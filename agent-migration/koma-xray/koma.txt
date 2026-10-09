@@ -1,0 +1,907 @@
+                                                                                                                                                                                 1
+
+
+
+
+                                           KoMA: Knowledge-driven Multi-agent Framework
+                                            for Autonomous Driving with Large Language
+                                                             Models
+                                                      Kemou Jiang1 , Xuan Cai1 , Zhiyong Cui*1 , Aoyong Li1 , Yilong Ren1 , Haiyang Yu1 , Hao Yang2 ,
+                                                                           Daocheng Fu3 , Licheng Wen3 , and Pinlong Cai*3
+                                          1
+                                              State Key Laboratory of Intelligent Transportation Systems, School of Transportation Science and Engineering,
+                                                                             Beihang University, 100191, Beijing, P.R.China.
+                                                       2
+                                                         Department of Civil and Systems Engineering, Johns Hopkins University, Baltimore, USA
+                                                               3
+arXiv:2407.14239v1 [cs.AI] 19 Jul 2024
+
+
+
+
+                                                                 Shanghai Artificial Intelligence Laboratory, 200232, Shanghai, P.R.China.
+
+
+
+                                            Abstract—Large language models (LLMs) as autonomous                 predominantly been data-driven [1]–[4], relying heavily on the
+                                         agents offer a novel avenue for tackling real-world challenges         collection and analysis of vast datasets to train algorithms ca-
+                                         through a knowledge-driven manner. These LLM-enhanced                  pable of complex driving scenarios. While these methods have
+                                         methodologies excel in generalization and interpretability. How-
+                                         ever, the complexity of driving tasks often necessitates the           made significant strides, they are often hampered by challenges
+                                         collaboration of multiple, heterogeneous agents, underscoring          such as dataset bias [5], overfitting [6], [7], and a lack of
+                                         the need for such LLM-driven agents to engage in cooperative           interpretability [8], [9], which can limit their effectiveness in
+                                         knowledge sharing and cognitive synergy. Despite the promise of        novel or unforeseen circumstances.
+                                         LLMs, current applications predominantly center around single-            In response to these challenges, there has been a paradigm
+                                         agent scenarios, which limits their scope in the face of intricate,
+                                         interconnected tasks. To broaden the horizons of knowledge-            shift towards knowledge-driven approaches in autonomous
+                                         driven strategies and bolster the generalization capabilities of       driving [10], [11]. This shift is underpinned by the recognition
+                                         autonomous agents, we propose the KoMA framework con-                  that human drivers can rely on their rich experience and knowl-
+                                         sisting of the multi-agent interaction, the multi-step planning,       edge coupled with logical reasoning ability to make reasonable
+                                         the shared-memory, and the ranking-based reflection modules            judgments and decisions when facing new scenarios. Large
+                                         to enhance multi-agents’ decision-making in complex driving
+                                         scenarios. Based on the framework’s generated text descriptions        Language Models (LLMs) are trained on large amounts of
+                                         of driving scenarios, the multi-agent interaction module enables       text data to process, understand, and generate natural language
+                                         LLM agents to analyze and infer the intentions of surrounding          text. The LLM has a broad range of basic human knowledge
+                                         vehicles based on scene information, akin to human cognition.          and superior reasoning abilities, making it a powerful tool in
+                                         The multi-step planning module enables LLM agents to analyze           this new knowledge-driven paradigm [12], [13]. These models,
+                                         and obtain final action decisions layer by layer to ensure consis-
+                                         tent goals for short-term action decisions. The shared memory          exemplified by the likes of GPT3.5 and GPT4 [13] , have
+                                         module can accumulate collective experience to make superior           demonstrated unparalleled proficiency in understanding and
+                                         decisions, and the ranking-based reflection module can evaluate        generating natural language text and can quickly adapt to new
+                                         and improve agent behavior with the aim of enhancing driving           application scenarios with a small number of prompt words,
+                                         safety and efficiency. The KoMA framework not only enhances            suggesting their potential to serve as agents within autonomous
+                                         the robustness and adaptability of autonomous driving agents but
+                                         also significantly elevates their generalization capabilities across   systems [14]–[16].
+                                         diverse scenarios. Empirical results demonstrate the superiority          Recent studies on LLM-based autonomous driving agents
+                                         of our approach over traditional methods, particularly in its          have primarily been tested in simplistic scenarios, such as
+                                         ability to handle complex, unpredictable driving environments          highway main road driving scenarios and circular track driving
+                                         without extensive retraining. Project Page: https://jkmhhh.github.     scenarios [10], [17], [18]. In these contexts, the impact of other
+                                         io/KoMA/.
+                                                                                                                vehicles on the agent vehicle is negligible, placing the agent
+                                           Index Terms—Autonomous Driving, Large Language Models,               vehicle in a safe and stable environment. However, real-world
+                                         Multi agents, Shared Memory, Multi-Step Planning, Chain of
+                                                                                                                driving scenarios are complex and time-variant, reflected by
+                                         Thought.
+                                                                                                                two major aspects: 1) the diversity of driving scenarios, such
+                                                                                                                as ramp merging and roundabouts, increases the likelihood
+                                                                I. I NTRODUCTION
+                                                                                                                of conflicts between vehicles due to their complexity. This
+                                            The quest for autonomous driving system has long been at            diversity requires the vehicle agents to make reasonable and
+                                         the forefront of technological innovation, aiming to revolution-       rapid plans to ensure driving safety and efficiency. 2) The
+                                         ize transportation through improved safety, efficiency, and ac-        second factor is the diversity of drivers determined by the
+                                         cessibility. Traditional approaches to autonomous driving have         drivers’ unique charateristics and reflected by their driving
+                                              * Corresponding Author                                            behaviors. This diversity contributes to the increased temporal
+                                                                                                                variability of scenarios. Therefore, autonomous driving agents
+                                                                                                                                                            2
+
+
+
+
+                                                    Information                               Update
+                                                                                                                            Single
+                                                                            Recall
+                                                                                                                            Agent
+                                                                  Reflect            Reason
+
+                                Environment           Action       Driver Agent               Retrieve      Memory         System
+
+
+
+
+                                                   Information         Driver Agent            Update
+                                                                                                                            Multi-
+                                                                       Interaction                                          Agent
+                                Environment          Action            Driver Agent            Retrieve     Memory         System
+
+
+
+
+Fig. 1. The knowledge-driven paradigm for single driving agent system and multiple driving agents system. Single knowledge-driven agent system including
+an interactive environment, a driver agent with recall, reasoning and reflection abilities, along with an independent memory module. Multiple knowledge-driven
+driving agent systems have an additional interaction module for communication and exchange among the agents.
+
+
+
+based on LLMs need further verification of their intelligence                          when faced with more complex driving scenarios, the former,
+levels in complex and time-variant scenarios, especially when                          which makes decisions for the next frame solely based on the
+those agents with different objectives influence with each                             current scene description, is prone to falling into local optimal
+other.                                                                                 solutions, lacking foresight, thereby making it difficult to
+   In multiagent driving scenarios, vehicle agents based on                            achieve a goal that requires continuous action across multiple
+LLMs must account for both the impact of fixed driver model                            frames. In the face of more dynamic driving scenarios, the
+vehicles and the influence of variable LLM-based agent vehi-                           latter, which plans multiple-step action decisions at once, is
+cles on their own driving decisions. By adopting this approach,                        susceptible to plan failure due to sudden changes in the scene
+the agents can more accurately simulate the complexities of                            conditions, thus failing to complete the scene goals smoothly.
+real-world driving conditions, thereby advancing the frontier                          To address this, the KoMA framework introduces a multi-step
+of knowledge-driven agent technology. The well-established                             reasoning module that achieves the final single-step action
+knowledge-driven framework, DiLu [10], have summarized the                             decision through a three-tiered reasoning process of goal-plan-
+knowledge-driven paradigm of autonomous driving systems,                               action, ensuring the continuity of action decisions.
+which comprises three components: 1) an environment with                                  In the knowledge-driven autonomous driving setting, the
+which the agent can interact; 2) a driving agent capable of                            current reflection module is primarily activated after a collision
+memory, reasoning, and reflection; 3) a memory component                               occurs [10], [11], but this raises two issues: (1) In complex
+to retain experience. As shown in Fig. 1, the knowledge-                               scenarios, the cause of an accident is often not the last action
+driven paradigm can still be used within the multi-agent                               decision, but rather a critical decision made earlier in a long
+framework after expanding the interactions among multiple                              sequence of decisions. Identifying the key erroneous decision
+agents. However, due to the increased complexity of the                                and reflecting on it for correction is a critical challenge.
+scenarios in both time and space, further expansion and im-                            (2) In reality, drivers need to ensure not only the safety
+provement of some modules are required to better apply them                            of driving but also its efficiency. An agent that completely
+in complex scenarios. To address these limitations, this study                         sacrifices efficiency for safety is impractical for real-world
+introduce a knowledge-driven autonomous driving framework                              scenarios. Therefore, the KoMA framework proposes a score-
+KoMA that incorporates multiple agents empowered by LLMs.                              based reflection module that includes assessments of safety
+It encapsulates five integral modules: Environment, Multi-                             and efficiency. It expands the conditions for initiating reflection
+agent Interaction, Multi-step Planning, Shared Memory, and                             to situations where there is a sudden drop or extremely low
+Ranking-based Reflection.                                                              score, allowing for timely correction of erroneous decisions
+   At present, the reasoning module of LLMs is mainly divided                          and enhancing the quality of the memory fragments stored in
+into two approaches: making single-step decisions directly                             the memory module.
+for each frame [10] and formulating a plan that includes a                                The memory module serves as a repository for the historical
+sequence of multiple-step decisions at once [19]. However,                             driving experiences of an agent, capable of retrieving similar
+                                                                                                                                   3
+
+
+
+scenario experiences to assist the LLM-empowered agent in          discussed by Xi et al., signified a pivotal transition towards
+making action decisions. In early reinforcement learning multi-    more integrated and autonomous systems [23]. Gao et al.
+agent systems, each agent was trained independently [20].          introduced AssistGPT, which employed a method of linguistic
+However, this may lead to the collective intelligence being        reasoning called Plan, Do, Check, and Learn (PEIL). This
+limited by an individual agent with poor training outcomes.        methodology enhanced the integration of LLMs with vari-
+Benefiting from the parameter sharing mechanism in rein-           ous tools, pushing the boundaries of their application [24].
+forcement learning [21], the KoMA framework incorporates           Similarly, Shen et al. proposed HuggingGPT, a framework
+a shared memory module, allowing all agents to share a             designed to leverage LLMs for connecting disparate AI models
+single vector database. This enables the sharing of driving        within the machine learning community to address complex
+experiences among agents, thereby enhancing the training           AI tasks [25]. Furthermore, ViperGPT, as presented by Suris
+speed and effectiveness of collective intelligence.                et al., showcased a novel approach by utilizing an API to
+   In summary, this study proposes KoMA, a comprehensive           access and compose modules through Python code generation,
+framework that harnesses the power of LLMs to facilitate           thereby offering solutions for an array of queries [26]. A
+advanced decision-making in complex, multi-agent driving en-       significant evolution in the deployment of LLMs as agents
+vironments. The KoMA framework is designed to address the          was the transition from traditional, data-driven paradigms to
+limitations of current single-agent approaches by integrating      knowledge-driven methodologies. Li et al. emphasized this
+several key components that work in concert to enhance the         shift, advocating for a move towards active, cognition-based
+capabilities of autonomous agents. Through a series of exper-      understanding that leveraged the extensive general knowledge
+iments and implementations, we demonstrate the feasibility         and reasoning capabilities of LLMs [11]. This approach not
+of our approach and its advantages over traditional methods,       only enhanced the agent’s ability to interact with and compre-
+particularly in terms of generalization, adaptability, and the     hend the world, but also enabled the system to become more
+ability to handle novel scenarios without extensive retraining.    autonomous and intelligent with relevant domain knowledge
+   The contribution of this paper is listed as follows:            and reasoning learning ability.
+   1) To the best of knowledge, we are the first to propose a
+       knowledge-driven autonomous driving framework with          B. Multi agent with LLM
+       multiple LLM-empowered agents, where those driving
+       agents implicitly interact through estimating the inten-       The integration of LLMs in multi-agent systems has become
+       tions of surrounding vehicles.                              an emerging research field for improving collective intelli-
+   2) We propose a three-layer structure of GPA (goal-             gence and collaboration in various fields. The exploration
+       planning-action) for analyzing tasks step by step in        of LLM-powered multi-agent systems revealed the future of
+       complex autonomous driving scenarios, ensuring the          collaborative intelligence, where the cooperation of multiple
+       coherence of long-term decision-making.                     independent agents could enhance problem-solving capabil-
+   3) The framework also integrating safety and efficiency         ities. Handler et al. proposed a multi-dimensional taxon-
+       indicators into the reflection module to accurately mea-    omy to tackle the difficulties in categorize and understand
+       sure and locate erroneous decisions, thereby expanding      the architectural complexities posed by LLM-powered multi-
+       the scope of reflection and enhancing the module’s          agent systems which aimed at accomplishing complex tasks,
+       effectiveness.                                              goals, or problems with the cognitive synergy of multiple
+   4) A memory sharing module is proposed to enable mul-           autonomous LLM-powered agents [27]. Liu et al. proposed the
+       tiple agents quickly accumulate experience of different     Dynamic LLM-Agent Network (DyLAN), a novel approach
+       scenario at the same time and ensure that the memory        for fostering LLM-agent collaboration on intricate tasks such
+       and learning procedures of multiple agents are consis-      as reasoning and code generation. DyLAN created a strate-
+       tent. Experiments have demonstrated that this shared        gic assembly of agents that communicate within a dynamic
+       memory module effectively enhances the generalization       interaction architecture tailored to the specific requirements
+       capability of the agents.                                   of the task query [28]. This model exemplified the potential
+                                                                   of context-aware collaboration among LLM-powered agents,
+                  II. L ITERATURE R EVIEW                          pushing the boundaries of collective problem-solving capabil-
+                                                                   ities. Chen et al. introduced AGENTVERSE, a multi-agent
+A. LLM as Agent                                                    framework designed to orchestrate a collaborative group of
+   In the burgeoning field of artificial intelligence, the emer-   expert agents, creating a system whose capabilities exceed the
+gence and integration of LLMs as agents have marked a              sum of its parts. AGENTVERSE enhanced the efficiency and
+significant pivot from conventional rule-based systems to          effectiveness of task accomplishment, showcasing the power
+knowledge-driven approaches. The LLMs demonstrate re-              of agent collaboration in complex problem-solving scenarios
+markable abilities to perform tasks based on user prompts and      [29]. Gong et al. presented Mindagent, an infrastructure that
+rapidly adapt to new scenarios through in-context learning.        leverages LLMs for interactive multi-agent planning. This sys-
+Zhou et al. highlighted the intrinsic properties of LLMs           tem not only demonstrated the in-context learning capabilities
+that facilitate this adaptability, laying the groundwork for       of LLMs in multi-agent planning but also offered several
+their application as complex agents [22]. The shift towarded       prompting techniques to bolster their planning proficiency. It is
+employing LLMs as the “brain” or controller of agents, as          proposed for evaluating planning and coordination capabilities
+                                                                                                                                                       4
+
+
+
+in the context of gaming interaction [30]. Zhang et al. devel-                     ory mechanism for task-related information organization and
+oped the Cooperative Embodied Language Agent (CoELA),                              an expert-oriented black-box tuning to enhance performance
+an agent capable of planning, communicating, and cooperating                       without the need for fine-tuning the LLMs. The application
+with others to efficiently accomplish long-horizon tasks. Pow-                     of Co-Pilot in path tracking control and trajectory planning
+ered by GPT4, CoELA surpassed traditional planning-based                           tasks showcased its versatility and effectiveness [18]. Shao et
+methods, demonstrating emergent effective communication                            al. presented LMDrive, an innovative language-guided, end-to-
+strategies. This advance highlighted the potential for LLM to                      end, closed-loop framework for autonomous driving. Uniquely
+conduct cooperative behavior and perform complex tasks in                          integrating multi-modal sensor data with natural language
+multiple agents [31].                                                              instructions, LMDrive facilitated interaction with humans and
+                                                                                   navigation software in realistic settings [33].
+C. LLM for Autonomous Driving                                                         The exploration of LLMs within autonomous driving sys-
+                                                                                   tems unveiled a promising horizon where vehicles not only
+   The integration of LLMs into autonomous driving systems
+                                                                                   mimicked human driving capabilities but also engaged in
+signified a transformative leap towards embedding human-
+                                                                                   complex decision-making and problem-solving tasks with
+like intelligence for enhanced decision-making and interaction
+                                                                                   an unprecedented level of intelligence and adaptability. The
+capabilities. Mao et al. emphasized the role of LLMs as cogni-
+                                                                                   reviewed literature underscored the shift towards leveraging
+tive agents in autonomous driving systems, highlighting their
+                                                                                   human-like intelligence and knowledge-driven methodologies,
+capacity to integrate human-like intelligence across various
+                                                                                   illustrating the potential of LLMs to redefine autonomous
+functions such as perception, prediction, and planning [32].
+                                                                                   driving.However, current research on LLM-empowered au-
+This foundational approach underscored the potential of LLMs
+                                                                                   tonomous driving agents mainly focused on simple scenarios
+to mimic human cognitive processes. Li et al. discussed the
+                                                                                   lacking conflicts. We try to further explore and test the scope
+employment of LLMs as foundation models for autonomous
+                                                                                   of knowledge driven capabilities in scenarios with conflicts,
+driving, capitalizing on their rich repository of human driving
+                                                                                   in order to fill the gap in this field.
+experience and common sense. These models actively under-
+stood, interacted with, acquired knowledge from, and reasoned
+about driving scenarios [11]. Wen et al. introduced DiLu,                                                  III. M ETHODOLOGY
+a framework combining reasoning and reflection modules to
+                                                                                   A. Overview
+facilitate decision-making based on common-sense knowledge
+while enabling continuous system evolution. DiLu’s extensive                          We introduce a knowledge-driven autonomous driving
+experiments demonstrated its superior generalization ability                       framework KoMA that incorporates multiple agents empow-
+over reinforcement learning-based methods, evidencing the                          ered by LLMs, comprising five integral modules: Environ-
+capability of LLMs to accumulate experience and adaptively                         ment, Multi-agent Interaction, Multi-step Planning, Shared
+improve [10]. Wang et al. proposed Co-Pilot, a universal                           Memory, and Ranking-based Reflection. Within this frame-
+framework that incorporates LLMs as a vehicle’s “Co-Pilot”,                        work, all agents operate on an equal and independent basis,
+adept at fulfilling specific driving tasks with human inten-                       as illustrated in Fig. 2.
+tions in mind. This framework not only defined a workflow                             The environment module provides driving scenarios for the
+for human-vehicle interaction but also introduced a mem-                           driving agent, which can be either a simulation environment
+
+
+                        Scenario Description                                                  Memory-based Enhancement
+
+
+    Environment                                                                              Evaluation-
+                                                             Multi-step Planning                                                   Shared-Memory
+                                                                                              Reflection
+
+                                                             Multi-step Planning             Evaluation-                   E
+                                                                                             Reflection                    M
+                                  D
+                                  E            Interaction              Goal                Replanning                     B
+                                  C                                                                                        E
+                                                 Analyze
+                                  O              Intention              Plan                New action
+                                                                                                                           D
+                                  D                                                                                        D
+                                  E                                                                                        I
+                                  R
+                                                                        Action              Summarizing                    N
+                                                                                                                           G
+                                                                                             Evaluation-
+                                                             Multi-step Planning
+                                                                                             Reflection
+
+            Environment Vehicle                Vehicle Agent Driven by LLM                                 Success Experience     Revised Experience
+
+
+
+
+Fig. 2. Knowledge-driven autonomous driving framework KoMA that incorporates multiple agents empowered by LLMs. KoMA consists of five core modules:
+the environment module, the multi-step planning module, the interaction module, the ranking-based reflection module, and the shared memory module.
+                                                                                                                                     5
+
+
+
+or a real-world scenario. It is mainly responsible for provid-       Algorithm 1 Autonomous Driving with Multi-agent LLMs
+ing a text description of the corresponding scene for each             Input: Simulation scenario sce, simulation duration time T ,
+autonomous driving agent before making decisions.                      current time t, decision interval time ∆t, reflection agent
+   The multi-agent interaction module further processes the            RA, driving agent DA, driving agent list DA list, shared-
+textual information returned by the environment module, pri-           memory M
+marily enables the LLMs to analyze the behavior of other               Initialize: t = 0, score list SL = [], decision list DL = [],
+vehicles in the scenario like a human, infer their intentions, and     document doc = [], plan = None
+support subsequent action decisions with relevant information.         while t < T do
+   Chain of Thought (CoT) is a technique used in LLMs that                 for DA in DA list :
+promotes complex reasoning and problem-solving capabilities.               \\ Get the scenario description
+The core idea behind this method is to break down a complex                    sce des = sce.describe(DA)
+problem into a series of smaller steps, known as intermediate              \\ Retrive similar experience from shared-memory
+reasoning steps. This enabless the model to incrementally                      f ew-shot = M .retriveMemory(sce des)
+construct a complete solution by addressing each step in a                 \\ Driving agent making action decision
+logical and sequential manner [34]–[36]. The multi-step plan-                  action, plan = DA.reason(sce des, f ew-shot,
+ning module is an application of the CoT technique to guide            plan)
+LLM make the final action decision. The LLMs firstly analyze                   DL.append(action)
+the goal according to the current scenario, then formulates the            \\ Execute the action decision in environment
+plan, and finally makes an action decision. This structured                    score, done = env.step(action)
+planning process enables the LLM agent to maintain a clear                     SL.append(score)
+goal for its actions and more effectively pursue long-term                     doc.append([DA, sce des, plan, action, score])
+goals. Based on the textual description of the current scene                   t = t + ∆t
+and the experiential playback of historical similar scenes, the            \\ Check whether the scene is finished
+LLM ultimately selects an action through continuous analysis                   if done:
+and then returns the action decision to the environment module                     break
+for execution.                                                         \\ Reflection agent correct the wrong action
+   The shared memory module utilizes a shared vector                   corrected decision = RA.reflect(SL, DL)
+database to store the successful driving experiences of all            \\ Update the memory
+agents. Before each agent makes a decision, the module                 M .update(corrected decision)
+retrieves analogous descriptions relevant to the agent’s current       Output: Document doc, updated shared-memory M
+situation and then provides these experiences to the agent,
+helping to formulate an informed action decision. This module
+allows each agent to train, accumulate experience, and inter-        action decisions. After receiving the text description from the
+act with the environment, continuously enhancing decision-           environment module, the agent preliminarily processes the
+making effectiveness.                                                information using the multi-agent interaction module, analyzes
+   To ensure the quality of experiences in the shared memory         and guesses the intentions of other vehicles before proceeding
+module, this framework introduces a ranking-based reflection         to the multi-step planning module with this information.
+module that evaluates each driving decision after execution
+based on efficiency and safety. After a scenario has been
+concluded, the framework reviews the outcomes of those               C. Multi-step Planning
+decisions, especially those with low scores or collisions. Only         The Multi-step Planning Module serves as the cornerstone
+those experiences where decisions were corrected with high           for LLMs’ reasoning within KoMA. The process is illustrated
+scores are retained. The procedure is outlined in Algorithm 1.       in Fig 3. Employing the Goal-Plan-Action methodology, this
+   More details about the Multi-agent Interaction, Multi-step        module merges inputs from the current scenario description
+Planning, Shared Memory, and Ranking-based Reflection                with similar historical experiences to determine the best course
+modules will be elaborated in the following sections.                of action, encompassing the following stages.
+                                                                        Clarify goals based on the current scenario: Drivers have
+                                                                     different goals to achieve in different scenarios. For example,
+B. Multi-agent Interaction Module                                    the goal of a normal vehicle running on the highway is to drive
+   In KoMA, agents do not interact directly with each other;         efficiently and quickly under the premise of ensuring safety.
+instead, agents infer their intentions just like real human          The main goal of vehicles on the freeway ramp is to merge
+drivers by analyzing the history and current state information       into the main road as soon as possible within a certain period
+of other vehicles. For example, when the LLM-driven agent            of time, so the driver’s goal is mainly related to the scenarios.
+senses a vehicle on its left suddenly accelerating, it further       Based on this, we divide the goals within the scenario into
+analyzes and reasons about this, guesses the vehicle’s intention     two categories: special scenario goals and general scenario
+to overtake, and then analyzes these guesses along with              goals. Special scenario goals refer to the tasks that need to
+its own plan to determine if adjustments to its short-term           be completed within a certain time in the scenario, such as
+plan are needed. Ultimately, the agent aims to make rational         ramp merging, intersection passage, etc. The general scenario
+                                                                                                                                                                                                                    6
+
+
+
+
+                          Scenario Description                                                                                Chained Decision Making
+
+                                 You are driving on the entrance ramp of the
+                                                                                                                               My goal is to merge onto the highway safely in time
+                                 highway and have reached the section where
+                                 you can merge onto the highway. The end
+                                 of the ramp is 115.50 meters ahead of you,                                Clarify the goal
+                                                                                                                               Step 1: Brainstorming plans:
+                                 you must turn left to merge onto the highway                                                  - Accelerate to increase our speed and then merge ahead of Vehicle 96.
+                Driving task     before reaching the end of ramp.                                                              - Maintain current speed (IDLE) and wait for a safe opportunity to merge,
+                                                                                                                               possibly behind Vehicle 96 or Vehicle 488.
+                                                                                                                               Step 2: Evaluating the proposed plans:
+                                 You are driving on a road with 3 lanes, and                                                   - Accelerating to increase our speed and then merge ahead of Vehicle 96: This
+                                 you are currently driving in the rightmost                                                    plan could allow us to take advantage of the small speed difference to merge
+                                 lane. Your current position is `(231.00,                                                      ahead of Vehicle 96. However, it increases the risk of getting too close to the
+                                 8.00)`, speed is 21.51 m/s, acceleration is                                                   maximum safe speed limit. Safety: 6, Efficiency: 8.
+                                 0.00 m/s^2.                                                                                   - Maintaining current speed (IDLE) and waiting for a safe opportunity to
+                Ego vehicle                                                                                                    merge: This plan is safer as it reduces the risk of exceeding the safe speed limit
+                                                                                                                               and allows us to find a safe gap to merge, either behind Vehicle 96 or Vehicle
+                                 There are other vehicles driving around                    LLM              Make a plan
+                                                                                                                               488. Safety: 9, Efficiency: 7.
+                                                                                                                               Step 3: Ranking the plans:
+                                 you, and below is their basic information:
+                                                                                                                               Given the evaluations, the plan to maintain current speed and wait for a safe
+                                 - Vehicle `96` is driving on the lane to your                                                 opportunity to merge is ranked higher due to its higher safety score.
+                                 left and is parallel to you. The center                                                       Step 4: Choosing the driving plan:
+                                 position of it is `(235.71, 4.00)`, length is 5.0                                             The chosen plan is to maintain our current speed (IDLE) and wait for a safe
+                                 meters, speed is 21.79 m/s, acceleration is                                                   opportunity to merge onto the highway, likely behind Vehicle 96 or Vehicle
+                                 0.00 m/s^2.                                                                                   488, depending on the traffic flow and the development of a safe gap.
+                                 - Vehicle `488` is driving on the lane to your
+                                                                                                                               Considering the distance to the end of the ramp (115.50 meters) and our
+                Surrounding      left and is ahead of you. The center position
+                                                                                                                               current speed, maintaining our current speed seems the safest option
+                                 of it is `(253.83, 4.00)`, length is 5.0 meters,
+                Traffic Status   speed is 21.38 m/s, acceleration is 0.00                                      Choose an       to prepare for a safe merge. This action ensures that we do not risk a
+                                 m/s^2.                                              Similar Experiences        action
+                                                                                                                               collision by changing lanes prematurely and gives us time to assess the
+                                                                                                                               traffic flow for a safe merge opportunity.
+
+
+
+
+Fig. 3. A case of multi-step planning module reasoning process. The multi-step planning module refers to a three-level multi-step reasoning of goal-plan-action,
+which analyzes and breaks down the scene target tasks step by step to ensure the consistency of the purpose of the decision-making before and after the
+action. Besides, it also refers to the four-step process of plan generation, plan evaluation, plan sorting, and plan selection when formulating a plan, to select
+the final plan that best fits the driving characteristics of the LLM, ensuring the feasibility and personalization of the plan.
+
+
+
+goal is a long-term objective, such as maintaining safe and                                           beneficial experiences. These archived experiences serve as
+efficient driving. Each agent first sets its objectives based                                         exemplars to assist LLMs in the planning and decision-making
+on the scenario description to inform planning and action                                             processes. Each experience is segmented into four critical
+decisions.                                                                                            elements: the scenario description, the planning process, the
+   Make a plan based on the goals: The planning process                                               final decision, and the evaluation score. The textual description
+involves the LLMs devising a strategy that connects identified                                        of scenarios is converted into vectors, serving as keys for
+goals with future actions, ensuring coherent actions over time.                                       gauging similarity within the memory module. The concept of
+Initially, the LLMs checks for a pre-established plan. If no                                          shared memory implies a unified memory module accessible
+such plan exists, the LLMs formulates a new strategy to guide                                         to all agents empowered by LLM, fostering consistency of ex-
+future actions. The planning process unfolds as follows:                                              perience and performance. This approach mirrors the principle
+   1) The LLMs brainstorm all workable and distinct plans                                             of parameter sharing observed in reinforcement learning.
+       based on the current scenario and goal.                                                           The primary aim of shared memory is to quickly accumulate
+   2) For each of the proposed plans, the LLMs will evaluate                                          experiences in different scenarios simultaneously. Using the
+       the potential of them, consider their pros and cons,                                           repository of past experiences, new agents can learn from
+       implementation difficulty, potential challenges and then                                       the collective wisdom and insights of their predecessors. This
+       assign safety, efficiency score from 0 to 10 to each                                           shared memory module enables agents to perform tasks with
+       option based on these factors.                                                                 an awareness of previously successful strategies and outcomes.
+   3) Based on the evaluations and scenarios, rank the plans.                                         Essentially, shared memory serves as a conduit for knowledge
+   4) A singular plan is selected to guide driving decisions.                                         transfer, ensuring that the collective learning of agents is
+If there is a pre-existing plan, the LLM evaluates other                                              preserved and utilized to enhance future decision making.
+vehicles’ intentions from the multi-agent interaction module.
+If the plan is deemed infeasible, it craft a new plan; otherwise,                                     E. Ranking-based Reflection
+it maintains the existing plan.                                                                          The reflection module, operational at the termination of
+   Choose an action according to the plan: It’s time for                                              each scenario, is designed to revise action decisions. These
+LLMs making reasonable and safe action choices based on the                                           rectified decisions, along with successful experiences, are
+current scene information and the plan. There are five actions                                        then integrated into the memory module. When the reflection
+in the action space:turn-left, IDLE (remain in the current lane                                       module updates the reflection results to the shared memory
+with current speed), turn-right, acceleration, and deceleration.                                      module, it can be considered that the agent has completed
+The LLMs select an action based on inference.                                                         one round of training. To differentiate the efficacy of each
+                                                                                                      action decision, the system incorporates safety indicators and
+D. Shared Memory                                                                                      efficiency scores, assessing the vehicle’s state post-execution
+  The shared memory module is an integral component of                                                of LLM-generated instructions. In the following, we delineate
+KoMA, encapsulating a vector database designed to archive                                             the criteria for these evaluations.
+                                                                                                                                                                       7
+
+
+
+
+                       Scenario description                                                                                       Scenario description
+                    You are driving on a highway.                                                                              You are driving on the entrance
+                    You need to avoid colliding with                                                                           ramp of the highway and your
+                    merging vehicles.                                                                                          goal is to merge onto the highway
+                    You are driving on a road with 3                                                                           safely.You are driving on a road
+                    lanes, and you are currently                                                                               with 3 lanes, and you are currently
+                    driving in the second lane from                                                                            driving in the rightmost lane. Your
+                    the left. Your current position is                                                                         current position is `(275.52, 8.00)`,
+                    `(304.21, 4.00)`, speed is 15.20                                                                           speed is 24.19 m/s, acceleration is
+                    m/s, acceleration is -0.35 m/s^2,                                                                          1.38 m/s^2, and lane position is
+                    and lane position is 74.21 m ......                                                                        45.52 m ......
+
+                                                 Vectorize                                                                        Vectorize
+                                                 and search                                                                       and search
+
+
+
+                                                Recall Similar                                                             Recall Similar
+                                                experience                Highway Driving             Ramp Merging         experience
+                                                                             Experience                 Experience
+
+
+
+                                                                      Shared Memory Constructed by Vector Database
+                            LLM Agent 1                                                                                                 LLM Agent 2
+
+
+
+Fig. 4. Different agents retrieve relevant experiences of their respective scenarios from shared memory modules. The shared memory module is a vector
+database that accumulates driving experience fragments from all agents. These fragments are vectorized and then stored in the same database. When making
+decisions, the agent retrieves similar driving experiences from analogous scenarios using vector search, thereby aiding in the decision-making process.
+
+
+
+   Safety evaluation criteria: Safety is quantified on a scale                                    between the agent’s speed and the average speed of surround-
+from 0 to 10, using Time To Collision (TTC) to measure ve-                                        ing vehicles. An agent vehicle that matches or exceeds the
+hicular safety post-action. The TTC above 3 seconds indicates                                     average speed of surrounding vehicles receives a full efficiency
+optimal safety, earning the highest score of 10. Below 1.5                                        score of 10. If the agent’s speed is below the average, the
+seconds, TTC indicates a critical safety risk, scoring 0 [37]–                                    efficiency score is the ratio of the agent’s speed to the average
+[39]. For TTC values between 1.5 and 3 seconds, the safety                                        speed, scaled to 10.
+score linearly scales from 0 to 10.                                                                                            (
+                                                                                                                                 10, if VLLM (t) > VAv g (t)
+                                                                                                      Ef f iciencyscore (t) =
+                    20(T T C(t)−1.5)
+                   
+                            3        , if 1.5s < T T C(t) < 3s                                                                  0, otherwise.
+Saf etyscore (t) = 10,                  else if T T C(t) > 3s
+                                                                                                     Upon the conclusion of a scenario, the LLM undertakes an
+                   
+                      0,                otherwise.
+                   
+                                                                                                  analysis of the scoring list to pinpoint actions that deviated
+  Efficiency evaluation criteria: Efficiency is similarly rated                                   from expected outcomes and requires reflection. This process
+on a scale from 0 to 10 and uses speed as the efficiency metric.                                  mandates the correction of previously unsafe decisions, fa-
+This metric considers the impact of surrounding vehicle speeds                                    cilitating a cycle of continuous enhancement in the agent’s
+on the agent’s vehicle, measuring efficiency by the difference                                    capabilities. The utilization of interpretable chain-of-thought
+
+
+
+                    Action             Safety             Efficiency        High
+                                                                            score                                                              update           #0
+                                                                                                 #0         #1            #4
+                      #0                  10                     10
+                                                                                                                                                                #1
+                      #1                 2.8                     10                                    Reflection Agent
+                                                                                            #2                                                                  #2
+                                                                                                          Replanning
+                      #2                 4.4                  8.9
+
+                                                                                            #3            New action
+                                                                                                                                 #3            update           #3
+                      #3                 6.7                  8.2
+                                                                                            。
+                                                                            Low             。
+                      #4                 8.1                  6.3           score           。             Summarize                                             #4
+
+                                 Score List                                                                                                                Memory
+
+
+Fig. 5. The ranking-based reflection module evaluates decisions, identifies those with low scores, and corrects them. It then updates the shared memory
+module with these refined decisions, along with the high-scoring experiences.
+                                                                                                                                             8
+
+
+
+responses significantly aids in uncovering the root causes of
+potentially hazardous scenarios.
+   In an effort to foster autonomous learning from past mis-
+takes, our methodology employs the detailed description of the                      (a) An example of initialization scenario
+driving scenario in which the erroneous decision was made,
+alongside the corresponding reasoning output, as inputs for the
+LLM. This approach prompts the LLM to elucidate the un-
+derlying reasons for the flawed decisions, thereby guiding the          (b) A failure scenario where a collision occurs on a ramp merge
+agent towards more accurate and safer future decisions. Addi-
+tionally, the LLM is tasked with devising strategies to mitigate
+the recurrence of similar errors, enhancing its decision-making
+framework.This reflective process incorporates refined reason-
+ing and revised decisions learned from error correction into          (c) A failure scenario where the ramp merge is not completed in time
+memory modules. This ensures the preservation of enhanced
+knowledge and underlies the agent’s ability to learn adaptively
+in a variety of driving environments.
+                                                                          (d) A successful scenario for safely completing ramp merges
+
+                      IV. E XPERIMENTS                             Fig. 6. Examples of different phases in the testing scenarios
+A. Experimental Settings
+   Simulation Environment: We leverage the “highway-env”           the agent reaches the endpoint or collides with other vehicles,
+as the simulation platform, which furnishes a realistic multi-     it is considered as the end of the scenario. The reflection
+vehicle interactive environment [40]. This environment permits     module will then update the shared-memory module. When
+the customization of various parameters including vehicle          the update is completed, the agent completes a round of
+positioning, velocity, count, and lane specifics, offering a       training in that scene. After every 20 rounds of training, 20
+versatile setting for conducting our studies. The focal point      randomly generated scenarios are selected and fixed for testing
+of our scenario selection is the on-ramp merging challenge         the trained agents in KoMA.
+within a highway context. This particular scenario underscores
+the exigency of accomplishing merging objectives within a                                           TABLE II
+constrained timeframe, thereby serving as an apt representation              THE PARAMETERS OF THE INITIALIZATION SCENARIOS
+
+of the agent’s decision-making acumen.                                                Parameter                                  Value
+   Large Language Model: GPT-4 [13] was mainly used                  The lane count of the highway main road                        2
+in experiments to verify the validity of the KoMA frame-            The lane count of the on-ramp merging road                      1
+                                                                        The length of on-ramp merging road                       120 m
+work. This model plays a pivotal role in both the Multi-step             The initialization speed of vehicles          range from 20 to 25 m/s
+Planning and Rank-based Reflection modules of our architec-               The spacing of the spawn points                        40 m
+ture, showcasing its versatility and advanced understanding                   The initial location noise                range from -10 to 10 m
+capabilities. For the Memory module, integral to our frame-            The count of LLM controlled vehicles                         2
+                                                                    The count of intelligent driver model vehicles                  5
+work, we incorporate “Chroma” an open-source embedded                              Policy frequency                               2 Hz
+vector database. This choice is instrumental in facilitating
+the conversion of scene descriptions into vectors, for which          Baseline MARL-based model: The baseline MARL
+we employ OpenAI’s “text-embeddings-ada-002” model. This           method is “deep multi-agent reinforcement learning for high-
+comprehensive setup not only exemplifies the integration of        way on-ramp merging in mixed traffic” [41], which develop
+cutting-edge AI technologies but also highlights our innova-       an efficient and scalable MARL framework that can be used in
+tive approach towards enhancing autonomous driving systems         dynamic traffic where the communication topology could be
+through nuanced understanding and reflection. TABLE I shows        time-varying. We have adjusted the MARL parameter Policy
+the parameters and components related to KoMA.                     frequency from 5Hz to 2Hz to maintain consistency with the
+                                                                   Policy frequency during training in KoMA. Concurrently, we
+                             TABLE I                               have adapted the MARL training scenarios to focus on the
+      THE PARAMETERS AND COMPONENTS RELATED TO KoMA
+                                                                   two-lane highway on-ramp merging context and have initiated
+               Parameter                   Value                   the training process accordingly.
+         Simulation environment       highway-env [40]
+          Large language model           GPT-4 [13]                B. Performance of the proposed framework
+         Text embedding model     text-embeddings-ada-002
+             Vector database              Chroma                      In this section, we conducted comparative experiments on
+                                                                   KoMA and deep multi-agent reinforcement learning (MARL).
+  Testing Scenario: The testing scenario locates at an on-         To maintain consistency with the test scenarios of the MARL
+ramp entrance on the highway with two main lanes. The              methods, we conducted comparative tests in scenarios where
+scenario incorporates two LLM-driven agents, one on the main       both the main road and the highway ramp are configured as
+road and the other on the on-ramp, as shown in Fig 6. When         single lanes.
+                                                                                                                                                           9
+
+
+
+   Performance: In the untrained state, the success rate of the
+KoMA framework is 30%, while the success rate of MARL
+reaches 45%. The success rate of MARL is slightly higher
+than that of the KoMA framework. This is because the selected
+GPT4 model is a general LLM that has not been extensively
+trained with corpora in the driving domain, resulting in a
+less clear understanding of driving tasks. However, after 20
+rounds of training and accumulating driving experience, the
+KoMA framework has achieved a success rate of 50%, which
+is essentially on par with the 51% success rate achieved by
+the MARL algorithm after 20,000 rounds of training. When
+the KoMA framework has undergone 40 rounds of training,
+it has already achieved a success rate of 70%, successfully
+surpassing the 65% success rate achieved by the MARL
+algorithm after 40,000 rounds of training. This experiment not
+only demonstrates the effectiveness of the KoMA framework                    Fig. 8. Experimentalresults tested in the initial scenario with different memory
+in closed-loop learning within scenarios but also highlights                 modules after 20 and 40 rounds of training.
+that, compared to traditional data-driven methods, knowledge-
+driven agents possess higher learning efficiency and better
+                                                                                The non-shared memory module exhibits poorer perfor-
+training outcomes.
+                                                                             mance during training; after 40 rounds of training, the success
+                                                                             rate is only 45%, which is worse than the performance of the
+C. The validation of the framework                                           shared memory module after just 20 rounds of training. This is
+                                                                             partially because sharing a common memory module leads to
+   1) Shared Memory: In this section, an ablation study is                   a richer and more abundant vector database, allowing for the
+conducted on the Shared Memory module. We have set up                        simultaneous accumulation of training effects from multiple
+three different types of memory modules for comparative                      agents. After the vehicles driving on ramp merge onto the
+testing to verify the superiority of the shared memory module.               highway, they still need to travel on the main road for some
+The first type is the no-memory module, which means that                     time, which requires the agent to have a certain amount of
+no vector database is set up to accumulate and store histor-                 highway driving experience. However, most of the experience
+ical experiences. The second type is the non-shared memory                   of agents on the ramp is confined to the ramp scenario, with
+module, where each agent has its own vector database, and                    less experience driving on the main road, which requires more
+the accumulated experience fragments are not shared with                     training rounds. Therefore, the shared memory module not
+other agents, only used to assist in their own action decisions.             only effectively enhances the training effectiveness of multiple
+The third type is the shared memory module, where each                       agents, improving collective intelligence, but also ensures that
+agent shares a common vector database, and the experiences                   all agents are at the same level of intelligence, preventing the
+accumulated by an agent can be called upon by other agents                   group’s performance from being adversely affected by poorly
+to assist in their action decisions, thus achieving sharing. The             trained agents.
+testing results are shown in Fig. 8.                                            2) Multi-step Planning: In this section, we will compare
+                                                                             the training results of agents with and without the multi-step
+                                                                             planning module to verify the effectiveness of KoMA. The
+                                                                             agents under these two frameworks are both trained for 40
+                                                                             rounds. The testing results are displayed via a boxplot in Table
+                                                                             III. It shows the success rates of agents at the different training
+                                                                             stages, including agents without training, agents trained with
+                                                                             20 rounds and agents trained with 40 rounds.
+
+                                                                                                          TABLE III
+                                                                                  T HE SUCCESS RATE OF EXPERIMENTAL RESULTS IN THE INITIAL
+                                                                                SCENARIO WAS EVALUATED USING DIFFERENT FRAMEWORKS , WITH
+                                                                                TESTING CONDUCTED AFTER 0, 20, AND 40 ROUNDS OF TRAINING .
+
+                                                                                                Training episodes       DiLu      KoMA
+                                                                                                        0               40%        30%
+                                                                                                       20               50%        50%
+                                                                                                       40               50%        70%
+
+
+Fig. 7. The performance of KoMA after 0, 20, and 40 training episodes is
+                                                                               We found that agents with multi-step planning modules
+compared with the performance of MARL after 0, 20,000, and 40,000 training   performed worse without training, with a success rate of
+episodes, respectively.                                                      only 30%. However, during 20 rounds of training, the effect
+                                                                                                                                                       10
+
+
+
+
+Fig. 9. The average efficiency score and safety score of successful testing   Fig. 10. The experimental results for different generalization scenarios are
+scenarios after 40 rounds of training.                                        evaluated with and without the memory, which has been trained on a main
+                                                                              roadway with two lanes.
+
+was on par with that of agents without multi-step planning
+modules, achieving a success rate of 50%. After 40 rounds of                  module. We then tested this module in scenarios with one more
+training, the agent with multi-step planning modules achieved                 or one less lane on the main roadway, at the same density. As
+a success rate of 70%. This indicates that agents with multi-                 the memory module lacks content for these new scenarios,
+step planning modules have better training effects and faster                 this setup tests the LLM agents’ ability to generalize. The
+convergence in ramp merging scenarios. The Fig. 9 shows the                   results are shown in Fig. 10. We found that the shared-memory
+average score of successful testing scenarios after 40 rounds of              trained in the initial scenario still affects and yields good
+training. Agents with multi-step planning modules have better                 results when generalizing to scenarios with varying main road
+efficiency and safety scores, indicating that they can complete               lanes, indicating superior generalization ability in knowledge-
+scenario testing more safely and efficiently. This may be                     driven agents compared to traditional data-driven ones.
+because the three-layer progressive reasoning thinking chain
+                                                                                 2) Generalizing to roundabout scenarios: Continuing with
+of goal-plan-action can better assist the LLM in making action
+                                                                              the use of the same memory module as in the previous section,
+decisions with consistent goals when completing urgent tasks
+                                                                              we shifted the scenario from ramp merging to roundabouts.
+in complex and time-varying scenarios.When there is a clear
+                                                                              Our aim was to test whether the LLM agents could learn from
+short-term goal, action decisions become more purposeful,
+                                                                              previous scenarios and enhance their decision-making abilities
+avoiding meaningless action decisions of repeated acceleration
+                                                                              by generalizing to completely different scenarios. Additionally,
+and deceleration, which improves the efficiency of the agent.
+                                                                              this shift aimed to demonstrate the value of a shared memory
+Meanwhile, the inspection part of the plan ensures that the
+                                                                              module in enhancing the generalization capabilities of multiple
+agent can timely reformulate the plan when the old plan is no
+                                                                              agents.
+longer safe and feasible in time-varying scenarios, avoiding
+                                                                                 The roundabout scenario setup is depicted in Fig. 11. There
+the continued execution of high-risk old plans and improving
+                                                                              is a single lane for each of the four entry and exit roads of the
+the security of the agent.
+                                                                              roundabout. Within the roundabout itself, there is a two-lane
+                                                                              circular road. Roundabout scenarios can be mainly divided
+D. Generalization under different Scenarios                                   into three phases: 1. Roundabout entry phase: Merging into
+   Data-driven agents often tend to overfit to training scenarios,            the roundabout from the entry road. 2. Roundabout internal
+leading to poor generalization capabilities and limited appli-                driving phase: Driving within the roundabout until approach-
+cability [6], [7], [11]. Therefore, in this section, we conduct a             ing the target exit road. 3. Roundabout exit phase: Exiting from
+series of tests on the generalization capabilities of knowledge-              the roundabout to the exit road and leaving the roundabout.
+driven agents within the framework to examine whether LLMs                    There are four vehicles modeled as intelligent driver model
+can learn knowledge from experiential fragments and apply it                  (IDM) on the western entry road of the roundabout, with
+to different scenarios.                                                       their destination being the eastern exit road. The agent vehicle
+   1) Altering the number of lanes on the main roadway:                       controlled by the LLM is on the southern entry road, followed
+Initially, we conducted tests with minor variations in scenario               by an IDM environmental vehicle. There are a total of six
+complexity by changing the number of lanes on the merging                     vehicles in the entire roundabout scenario, and their actual
+main roadway. Despite these minor changes, these scenarios                    generation positions still follow the form of fixed coordinate
+still pose challenges for data-driven agents in generalizing.                 points plus random fluctuations to reflect randomness. In this
+We trained the LLM agents on scenarios with two-lane main                     scenario, the agent vehicle controlled by the LLM needs to
+roadways and single-lane ramps. After training, we obtained                   safely merge into the roundabout from the southern entry and
+an experience-rich vector database, known as the memory                       smoothly exit from the eastern side of the roundabout, which
+                                                                                                                                                     11
+
+
+
+
+   (a) The first phase of the roundabout driving scenario: Gradually
+   approach the roundabout and observe the traffic conditions within it,
+   looking for the right moment to enter the roundabout.
+
+
+
+
+                                                                           Fig. 12. The generalization ability of the memory, trained for 40 episodes in
+                                                                           the initial scenario, is specifically tested in the roundabout scenario.
+
+
+
+   (b) The second phase of the roundabout driving scenario: The vehicle    E. Performance under different LLMs
+   successfully enters the roundabout and drives within it. The vehicle
+   needs to identify its exit within the roundabout and merge out in a        In this section, we will employ various LLMs to verify
+   timely manner at the designated exit.                                   the efficacy of KoMA framework. By comparing their per-
+                                                                           formance during training, we aim to ascertain which model is
+                                                                           better suited for our KoMA framework.
+
+                                                                                                        TABLE IV
+                                                                           T HE SUCCESS RATE OF EXPERIMENTAL RESULTS WITH DIFFERENT LLM S
+                                                                              AFTER 0, 20, 40 ROUNDS OF TRAINING IN THE KO MA FRAMEWORK
+
+                                                                            episodes      GPT3.5      GPT4       Llama3-8B       Llama2-7B       Qwen2-7B
+                                                                                0          20%        30%           25%             20%            25%
+                                                                               20          30%        50%           35%             25%            30%
+   (c) The third phase of the roundabout driving scenario: The vehicle         40          35%        70%           40%             35%            40%
+   successfully merges out from the exit and leaves the roundabout,
+   completing the roundabout scenario.
+                                                                              Our research findings demonstrate that a range of Large
+Fig. 11. Illustrations of the three stages of the roundabout scenario.
+                                                                           Language Models (LLMs), including GPT3.5 [42], GPT4 [13],
+                                                                           LLaMA2-7B [12], LLaMA3-8B [43], and QWEN2-7B [44],
+                                                                           can be effectively trained within the KoMA framework. This
+is considered a successful completion of the scenario. If a                training significantly improves their decision-making capabili-
+collision occurs or the vehicle fails to exit from the eastern             ties, thereby validating the framework’s universal applicability
+side of the roundabout in time, it is considered a failure of the          and effectiveness across different models. GPT-4 performs best
+scenario. The result are shown in Fig. 12                                  within the KoMA framework, with better training outcomes
+   In the initial ramp merging scenario on a two-lane main                 and faster convergence speed. GPT-3.5 underperforms within
+road, the success rate was 30% without prior training, and it              KoMA, particularly in handling lengthy scenario texts. The
+reached a 70% success rate after 40 rounds of training. An                 model’s difficulty in accurately capturing critical details, such
+agent without any memory repository achieved a 60% success                 as vehicle spacing and speed variations, often leads to the
+rate in the roundabout scenario. When the memory repository                exclusion of essential information during decision-making
+from 40 rounds of training in the initial ramp merging scenario            processes. This oversight can result in collisions involving
+was applied to the agent in the roundabout scenario, the                   the agent vehicles, highlighting the need for enhanced model
+success rate increased to 80%, demonstrating the effectiveness             training and attention to detail recognition.
+of knowledge-driven generalization capabilities of the agent.
+The reason for the roundabout scenario still having a 60%                                             V. C ONCLUSION
+success rate without experience is mainly twofold: firstly,
+because there is only one LLM controlling the agent in the                    The advent of LLMs as autonomous agents has marked a
+scenario, which reduces the overall collision risk of the LLM              significant shift in the approach to knowledge-driven problem-
+agent; secondly, because the roundabout scenario is simpler,               solving, particularly within the autonomous driving sector.
+with only longitudinal acceleration and deceleration control               This study presents the KoMA framework, a comprehen-
+before merging, without the need to consider lane-changing                 sive system designed to transcend the limitations of current
+behavior.                                                                  single-agent models by facilitating multi-agent collaboration,
+                                                                                                                                                            12
+
+
+
+shared knowledge, and cognitive synergy. The KoMA frame-                          [9] L. H. Gilpin, D. Bau, B. Z. Yuan, A. Bajwa, M. Specter, and L. Kagal,
+work’s multi-faceted approach, integrating interaction, plan-                         “Explaining explanations: An overview of interpretability of machine
+                                                                                      learning,” in IEEE 5th International Conference on data science and
+ning, memory, and reflection modules, has proven instrumental                         advanced analytics. IEEE, 2018, pp. 80–89.
+in enhancing decision-making in complex driving scenarios.                       [10] L. Wen, D. Fu, X. Li, X. Cai, M. Tao, P. Cai, M. Dou, B. Shi, L. He,
+Our empirical evaluations have confirmed the KoMA frame-                              and Y. Qiao, “Dilu: A knowledge-driven approach to autonomous driving
+                                                                                      with large language models,” in The Twelfth International Conference
+work’s superiority over traditional methods, showcasing its                           on Learning Representations.
+robustness in unpredictable environments and its ability to                      [11] X. Li, Y. Bai, P. Cai, L. Wen, D. Fu, B. Zhang, X. Yang, X. Cai, T. Ma,
+generalize across a wide array of driving situations without                          J. Guo et al., “Towards knowledge-driven autonomous driving,” arXiv
+                                                                                      preprint arXiv:2312.04316, 2023.
+the need for extensive retraining. The framework’s success lies                  [12] H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A. Lachaux,
+in its human-like cognition, where LLM agents can discern                             T. Lacroix, B. Rozière, N. Goyal, E. Hambro, F. Azhar et al.,
+and respond to the intentions of surrounding vehicles, and                            “Llama: Open and efficient foundation language models,” arXiv preprint
+                                                                                      arXiv:2302.13971, 2023.
+its layered planning ensures strategic consistency in action                     [13] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman,
+decisions.                                                                            D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat et al., “Gpt-4
+   The KoMA framework is a preliminary test of the po-                                technical report,” arXiv preprint arXiv:2303.08774, 2023.
+                                                                                 [14] C. H. Song, J. Wu, C. Washington, B. M. Sadler, W.-L. Chao, and Y. Su,
+tential of LLMs in revolutionizing autonomous systems. It                             “Llm-planner: Few-shot grounded planning for embodied agents with
+opens a new frontier for research, suggesting that the future                         large language models,” in Proceedings of the IEEE/CVF International
+of autonomous driving lies in the seamless integration and                            Conference on Computer Vision, 2023, pp. 2998–3009.
+collaboration of multiple agents. As we continue to refine                       [15] J. Mai, J. Chen, G. Qian, M. Elhoseiny, B. Ghanem et al., “Llm as a
+                                                                                      robotic brain: Unifying egocentric memory and control,” 2023.
+and expand upon this framework, we envision a future where                       [16] J. Pan, “What in-context learning “learns” in-context: Disentangling task
+autonomous driving systems are not only highly adaptable and                          recognition and task learning,” Ph.D. dissertation, Princeton University,
+safe but also capable of learning and improving continuously                          2023.
+                                                                                 [17] C. Cui, Y. Ma, X. Cao, W. Ye, and Z. Wang, “Drive as you speak:
+from shared experiences and insights.                                                 Enabling human-like interaction with large language models in au-
+                                                                                      tonomous vehicles,” in Proceedings of the IEEE/CVF Winter Conference
+                                                                                      on Applications of Computer Vision, 2024, pp. 902–909.
+                       ACKNOWLEDGMENTS                                           [18] S. Wang, Y. Zhu, Z. Li, Y. Wang, L. Li, and Z. He, “Chatgpt as your
+                                                                                      vehicle co-pilot: An initial attempt,” IEEE Transactions on Intelligent
+   This work was also partially supported by the Na-                                  Vehicles, 2023.
+tional Natural Science Foundation of China (project num-                         [19] C. Cui, Y. Ma, X. Cao, W. Ye, and Z. Wang, “Receive, reason, and react:
+ber: 52202378), Beijing Natural Science Foundation (project                           Drive as you say, with large language models in autonomous vehicles,”
+                                                                                      IEEE Intelligent Transportation Systems Magazine, 2024.
+number: L243008), the Open Research Project Program                              [20] A. Tampuu, T. Matiisen, D. Kodelja, I. Kuzovkin, K. Korjus, J. Aru,
+of the State Key Laboratory of Internet of Things                                     J. Aru, and R. Vicente, “Multiagent cooperation and competition with
+for Smart City (project number: SKL-IoTSC(UM)-2021-                                   deep reinforcement learning,” PloS one, vol. 12, no. 4, p. e0172395,
+                                                                                      2017.
+2023/ORP/GA08/2022), and the Ministry of Transport of                            [21] J. K. Gupta, M. Egorov, and M. Kochenderfer, “Cooperative multi-agent
+PRC Key Laboratory of Transport Industry of Comprehensive                             control using deep reinforcement learning,” in Autonomous Agents and
+Transportation Theory (Grant No. MTF2023002).                                         Multiagent Systems: AAMAS 2017 Workshops, Best Papers, São Paulo,
+                                                                                      Brazil, May 8-12, 2017, Revised Selected Papers 16. Springer, 2017,
+                                                                                      pp. 66–83.
+                             R EFERENCES                                         [22] A. Zhou, K. Yan, M. Shlapentokh-Rothman, H. Wang, and Y.-X. Wang,
+                                                                                      “Language agent tree search unifies reasoning, acting, and planning in
+[1] A. Amini, I. Gilitschenski, J. Phillips, J. Moseyko, R. Banerjee, S. Kara-        language models,” in Forty-first International Conference on Machine
+    man, and D. Rus, “Learning robust control policies for end-to-end                 Learning.
+    autonomous driving from data-driven simulation,” IEEE Robotics and           [23] Z. Xi, W. Chen, X. Guo, W. He, Y. Ding, B. Hong, M. Zhang, J. Wang,
+    Automation Letters, vol. 5, no. 2, pp. 1143–1150, 2020.                           S. Jin, E. Zhou et al., “The rise and potential of large language model
+[2] K. Xu, X. Xiao, J. Miao, and Q. Luo, “Data driven prediction architec-            based agents: A survey,” arXiv preprint arXiv:2309.07864, 2023.
+    ture for autonomous driving and its application on apollo platform,” in      [24] D. Gao, L. Ji, L. Zhou, K. Q. Lin, J. Chen, Z. Fan, and M. Z.
+    IEEE Intelligent Vehicles Symposium. IEEE, 2020, pp. 175–181.                     Shou, “Assistgpt: A general multi-modal assistant that can plan, execute,
+[3] D. Bogdoll, J. Breitenstein, F. Heidecker, M. Bieshaar, B. Sick, T. Fin-          inspect, and learn,” arXiv preprint arXiv:2306.08640, 2023.
+    gscheidt, and M. Zöllner, “Description of corner cases in automated         [25] Y. Shen, K. Song, X. Tan, D. Li, W. Lu, and Y. Zhuang, “Hugginggpt:
+    driving: Goals and challenges,” in Proceedings of the IEEE/CVF Inter-             Solving ai tasks with chatgpt and its friends in hugging face,” Advances
+    national Conference on Computer Vision, 2021, pp. 1023–1028.                      in Neural Information Processing Systems, vol. 36, 2024.
+[4] L. Chen, Y. Li, C. Huang, Y. Xing, D. Tian, L. Li, Z. Hu, S. Teng,           [26] D. Surı́s, S. Menon, and C. Vondrick, “Vipergpt: Visual inference
+    C. Lv, J. Wang et al., “Milestones in autonomous driving and intelligent          via python execution for reasoning,” in Proceedings of the IEEE/CVF
+    vehicles—part 1: Control, computing system design, communication,                 International Conference on Computer Vision, 2023, pp. 11 888–11 898.
+    hd map, testing, and human behaviors,” IEEE Transactions on Systems,         [27] T. Händler, “Balancing autonomy and alignment: A multi-dimensional
+    Man, and Cybernetics: Systems, 2023.                                              taxonomy for autonomous llm-powered multi-agent architectures,” arXiv
+[5] N. Jaipuria, X. Zhang, R. Bhasin, M. Arafa, P. Chakravarty, S. Shri-              preprint arXiv:2310.03659, 2023.
+    vastava, S. Manglani, and V. N. Murali, “Deflating dataset bias using        [28] Z. Liu, Y. Zhang, P. Li, Y. Liu, and D. Yang, “Dynamic llm-agent
+    synthetic data augmentation,” in Proceedings of the IEEE/CVF Confer-              network: An llm-agent collaboration framework with agent team op-
+    ence on Computer Vision and Pattern Recognition Workshops, 2020, pp.              timization,” arXiv preprint arXiv:2310.02170, 2023.
+    772–773.                                                                     [29] W. Chen, Y. Su, J. Zuo, C. Yang, C. Yuan, C.-M. Chan, H. Yu,
+[6] X. Ying, “An overview of overfitting and its solutions,” in Journal of            Y. Lu, Y.-H. Hung, C. Qian et al., “Agentverse: Facilitating multi-
+    physics: Conference series, vol. 1168. IOP Publishing, 2019, p. 022022.           agent collaboration and exploring emergent behaviors,” in The Twelfth
+[7] D. M. Hawkins, “The problem of overfitting,” Journal of chemical                  International Conference on Learning Representations, 2023.
+    information and computer sciences, vol. 44, no. 1, pp. 1–12, 2004.           [30] R. Gong, Q. Huang, X. Ma, Y. Noda, Z. Durante, Z. Zheng, D. Ter-
+[8] Y. Zhang, P. Tiňo, A. Leonardis, and K. Tang, “A survey on neural                zopoulos, L. Fei-Fei, J. Gao, and H. Vo, “Mindagent: Emergent gaming
+    network interpretability,” IEEE Transactions on Emerging Topics in                interaction,” in Findings of the Association for Computational Linguis-
+    Computational Intelligence, vol. 5, no. 5, pp. 726–742, 2021.                     tics: NAACL 2024, 2024, pp. 3154–3183.
+                                                                                 13
+
+
+
+[31] H. Zhang, W. Du, J. Shan, Q. Zhou, Y. Du, J. B. Tenenbaum, T. Shu, and
+     C. Gan, “Building cooperative embodied agents modularly with large
+     language models,” in The Twelfth International Conference on Learning
+     Representations.
+[32] J. Mao, J. Ye, Y. Qian, M. Pavone, and Y. Wang, “A language agent for
+     autonomous driving,” arXiv preprint arXiv:2311.10813, 2023.
+[33] H. Shao, Y. Hu, L. Wang, G. Song, S. L. Waslander, Y. Liu, and H. Li,
+     “Lmdrive: Closed-loop end-to-end driving with large language models,”
+     in Proceedings of the IEEE/CVF Conference on Computer Vision and
+     Pattern Recognition, 2024, pp. 15 120–15 130.
+[34] J. Wei, X. Wang, D. Schuurmans, M. Bosma, F. Xia, E. Chi, Q. V. Le,
+     D. Zhou et al., “Chain-of-thought prompting elicits reasoning in large
+     language models,” Advances in neural information processing systems,
+     vol. 35, pp. 24 824–24 837, 2022.
+[35] Q. Lyu, S. Havaldar, A. Stein, L. Zhang, D. Rao, E. Wong, M. Apidi-
+     anaki, and C. Callison-Burch, “Faithful chain-of-thought reasoning,” in
+     The 13th International Joint Conference on Natural Language Process-
+     ing and the 3rd Conference of the Asia-Pacific Chapter of the Association
+     for Computational Linguistics (IJCNLP-AACL 2023), 2023.
+[36] Z. Zhang, A. Zhang, M. Li, G. Karypis, A. Smola et al., “Multimodal
+     chain-of-thought reasoning in language models,” Transactions on Ma-
+     chine Learning Research.
+[37] A. Papadoulis, M. Quddus, and M. Imprialou, “Evaluating the safety
+     impact of connected and autonomous vehicles on motorways,” Accident
+     Analysis & Prevention, vol. 124, pp. 12–22, 2019.
+[38] M. M. Morando, Q. Tian, L. T. Truong, and H. L. Vu, “Studying the
+     safety impact of autonomous vehicles using simulation-based surrogate
+     safety measures,” Journal of advanced transportation, vol. 2018, no. 1,
+     p. 6135183, 2018.
+[39] N. Virdi, H. Grzybowska, S. T. Waller, and V. Dixit, “A safety assess-
+     ment of mixed fleets with connected and autonomous vehicles using the
+     surrogate safety assessment module,” Accident Analysis & Prevention,
+     vol. 131, pp. 95–111, 2019.
+[40] E. Leurent et al., “An environment for autonomous driving decision-
+     making,” 2018.
+[41] D. Chen, M. R. Hajidavalloo, Z. Li, K. Chen, Y. Wang, L. Jiang,
+     and Y. Wang, “Deep multi-agent reinforcement learning for highway
+     on-ramp merging in mixed traffic,” IEEE Transactions on Intelligent
+     Transportation Systems, vol. 24, no. 11, pp. 11 623–11 638, 2023.
+[42] T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal,
+     A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al., “Language mod-
+     els are few-shot learners,” Advances in neural information processing
+     systems, vol. 33, pp. 1877–1901, 2020.
+[43] M. L. Team. (2024) Introducing meta llama 3: The most capable
+     openly available llm to date. [Online]. Available: https://ai.meta.com/
+     blog/meta-llama-3/
+[44] J. Bai, S. Bai, Y. Chu, Z. Cui, K. Dang, X. Deng, Y. Fan, W. Ge,
+     Y. Han, F. Huang et al., “Qwen technical report,” arXiv preprint
+     arXiv:2309.16609, 2023.
+

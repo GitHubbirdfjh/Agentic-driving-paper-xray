@@ -1,0 +1,985 @@
+                                               DriveWorld: 4D Pre-trained Scene Understanding via World Models for
+                                                                       Autonomous Driving
+
+                                                      Chen Min1,2 , Dawei Zhao2 *, Liang Xiao2 *, Jian Zhao3 , Xinli Xu4 , Zheng Zhu5
+                                                Lei Jin6 , Jianshu Li7 , Yulan Guo8 , Junliang Xing9 , Liping Jing10 , Yiming Nie2 , Bin Dai2
+                                                                     1
+                                                                       School of Computer Science, Peking University
+                                                    2
+                                                      Unmanned Systems Technology Research Center, Defense Innovation Institute
+arXiv:2405.04390v1 [cs.CV] 7 May 2024
+
+
+
+
+                                         3
+                                           China Telecom Institute of AI & NPU 4 HKUST 5 GigaAI 6 BUPT 7 Ant Group 8 SYSU 9 THU 10 BJTU
+                                                               minchen@stu.pku.edu.cn, adamzdw@163.com, xiaoliang@nudt.edu.cn
+
+
+
+                                                                     Abstract                                                                             2D Pre-text Task
+                                                                                                                                        Feature
+                                            Vision-centric autonomous driving has recently raised                                      Extraction
+                                        wide attention due to its lower cost. Pre-training is essential                   (a) Monocular 2D Pre-training
+                                        for extracting a universal representation. However, current                                                          3D Pre-text Task
+                                        vision-centric pre-training typically relies on either 2D or                                    2D to 3D
+                                        3D pre-text tasks, overlooking the temporal characteristics                                  View Transform
+                                        of autonomous driving as a 4D scene understanding task. In
+                                                                                                                          (b) Multi-camera 3D Pre-training
+                                        this paper, we address this challenge by introducing a world
+                                        model-based autonomous driving 4D representation learn-                                                           4D Pre-text Task
+                                        ing framework, dubbed DriveWorld, which is capable of
+                                                                                                                                       2D to 3D
+                                                                                                                    ...
+
+
+
+
+                                        pre-training from multi-camera driving videos in a spatio-
+                                        temporal fashion. Specifically, we propose a Memory State-                                  View Transform
+                                        Space Model for spatio-temporal modelling, which consists
+                                        of a Dynamic Memory Bank module for learning temporal-                            (c) Multi-camera 4D Pre-training
+                                        aware latent dynamics to predict future changes and a Static
+                                                                                                          Figure 1. Comparison on different pre-training methods for vision-
+                                        Scene Propagation module for learning spatial-aware la-
+                                                                                                          centric autonomous driving. (a) Monocular 2D pre-training with
+                                        tent statics to offer comprehensive scene contexts. We ad-        2D pre-text tasks (e.g., 2D classification and depth estimation). (b)
+                                        ditionally introduce a Task Prompt to decouple task-aware         Multi-camera 3D pre-training via 3D scene reconstruction or 3D
+                                        features for various downstream tasks. The experiments            object detection. (c) The proposed 4D pre-training based on world
+                                        demonstrate that DriveWorld delivers promising results on         models learns unified spatio-temporal representations.
+                                        various autonomous driving tasks. When pre-trained with
+                                        the OpenScene dataset, DriveWorld achieves a 7.5% in-
+                                        crease in mAP for 3D object detection, a 3.0% increase in
+                                                                                                          demands the acquisition of a robust spatio-temporal repre-
+                                        IoU for online mapping, a 5.0% increase in AMOTA for
+                                                                                                          sentation that can address tasks involving perception, pre-
+                                        multi-object tracking, a 0.1m decrease in minADE for mo-
+                                                                                                          diction, and planning [31]. Learning spatio-temporal rep-
+                                        tion forecasting, a 3.0% increase in IoU for occupancy pre-
+                                                                                                          resentations is highly challenging due to the stochastic na-
+                                        diction, and a 0.34m reduction in average L2 error for plan-
+                                                                                                          ture of natural scenes, the partial observability of the envi-
+                                        ning.
+                                                                                                          ronment, and the diversity of downstream tasks [58, 84].
+                                                                                                          Pre-training plays a crucial role in acquiring a universal
+                                                                                                          representation from massive data, enabling the construc-
+                                        1. Introduction                                                   tion of a foundational model enriched with common knowl-
+                                                                                                          edge [6, 35, 64, 70, 98]. However, research on pre-training
+                                        Autonomous driving is a complex undertaking that relies
+                                                                                                          for spatio-temporal representation learning in autonomous
+                                        on comprehensive 4D scene understanding [1, 75]. This
+                                                                                                          driving remains relatively limited.
+                                          * Corresponding authors.                                           Vision-centric autonomous driving has recently attracted
+increasing attention because of its lower cost [31, 33, 43,        To validate the performance of our proposed 4D
+44, 51, 77, 95]. However, as shown in Fig. 1, the ex-           pre-training approach, we conducted pre-training on the
+isting vision-centric pre-training algorithms still predom-     nuScenes [5] training set and the recently released large-
+inantly rely on 2D pre-text tasks [24, 60] or 3D pre-text       scale 3D occupancy datasets, OpenScene [11], followed by
+tasks [57, 69, 88]. DD3D [60] has demonstrated the effec-       fine-tuning on the nuScenes training set. The experimental
+tiveness of depth estimation for pre-training. OccNet [69],     results demonstrate the superiority of our 4D pre-training
+UniScene [57], and UniPAD [88] have further extended pre-       approach when compared to 2D ImageNet pre-training [24],
+training to 3D scene reconstruction. However, these algo-       3D occupancy pre-training [57, 69], and knowledge distilla-
+rithms overlook the importance of 4D representation for un-     tion algorithms [10]. Our 4D pre-training algorithm exhib-
+derstanding self-driving scenes.                                ited substantial improvements in vision-centric autonomous
+    We aim to employ world models to address 4D represen-       driving tasks, including 3D object detection, multi-object
+tation for vision-centric autonomous driving pre-training.      tracking, online mapping, motion forecasting, occupancy
+World models excel in representing an agent’s spatio-           prediction, and planning. The main contributions of this
+temporal knowledge about its environment. [19, 39]. In          work are listed below:
+reinforcement learning, DreamerV1 [20], DreamerV2 [22],         • We present the first 4D pre-training method based on
+and DreamerV3 [23] employ world models to encapsulate             world models for real-world vision-centric autonomous
+an agent’s experience within a predictive model, thereby          driving, which learns a compact spatio-temporal repre-
+facilitating the acquisition of a wide array of behaviours.       sentation from multi-camera driving videos.
+MILE [27] leverages 3D geometry as an inductive bias and        • We design the Memory State-Space Model, which in-
+learns a compact latent space directly from videos of expert      cludes a Dynamic Memory Bank module for learning
+demonstrations to construct world models in the CARLA             temporal-aware latent dynamics, a Static Scene Propaga-
+simulator [12]. ContextWM [82] and SWIM [54] pre-train            tion module for learning spatial-aware latent statics, and
+world models with abundant in-the-wild videos to enhance          a Task Prompt to condition feature extraction adaptively
+the efficient learning of downstream visual tasks. More           for various tasks.
+recently, GAIA-1 [28] and DriveDreamer [76] have con-           • Extensive experiments indicate DriveWorld’s pre-training
+structed generative world models that harness video, text,        aids in establishing new state-of-the-art performance in
+and action inputs to create realistic driving scenarios using     vision-centric perception, prediction, and planning tasks.
+diffusion models. Unlike the aforementioned prior works
+on world models, our approach primarily focuses on har-
+nessing world models to learn 4D representations for au-
+tonomous driving pre-training.                                  2. Related Work
+   Driving inherently entails grappling with uncer-
+tainty [26].    There are two types of uncertainty in           2.1. Pre-training for Autonomous Driving
+ambiguous autonomous driving scenarios: aleatoric uncer-
+tainty, stemming from the stochastic nature of the world,       Based on input modalities, autonomous driving pre-training
+and epistemic uncertainty, arising from imperfect knowl-        algorithms can be primarily categorized: pre-training on
+edge or information [15]. How to leverage past experience       large-scale LiDAR point clouds [14, 91, 92] and pre-
+to predict plausible future states, and estimate missing        training on images [7, 40, 47]. Pre-training algorithms for
+information about the state of the world for autonomous         large-scale LiDAR point clouds can further be classified
+driving remains an open problem. In this work, we explore       into contrastive learning methods [8, 34, 45, 65, 67, 90],
+4D pre-training via world models to deal with both aleatoric    masked autoencoder methods [25, 56, 68, 85, 87], and
+and epistemic uncertainties. Specifically, we design the        occupancy-based approaches [4, 56, 86, 96]. To incorporate
+Memory State-Space Model to reduce uncertainty within           3D spatial structure into vision-centric autonomous driving,
+autonomous driving from two aspects. Firstly, to address        pre-training methods involving depth estimation have seen
+aleatoric uncertainty, we propose the Dynamic Memory            widespread adoption [60, 83]. OccNet [69], UniScene [57],
+Bank module for learning temporal-aware latent dynamics         UniPAD [88], and PonderV2 [98] have introduced pre-
+to predict future states. Secondly, to mitigate epistemic       training via 3D scene reconstruction. BEVDistill [10], Dis-
+uncertainty, we propose the Static Scene Propagation            tillBEV [79], and GeoMIM [49] employ knowledge distilla-
+module for learning spatial-aware latent statics to provide     tion to transfer geometric insights from pre-trained LiDAR
+comprehensive scene context. Furthermore, we introduce          point clouds detection models. However, autonomous driv-
+Task Prompt, which leverages semantic cues as prompts to        ing presents a 4D scene understanding challenge. We pro-
+tune the feature extraction network adaptively for different    pose the first 4D pre-training approach based on world mod-
+driving downstream tasks.                                       els for vision-centric autonomous driving.
+                          : 2D to 3D View Transform                     Memory State-Space Model          Task Description
+
+
+                                                               b´                                                            Task Prompt
+                                                                          Static Scene Propagation          Pre-trained
+                                                                                                           Text Encoder
+
+                                 Frame o´                                                                                      3D Occupancy
+                                                                                                                                    y^1
+                                                      BEV Feature b1 Stochastic State s1
+            Observation
+
+
+
+
+                                 Frame o1
+                                                                        Action aT-1
+                                                                                                                                 Action a1
+                                                                                                                                          ^
+                                   …
+
+
+
+
+                                                                                                          …
+                                                                                           Dynamic
+                                                              bT              sT           Memory
+                                                                                            Bank                                    y^T
+                                                                                             h1:t
+                                Frame oT                                                                                            a^T
+
+                                                                            sT+1
+            Prediction
+
+
+
+
+                                                                                                                                    y^T+1
+                             4D Driving World
+
+                                                                                                                                    a^T+1
+
+
+Figure 2. Overall framework of the proposed DriveWorld. Since autonomous driving heavily relies on the understanding of 4D scenes, our
+approach first involves the transformation of multi-camera images into a 4D space. Within the proposed Memory State-Space Model for
+spatio-temporal modelling, we have two essential components: the Dynamic Memory Bank, which learns temporal-aware latent dynamics
+for predicting future states, and the Static Scene Propagation, which learns spatial-aware latent statics to provide comprehensive scene
+context. This configuration facilitates the decoder’s task of reconstructing 3D occupancy and actions for both the current and future time
+steps. Besides, we design the Task Prompt based on a pre-trained text encoder to adaptively decouple task-aware features for various tasks.
+
+
+2.2. Spatial-Temporal Modeling for Autonomous                                         learning [22, 59, 66], and autonomous driving [3, 16, 28,
+     Driving                                                                          93]. In reinforcement learning, Ha and Schmidhuber [19]
+                                                                                      proposed that the world model can be trained quickly in
+In the domain of autonomous driving, there has been                                   an unsupervised manner to learn a compressed spatial and
+significant research focus on spatio-temporal modeling.                               temporal representation of the environment. Methods in
+BEVFormer [44] employs spatio-temporal transformers                                   [18, 20, 22, 23] presuppose access to rewards and online in-
+to learn BEV representations from multi-camera images.                                teraction with the environment from predictions in the com-
+BEVDet4D [32] extends BEVDet [33] from spatial-only 3D                                pact latent space of a world model. ContextWM [82] and
+space to the spatio-temporal 4D space. BEVStereo [42],                                SWIM [54] pre-train world models with abundant in-the-
+STS [78], and SOLOFusion [61] address depth perception                                wild videos for downstream visual tasks. In autonomous
+challenges in camera-based 3D tasks by leveraging tem-                                driving, Elfes [13] proposed the geometric occupancy grid
+poral multi-view stereo (MVS) [99]. PETRv2 [52] and                                   as a world model for robot perception and navigation in
+StreamPETR [73] utilize sparse object queries to model                                1989. MILE [27] proposed to build the world model by pre-
+moving objects and enable efficient transmission of long-                             dicting the future BEV segmentation from high-resolution
+term temporal information. ST-P3 [30] and UniAD [31] are                              videos of expert demonstrations for autonomous driving.
+dedicated to building end-to-end vision-based autonomous                              GAIA-1 [28] and DriveDreamer [76] have constructed gen-
+driving systems through spatio-temporal feature learning.                             erative world models that harness video, text, and action
+                                                                                      inputs to create realistic driving scenarios using diffusion
+2.3. World Models
+                                                                                      models. Zhang et al. [93] builds unsupervised world mod-
+World models enable intelligent agents to learn a state rep-                          els for the point cloud forecasting task in autonomous driv-
+resentation from past experiences and current observations,                           ing. In this paper, we imbue the robot with a pre-trained
+allowing them to predict future outcomes [19, 22, 39].                                spatio-temporal representation via world models to perceive
+World models find extensive applications in reinforcement                             surroundings and predict the future behaviour of other par-
+ticipants.                                                                                                      ŷ 1         â 1                                             ŷ T         â T                                        ŷ T+1   â T+1
+                                                                                           Dynamics                                                       Dynamics                                                  Dynamics
+                                                                                           Memory               ��          ��                            Memory              ��          ��                        Memory              ��      ��
+3. DriveWorld                                                            �̂                                                               …
+                                                                           ´                                   ��                                                            ��                                                        ��
+                                                                                                 h1                                 ��    …                     hT                                ��                     hT+1                            …
+                                                                                 min KL                                                       min KL
+Consider a sequence of observed T video frames denoted                                                          s1                                 sT                         sT
+                                                                        ��           s1
+as o1:T , captured by multi-view cameras, along with their
+                                                                                 �� , ��                     �∅ , �∅                           �� , ��                    �∅ , �∅                            �� , ��                   sT+1
+corresponding expert actions, a1:T and 3D occupancy la-
+                                                                       Statics
+bels y1:T which can be acquired with the aid of LiDAR                Propagation                                 x1                              â T-1        aT-1           xT
+
+point clouds and pose data, we aim to learn a compact                    �´                                      b1                                                           bT
+spatio-temporal BEV representation via world model that
+                                                                                                           Observation                                                                                                  Prediction
+predicts current and future 3D occupancy given the past
+multi-camera images and actions. As shown in Fig. 2, the            Figure 3. Overall architecture of proposed the Memory State-
+designed world model consists of an Image Encoder, a 2D             Sapce Model (MSSM). MSSM divides the transmitted information
+to 3D View Transform (e.g., Transformers [77], LSS [62]             into two categories: temporal-aware information and spatial-aware
+techniques), a Memory State-Space Model which consists              information. The Dynamic Memory Bank module utilizes motion-
+of a Dynamic Memory Bank module to learn the temporal-              aware layer normalization (MLN) to encode temporal-aware at-
+aware latent dynamics and a Static Scene Propagation mod-           tributes and engages in information interaction with the dynami-
+ule to learn the spatial-aware latent statics, a Decoder to         cally updated memory bank. Meanwhile, the Static Scene Prop-
+                                                                    agation module employs BEV features to represent spatial-aware
+predict the actions and 3D occupancy, and a Task Prompt to
+                                                                    latent statics, which are directly conveyed to the decoder.
+condition the feature extraction for different tasks.
+3.1. Memory State-Space Model
+                                                                       Considering the high dimensionality of BEV fea-
+As autonomous vehicle moves, it sequentially conveys two            tures, we transform them into a 1D vector xt ∈ R512
+types of information within its observations: the temporal-         and subsequently sample the Gaussian distribution from
+aware information linked to alterations in the scene due to         (ht , at−1 , xt ) to generate the posterior state distribution:
+object mobility, and the spatial-aware information associ-
+ated with scene context [82]. As illustrated in Fig. 3, to                 \label {post} q(s_t|o_{\leq t},a_{< t})\backsim \mathcal {N}(\mu _{\phi }(h_t,a_{t-1},x_t),\sigma _{\phi }(h_t, a_{t-1},x_t)\textbf {\textit {I}}),                       (1)
+address these dynamic agents and spatial scenes separately
+                                                                     where st is parameterised as a normal distribution with
+for 4D pre-training, we propose the Dynamic Memory Bank
+                                                                    diagonal covariance and the initial distribution is set as
+module for temporal-aware latent dynamics and the Static
+                                                                    s1 ∽ N (0, I). (µϕ , σϕ ) are multi-layer perceptrons that
+Scene Propagation module for spatial-aware latent statics.
+                                                                    parametrise the posterior state distribution.
+Next, we will begin by introducing the probabilistic model
+                                                                       In the absence of observed images, the model derives the
+for temporal modelling, followed by detailed presentations
+                                                                    prior state distribution based on historical information and
+of the Dynamic Memory Bank module and Static Scene
+                                                                    predicted action:
+Propagation module.
+                                                                                     \label {prior} p(s_t|h_{t-1},s_{t-1})\backsim \mathcal {N}(\mu _\theta (h_t,\hat {a}_{t-1}),\sigma _\theta (h_t,\hat {a}_{t-1})\textbf {\textit {I}}),          (2)
+Probabilistic Modelling. To imbue the model with the
+capability for temporal modelling, we first introduce two la-        where (µθ , σθ ) parameterizes the prior state distribution.
+tent variables (h1:T , s1:T ), where ht represents the history      πθ is the policy network for predicting action ât−1 with past
+and st signifies the stochastic state. ht is updated with the       history ht−1 and state st−1 . Following MILE [27], we uti-
+past histories h1:t−1 and stochastic states s1:t−1 .                lize MLP for action prediction, including velocity and steer-
+   When images are observed, current scene perception can           ing.
+be obtained by utilizing past and current images. However,
+when predicting the future, in the absence of input images,         Dynamic Memory Bank. In the process of temporal in-
+we rely solely on past histories and states (h1:t−1 , s1:t−1 )      formation propagation, we aim to account for the movement
+to predict the future states. This predictive process is akin       of objects by incorporating motion parameters. Following
+to the probabilistic generative models [38]. For predicting         StreamPETR [73], we introduce motion-aware layer nor-
+future, we follow Recurrent State-Space Model [97] and              malization (MLN) into the latent dynamics propagation pro-
+construct both the posterior state distribution q(st |o≤t , a<t )   cess. We define K moving objects and estimate their veloci-
+and the prior state distribution p(st |ht−1 , st−1 ). The objec-    ties. The motion attributes consist of velocity v, and relative
+tive is to match the prior distribution (the anticipated out-       time interval ∆t. (v, ∆t) are flattened and converted into
+come based on past histories and states) with the poste-            affine vectors γ and β through two linear layers (ξ1 , ξ2 ):
+rior distribution (the outcome derived from observed multi-         γ = ξ1 (v, ∆t), β = ξ2 (v, ∆t). Then an affine transforma-
+camera images and actions) [27].                                    tion is executed to yield the motion-aware latent stochastic
+state, denoted as s̃t = γ · LN (st ) + β. With the motion          3.3. Task Prompt
+of the vehicle, the deterministic history ht can establish a
+                                                                   While the designed pre-text task through the world model
+dynamic memory bank h1:t . The refined deterministic his-
+                                                                   enables the learning of spatio-temporal representations, dif-
+tory h̃t is obtained via the cross-attention mechanism with
+                                                                   ferent downstream tasks focus on distinct information [48,
+the dynamics memory bank. The transition of deterministic
+                                                                   72]. For instance, the 3D object detection task emphasizes
+history is set as ht+1 = fθ (h̃t , s̃t ).
+                                                                   current spatio-aware information, while future prediction
+                                                                   tasks prioritize temporal-aware information. Excessive fo-
+Static Scene Propagation. As the vehicle moves, con-               cus on future information, such as the future position of a
+secutive frames of the scene typically depict minimal al-          vehicle, could be detrimental to 3D object detection task.
+terations, with a prominent presence of static objects such            To mitigate this problem, inspired by Semantic Prompt
+as roads, trees, and traffic signs constituting the scene’s pre-   for few-shot image recognition [9] and Visual Exemplar
+dominant content. Converting input images into a 1D vec-           driven Prompts for multi-task learning [48], we introduce
+tor would lead to the loss of crucial information. In addition     the concept of “Task Prompt”, providing specific cues to
+to conveying temporal-aware information, the world model           different heads to guide them in extracting the task-aware
+should also be able to model spatial-aware information.            features. Acknowledging the semantic connections that ex-
+                                                         ′
+   As shown in Fig. 3, we randomly select a frame o from           ist among different tasks, we leverage the Large Language
+                                                ′
+frames 1 to T and use its BEV features b to construct a            Model gφ (· ) (e.g., BERT [35], CLIP [63]) to construct
+                                       ′
+latent static representation b̂ = zθ (b ) describing the spatio-   these task prompts. For instance, the task prompt ptext
+aware structure. We combine the spatio-aware latent stat-          for the 3D occupancy reconstruction task that focuses on
+ics b̂ and the temporal-aware latent dynamics st in channel-       the current scene is set as straightforward as “The task is
+wise manner. We opt not to use warping operations, allow-          to predict the 3D occupancy of the current scene”. We
+ing the model to learn a robust global representation of the       input the prompt ptext into gφ (· ) to acquire prompt en-
+entire scene and st to focus on capturing motion informa-          codings gφ (ptext ). Subsequently, we employ AdaptiveIn-
+tion. As st is learned from the BEV features bt , during the       stanceNorm [27] and CNNs to expand it to the dimensions
+model training process, BEV features simultaneously ac-            of BEV, denoted as qφ (gφ (ptext )), to integrate it with the
+quire representations for static scene and motion informa-         learned spatio-temporal features.
+tion. This holistic representation is subsequently utilized in
+the subsequent decoder network.                                    3.4. Pre-training Objective
+                                                                   The pre-training objectives of DriveWorld involve minimiz-
+3.2. 3D Occupancy Prediction
+                                                                   ing the divergence between post and prior state distributions
+Aiming at a comprehensive understanding of surrounding             (i.e. Kullback-Leibler (KL) divergence) and minimizing the
+scenes in autonomous driving, we model the physical world          loss related to past and future 3D occupancy (i.e. Cross-
+into the 3D occupancy structure, utilizing the geometric           Entropy loss (CE)) and actions (i.e. L1 loss). We depicted
+form of occupancy to depict the surrounding environment of         the model observing inputs over T timesteps, followed by
+the vehicle [13, 37, 50, 53, 69]. In contrast to other world       envisioning future 3D occupancy and actions for L steps.
+models that reconstruct the input 2D images [22, 28], the          The overall loss function of DriveWorld is:
+3D occupancy decoder can introduce geometric priors of
+the surrounding world through pre-training to vision-based
+                                                                      \label {loss} \begin {aligned} loss =&\displaystyle \sum _{t=1}^{T}[{\rm KL}(q(s_t|o_{\leq t,a_{<t}})\parallel p(s_t|h_{t-1},s_{t-1}))+{\rm CE}(\hat {y}_t,y_t)+\\ &{\rm L1}(\hat {a}_t,a_t)] +\displaystyle \sum _{k=1}^{L}[{\rm CE}(\hat {y}_k,y_k)+{\rm L1}(\hat {a}_k,a_k)]. \end {aligned} 
+models. Unlike depth estimation pre-training [60, 83],
+                                                                                                                                                                                                                                                                                                                                                                         (3)
+which primarily represents object surfaces, 3D occupancy
+can represent the entire structure. Furthermore, unlike
+MILE’s BEV segmentation target [27], which omits crucial
+height information, 3D occupancy provides a more compre-              For the OpenScene dataset [11], we also utilize an L2
+hensive description of objects. The 3D occupancy decoder           loss for occupancy flow prediction. DriveWorld is based
+is set as ŷt = lθ (mθ (h̃t , st ), b̂), where mθ is the network   on the Probabilistic Generative Model [22, 27, 38]. For the
+expanding the 1D features to the dimensions of BEV, and lθ         detailed derivation of the loss function, please refer to Sec-
+is the 3D convolutional network for predicting occupancy.          tion 6 in the supplementary material.
+    Reconstructing 3D occupancy as the pre-text task has
+                                                                   3.5. Fine-tuning on Downstream Tasks
+been demonstrated to be effective by pre-training algo-
+rithms like OccNet [69] and UniScene [57]. In comparison           Through DriveWorld, we acquire spatio-temporal BEV rep-
+to OccNet and UniScene, we further extend to 4D occu-              resentations. Specifically, the network between image fea-
+pancy pre-training, introducing additional prior knowledge         ture extraction and the generation of BEV features (i.e., en-
+through spatio-temporal modelling.                                 coder) is pre-trained. During fine-tuning, both the encoder
+                                                                                   MSSM                      Detection           Tracking                Mapping
+and decoder (i.e. head network for different tasks) with Task    RSSM
+                                                                         SSP       DMB MLN
+                                                                                              Task Prompt
+                                                                                                            mAP↑ NDS↑        AMOTA↑ AMOTP↓         IoU-lane↑ IoU-road↑
+
+Prompts are trained simultaneously.                                                                         0.416    0.517    0.355       1.336     0.301       0.671
+                                                                  ✓                                         0.381    0.494       -          -         -              -
+                                                                         ✓                                  0.429    0.528    0.365       1.327     0.319       0.688
+
+4. Experiments                                                           ✓         ✓                        0.425    0.524    0.370       1.320     0.312       0.686
+                                                                         ✓         ✓     ✓                  0.432    0.531    0.373       1.312     0.326       0.698
+                                                                         ✓         ✓     ✓          ✓       0.436    0.534    0.379       1.308     0.329       0.705
+4.1. Experimental Setup
+Dataset. We pre-train on the autonomous driving dataset           Table 1. Ablation studies of each component of DriveWorld.
+nuScenes [5] and the largest-scale 3D occupancy dataset
+OpenScene [11], and fine-tune on nuScenes. Evaluation             Pre-train            Fine-tune
+                                                                                                            Detection                        Tracking
+                                                                                                         mAP↑       NDS↑                AMOTA↑      AMOTP↓
+settings are the same as UniAD [31]. For detailed dataset
+descriptions, please refer to the Section 8 in the supplemen-           0%               100%             0.416         0.517             0.355              1.336
+
+tal material..                                                        50%                100%             0.425         0.523             0.364              1.323
+
+                                                                      100%               75%              0.418         0.518             0.358              1.331
+
+Pre-training. In alignment with BEVFormer [44] and                    100%               100%             0.436         0.534             0.379              1.308
+UniAD [31], we employ ResNet101-DCN [24] as the foun-
+dational backbone. For 3D occupancy prediction, we estab-               Table 2. Ablation studies of different scales of dataset.
+lish a voxel size of 16 × 200 × 200. The learning rate is set
+as 2×10−4 . By default, the pre-training phase encompasses            Method             mAP↑           NDS↑        mATE↓     mASE↓       mAOE↓     mAVE↓      mAAE↓
+
+24 epochs. The model observes inputs over T = 4 steps, and        DETR3D [77]
+                                                                   UVTR [41]
+                                                                                         0.349
+                                                                                         0.379
+                                                                                                        0.434
+                                                                                                        0.483
+                                                                                                                     0.716
+                                                                                                                     0.731
+                                                                                                                                0.268
+                                                                                                                                0.267
+                                                                                                                                           0.379
+                                                                                                                                           0.350
+                                                                                                                                                     0.842
+                                                                                                                                                     0.510
+                                                                                                                                                                0.200
+                                                                                                                                                                0.200
+the future prediction is set at L = 4 steps.                     BEVFormer [44]∗
+                                                                                         0.377          0.477        0.708      0.280      0.450     0.433      0.198
+                                                                  + FCOS3D [74]          0.416          0.517        0.673      0.274      0.372     0.394      0.198
+                                                                   + OccNet [69]         0.436          0.532        0.655      0.273      0.372     0.349      0.182
+                                                                  + UniScene [57]        0.438          0.534        0.656      0.271      0.371     0.348      0.183
+Fine-tuning. In the fine-tuning stage, we retain the pre-        + BEVDistill [10]       0.439          0.536        0.653      0.271      0.372     0.343      0.180
+
+trained encoder that generates BEV features and fine-tune         + DriveWorld†        0.442+6.5%   0.536+5.9%       0.650      0.268      0.370     0.342      0.183
+                                                                  + DriveWorld‡        0.452+7.5%   0.545+6.8%       0.642      0.264      0.359     0.324      0.176
+downstream tasks. For the 3D detection task, we employed
+the BEVFormer [44] framework, fine-tuning its parameters        Table 3. Quantitative 3D object detection performance. ∗: we
+without freezing the encoder, and conducted training for 24     retrain BEVFormer [44] with 2D ImageNet pre-training [24].
+epochs. Regarding other autonomous driving tasks, we uti-
+lized the UniAD [31] framework and loaded our fine-tuned                Method                     Lanes↑           Drivable↑           Divider↑       Crossing↑
+BEVFormer weights to UniAD, adhering to a standard 20-
+                                                                  BEVFormer [44]                    23.9               77.5                -                  -
+epoch training protocol for all tasks. For UniAD, we fol-          BEVerse [95]                      -                  -                 30.6               17.2
+lowed its experimental setup, which involved training for 6
+                                                                    UniAD [31]                      31.3               69.1               25.7               13.8
+epochs in stage 1 and 20 epochs in stage 2. Experiments are        + OccNet [69]                    32.1               70.2               26.3               14.2
+conducted with 8 NVIDIA Tesla A100 GPUs.                          + UniScene [57]                   32.5               70.5               26.9               14.9
+                                                                 + BEVDistill [10]                  32.7               70.4               26.8               14.7
+4.2. Ablation Studies                                             + DriveWorld†                  33.4+2.1%          71.3+2.2%           27.9+2.2%         15.2+1.4%
+                                                                  + DriveWorld‡                  34.2+2.9%          73.7+4.6%           29.5+3.8%         17.2+3.4%
+We first perform thorough ablation studies with UniAD [31]
+(only fine-tune on the Stage 1 with queue length of 3 for
+                                                                         Table 4. Quantitative online mapping performance.
+efficiency) pre-trained on nuScenes training set to validate
+the effectiveness of each component of DriveWorld.
+                                                                3D detection and online mapping but improves in tracking.
+Component Analysis. We first validate the effectiveness         In motion prediction tasks, a wide perceptual field is likely
+of the proposed Memory State-Space Model (MSSM) mod-            necessary for the model to perform effectively. However, in
+ule. As shown in Tab. 1, pre-training with the Recur-           detection tasks, precise localization is crucial, and a broad
+rent State-Space Model (RSSM) [97] results in significantly     perceptual field could potentially introduce additional noise
+poor 3D detection performance. This is attributed to RSSM       into the detection process. The subsequent introduction of
+having a 1D tensor for latent dynamics, which cannot ef-        Motion-aware Layer Normalization (MLN) yields improve-
+fectively retain context information, consequently causing      ments in all perception tasks. This demonstrates the im-
+model disruption during pre-training. However, when Static      portance of incorporating motion attributes when transfer-
+Scene Propagation (SSP) is integrated into MSSM, direct         ring dynamic information. Finally, the inclusion of the pro-
+reconstruction using BEV features leads to an approxi-          posed task prompt decouples different information for dis-
+mately 1% improvement in performance. Upon introduc-            tinct tasks, leading to further improvements in perception
+ing Dynamic Memory Bank (DMB), performance drops in             performance.
+Dataset Scale. We also investigate the influence of pre-                  Method                    AMOTA↑                   AMOTP↓                   Recall↑                 IDS↓
+training and fine-tuning data volumes. Tab. 2 illustrates that       QD3DT [29]                         0.242                   1.518                  0.399                    -
+augmenting the volume of data used in pre-training leads to          MUTR3D [94]                        0.294                   1.498                  0.427                  3822
+improved performance in downstream tasks. Importantly,                UniAD [31]                        0.359                   1.320                  0.467                  906
+using just 75% of the data for fine-tuning still results in          + OccNet [69]                      0.363                   1.315                  0.474                  950
+                                                                    + UniScene [57]                     0.373                   1.312                  0.484                  832
+comparable performance. This finding underscores the effi-
+                                                                   + BEVDistill [10]                    0.376                   1.310                  0.489                  812
+cacy of our 4D pre-training approach in reducing the data
+                                                                    + DriveWorld†                   0.385+2.6%               1.303−1.7%              0.511+4.4%            710−196
+requirements by 25%, which translates into considerable
+                                                                    + DriveWorld‡                   0.412+5.3%               1.266−5.4%              0.545+7.8%            701−205
+cost savings in terms of annotation and, as such, represents
+a substantial practical and economic advantage.                        Table 5. Quantitative multi-object tracking performance.
+4.3. Main Results
+                                                                         Method                   minADE(m)↓                minFDE(m)↓                MR↓                  EPA↑
+In this section, we validate the effectiveness of our proposed        PnPNet [46]                      1.15                     1.95                  0.226                0.222
+4D pre-training approach based on the world model across              ViP3D [17]                       2.05                     2.84                  0.246                0.226
+various autonomous driving tasks. In addition to comparing           UniAD [31]                        0.71                     1.02                  0.151                0.456
+                                                                    + OccNet [69]                      0.70                     1.02                  0.146                0.459
+it with state-of-the-art autonomous driving algorithms, we         + UniScene [57]                     0.69                     1.01                  0.148                0.457
+also contrast it with various pre-training algorithms, includ-    + BEVDistill [10]                    0.70                     0.99                  0.146                0.460
+ing 2D ImageNet pre-training [24], monocular 3D detection           + DriveWorld†                  0.67−0.04                 0.94−0.08            0.140−0.011         0.468+0.012
+algorithm FCOS3D [74], knowledge distillation algorithm             + DriveWorld‡                  0.61−0.10                 0.91−0.11            0.136−0.025         0.503+0.047
+BEVDistill [10], and 3D occupancy pre-training algorithms
+OccNet [69] and UniScene [57], to provide a comprehen-                   Table 6. Quantitative motion forecasting performance.
+sive assessment. The symbol † denotes pre-training with the
+training set of nuScenes [5], while ‡ signifies pre-training              Method                       IoU-n↑                 IoU-f↑              VPQ-n↑               VPQ-f↑
+with the training set of OpenScene [11]. For fine-tuning, we           ST-P3 [30]                           -                   38.9                   -                   32.1
+utilize the same decoder head as UniAD [31]. “+X” indi-               BEVerse [95]                         61.4                 40.9                  54.3                 36.1
+cates experimental results obtained after fine-tuning UniAD           UniAD [31]                           63.4                 40.2                  54.7                 33.5
+with different pre-trained model X.                                  + OccNet [69]                         63.9                 40.8                  55.1                 34.2
+                                                                    + UniScene [57]                        64.3                 41.2                  55.3                 34.9
+                                                                   + BEVDistill [10]                       64.1                 40.9                  54.9                 33.8
+3D Object Detection. We first evaluate the performance               + DriveWorld†                  65.3+1.9%               42.4+2.2%             56.7+2.0%          35.3+1.8%
+of the multi-camera 3D object detection task. The results            + DriveWorld‡                  66.2+2.8%               45.2+5.0%             58.1+3.4%          36.9+3.4%
+presented in Tab. 3 show that our 4D pre-training approach
+based on the world model, as opposed to BEVFormer re-                  Table 7. Quantitative occupancy prediction performance.
+lying solely on 2D ImageNet [24] pre-training, delivers a
+substantial increase of 7.5% in mAP and 6.8% in NDS.                  Method
+                                                                                                            L2(m)↓                                       Col.Rate(%)↓
+                                                                                         1s           2s             3s        Avg.         1s           2s        3s            Avg.
+BEVFormer with FCOS3D pre-training, specifically tai-               ST-P3 [30]          1.33         2.11            2.90      2.11        0.23         0.62        1.27         0.71
+lored for monocular 3D object detection, outperforms mod-          BEVGPT [71]          0.39         0.88            1.70      1.22          -            -           -            -
+                                                                     UniAD [31]         0.48         0.96            1.65      1.03        0.05         0.17        0.71         0.31
+els that rely solely on 2D pre-training resulting in a com-         + OccNet [69]       0.49         0.95            1.64      1.02        0.07         0.15        0.69         0.30
+                                                                   + UniScene [57]      0.47         0.91            1.56      0.98        0.05         0.16        0.64         0.28
+mendable 4% increase in performance. OccNet, UniScene,            + BEVDistill [10]     0.46         0.92            1.60      0.99        0.05         0.16        0.67         0.29
+                                                                   + DriveWorld†      0.47−0.01    0.86−0.10    1.42−0.23    0.92−0.11      0.05      0.13−0.04   0.59−0.12    0.26−0.05
+and BEVDistill, which leverage 3D occupancy reconstruc-            + DriveWorld‡      0.34−0.14    0.67−0.29    1.07−0.58    0.69−0.34   0.04−0.01    0.12−0.05   0.41−0.30    0.19−0.12
+tion and knowledge distillation as the pre-training target,
+result in an additional 2% performance increase. These                             Table 8. Quantitative planning performance.
+findings underscore the effectiveness of 3D pre-training
+when compared to traditional 2D pre-training paradigms.
+Our innovative DriveWorld, which introduces 4D spatio-           results in an improvement of about 1% in IoU, and the
+temporal pre-training, exhibits a modest performance im-         knowledge distillation algorithm BEVDistill also enhances
+provement over OccNet, UniScene, and BEVDistill on the           performance by 1%. After our 4D pre-training on nuScenes,
+nuScenes dataset. When extended to the large-scale occu-         there is a 2% improvement and a 3% improvement after pre-
+pancy dataset OpenScene for pre-training, it contributes to      training on OpenScene.
+an additional 1% performance enhancement.
+                                                                 Multi-object Tracking. We further evaluate the perfor-
+Online Mapping. We validate the performance on the on-           mance on the multi-object tracking task, which demands a
+line mapping task. As shown in Tab. 4, compared to UniAD,        deeper consideration of temporal information. Tab. 5 illus-
+pre-training with 3D occupancy in OccNet and UniScene            trates the outcomes of this evaluation. It is evident that
+                                                          UniAD
+                                                                     illustrated in Tab. 8, DriveWorld stands out by achieving
+                                                                     new state-of-the-art planning results, reducing an 0.34m av-
+                                                                     erage L2 error and an average Collision rate of 0.12. These
+                                                                     results surpass the prior best model, UniAD. UniAD inte-
+                                                                     grates perception, prediction, and planning in a sequential
+                                                                     fashion. Our 4D pre-training approach, which comprehen-
+                                                        DriveWorld
+                                                                     sively reconstructs the 3D scene, enhances tasks focused on
+                                                                     the current scene, such as detection and segmentation. and
+                                                                     predicts future scenarios elevating tracking and forecasting
+                                                                     capabilities. By combining these advantages, we further
+                                                                     improve the performance of the final planning step. Con-
+                                                                     sequently, we have developed a robust fundamental model
+                                                                     for autonomous driving.
+Figure 4. Visual comparison between UniAD [31] (Top) and our
+DriveWorld (Bottom).
+                                                                     4.4. Qualitative Results
+
+leveraging DriveWorld’s 4D pre-training results in a no-             The qualitative comparison between UniAD and Drive-
+table enhancement of 2.6% in terms of AMOTA. Impres-                 World is visualized in Fig. 4. UniAD exhibited false posi-
+sively, after pre-training on OpenScene, this performance            tives in detecting distant objects, and the detection accuracy
+boost becomes even more significant, reaching a substan-             was improved by DriveWorld. Additionally, UniAD made
+tial 5.3% increase in AMOTA. In contrast, pre-training with          trajectory prediction errors for turning vehicles, which was
+OccNet, UniScene, and BEVDistill only provides a moder-              addressed by DriveWorld after 4D pre-training, allowing for
+ate improvement of 1.0% in AMOTA. Furthermore, Drive-                accurate predictions of future changes.
+World exhibits the lowest ID switch score, indicating that
+DriveWorld enables the model to consistently demonstrate             5. Conclusion
+temporal coherence for each tracklet.
+                                                                     We introduce DriveWorld, a world model-based 4D pre-
+                                                                     training method for vision-centric autonomous driving.
+Motion Forecasting. In the motion prediction task, as
+                                                                     DriveWorld learns compact spatio-temporal BEV repre-
+demonstrated in Tab. 6, the improvement obtained from 3D
+                                                                     sentations via a world model that predicts 3D occupancy
+pre-training (e.g., OccNet, UniScene, and BEVDistill) is
+                                                                     based on the past multi-camera images and actions. We
+notably limited. In contrast, our 4D pre-training approach,
+                                                                     design a Memory State-Space Model for spatio-temporal
+which encompasses the capability to forecast future states,
+                                                                     modelling, employing a Dynamic Memory Bank module
+significantly enhances the performance of the motion pre-
+                                                                     to learn temporal-aware representations and a Static Scene
+diction task. Pre-training on nuScenes results in a reduc-
+                                                                     Propagation module to learn spatial-aware representations.
+tion of 0.04m in minADE, while pre-training on OpenScene
+                                                                     Additionally, a Task Prompt is introduced to guide the
+leads to a remarkable 0.1m decrease in minADE. This no-
+                                                                     model toward adaptively acquiring task-specific represen-
+table improvement is partly attributed to the larger data
+                                                                     tations. Extensive experiments demonstrate that Drive-
+scale of OpenScene and the presence of valuable flow in-
+                                                                     World significantly enhances the performance of various
+formation in this dataset.
+                                                                     autonomous driving tasks. The power of DriveWorld to rep-
+                                                                     resent 4D world knowledge opens new pathways for inno-
+Occupancy Prediction. The UniAD’s occupancy predic-                  vation within autonomous driving.
+tion task is carried out in the 2D BEV view. As shown
+in Tab. 7, after undergoing 4D occupancy pre-training on
+OpenScene, our model exhibits impressive enhancements:               Limitations and Future Work. Currently, the annota-
+a 2.8% increase in IoU-near, a 5% boost in IoU-far, a 3.4%           tion of DriveWorld is still based on LiDAR point clouds.
+gain in VPQ-near, and a 3.4% rise in VPQ-far. This out-              It is essential to explore self-supervised learning for
+come underscores the effectiveness of our pre-training ap-           vision-centric pre-training. Besides, the effectiveness of
+proach in achieving a more comprehensive reconstruction              DriveWorld has only been validated on the lightweight
+of 4D scenes.                                                        ResNet101 backbone; it is worthwhile to consider scal-
+                                                                     ing up the dataset and the backbone size. We hope the
+                                                                     proposed 4D pre-training method can contribute to the de-
+Planning. We finally validate the effectiveness of the pro-          velopment of the foundation model for autonomous driving.
+posed 4D pre-training algorithm on the planning task. As
+References                                                          [16] Zeyu Gao, Yao Mu, Ruoyan Shen, Chen Chen, Yangang Ren,
+                                                                         Jianyu Chen, Shengbo Eben Li, Ping Luo, and Yanfeng Lu.
+ [1] Ben Agro, Quinlan Sykora, Sergio Casas, and Raquel Urta-            Enhance sample efficiency and robustness of end-to-end ur-
+     sun. Implicit occupancy flow fields for perception and pre-         ban autonomous driving via semantic masked world model.
+     diction in self-driving. In CVPR, pages 1379–1388, 2023.            arXiv preprint arXiv:2210.04017, 2022. 3
+     1
+                                                                    [17] Junru Gu, Chenxu Hu, Tianyuan Zhang, Xuanyao Chen,
+ [2] Jonathan T Barron, Ben Mildenhall, Matthew Tancik, Peter            Yilun Wang, Yue Wang, and Hang Zhao. Vip3d: End-to-end
+     Hedman, Ricardo Martin-Brualla, and Pratul P Srinivasan.            visual trajectory prediction via 3d agent queries. In CVPR,
+     Mip-nerf: A multiscale representation for anti-aliasing neu-        pages 5496–5506, 2023. 7
+     ral radiance fields. In ICCV, pages 5855–5864, 2021. 15
+                                                                    [18] David Ha and Jürgen Schmidhuber. Recurrent world models
+ [3] Daniel Bogdoll, Lukas Bosch, Tim Joseph, Helen Gremmel-             facilitate policy evolution. In NIPS, 2018. 3
+     maier, Yitian Yang, and J Marius Zöllner. Exploring the po-   [19] David Ha and Jürgen Schmidhuber. World models. arXiv
+     tential of world models for anomaly detection in autonomous         preprint arXiv:1803.10122, 2018. 2, 3
+     driving. arXiv preprint arXiv:2308.05701, 2023. 3
+                                                                    [20] Danijar Hafner, Timothy Lillicrap, Jimmy Ba, and Moham-
+ [4] Alexandre Boulch, Corentin Sautier, Björn Michele, Gilles          mad Norouzi. Dream to control: Learning behaviors by la-
+     Puy, and Renaud Marlet. Also: Automotive lidar self-                tent imagination. In ICLR, 2019. 2, 3, 16
+     supervision by occupancy estimation. In CVPR, pages
+                                                                    [21] Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Ville-
+     13455–13465, 2023. 2
+                                                                         gas, David Ha, Honglak Lee, and James Davidson. Learning
+ [5] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora,            latent dynamics for planning from pixels. In ICML, pages
+     Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan,                2555–2565, 2019. 16
+     Giancarlo Baldan, and Oscar Beijbom. nuscenes: A mul-
+                                                                    [22] Danijar Hafner, Timothy P Lillicrap, Mohammad Norouzi,
+     timodal dataset for autonomous driving. In CVPR, pages
+                                                                         and Jimmy Ba. Mastering atari with discrete world models.
+     11621–11631, 2020. 2, 6, 7, 15
+                                                                         In ICLR, 2020. 2, 3, 5, 13, 16
+ [6] Anthony Chen, Kevin Zhang, Renrui Zhang, Zihan Wang,           [23] Danijar Hafner, Jurgis Pasukonis, Jimmy Ba, and Timothy
+     Yuheng Lu, Yandong Guo, and Shanghang Zhang. Pimae:                 Lillicrap. Mastering diverse domains through world models.
+     Point cloud and image interactive masked autoencoders for           arXiv preprint arXiv:2301.04104, 2023. 2, 3, 16
+     3d object detection. In CVPR, pages 5291–5301, 2023. 1
+                                                                    [24] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+ [7] Kai Chen, Lanqing Hong, Hang Xu, Zhenguo Li, and                    Deep residual learning for image recognition. In CVPR,
+     Dit-Yan Yeung. Multisiam: Self-supervised multi-instance            pages 770–778, 2016. 2, 6, 7
+     siamese representation learning for autonomous driving. In
+                                                                    [25] Georg Hess, Johan Jaxing, Elias Svensson, David Hager-
+     ICCV, pages 7546–7554, 2021. 2
+                                                                         man, Christoffer Petersson, and Lennart Svensson. Masked
+ [8] Runjian Chen, Yao Mu, Runsen Xu, Wenqi Shao, Chenhan                autoencoder for self-supervised pre-training on lidar point
+     Jiang, Hang Xu, Zhenguo Li, and Ping Luo. Coˆ 3: Coopera-           clouds. In WACVW, pages 350–359, 2023. 2
+     tive unsupervised 3d representation learning for autonomous
+                                                                    [26] Anthony Hu. Neural world models for computer vision,
+     driving. arXiv preprint arXiv:2206.04028, 2022. 2
+                                                                         2023. 2
+ [9] Wentao Chen, Chenyang Si, Zhang Zhang, Liang Wang,             [27] Anthony Hu, Gianluca Corrado, Nicolas Griffiths, Zachary
+     Zilei Wang, and Tieniu Tan. Semantic prompt for few-shot            Murez, Corina Gurau, Hudson Yeo, Alex Kendall, Roberto
+     image recognition. In CVPR, pages 23581–23591, 2023. 5              Cipolla, and Jamie Shotton. Model-based imitation learning
+[10] Zehui Chen, Zhenyu Li, Shiquan Zhang, Liangji Fang, Qin-            for urban driving. In NIPS, pages 20703–20716, 2022. 2, 3,
+     hong Jiang, and Feng Zhao. Bevdistill: Cross-modal bev dis-         4, 5, 13, 16
+     tillation for multi-view 3d object detection. In ICLR, 2022.   [28] Anthony Hu, Lloyd Russell, Hudson Yeo, Zak Murez,
+     2, 6, 7                                                             George Fedoseev, Alex Kendall, Jamie Shotton, and Gian-
+[11] OpenScene Contributors. Openscene: The largest up-to-date           luca Corrado. Gaia-1: A generative world model for au-
+     3d occupancy prediction benchmark in autonomous driving,            tonomous driving. arXiv preprint arXiv:2309.17080, 2023.
+     2023. 2, 5, 6, 7, 15                                                2, 3, 5
+[12] Alexey Dosovitskiy, German Ros, Felipe Codevilla, Antonio      [29] Hou-Ning Hu, Yung-Hsu Yang, Tobias Fischer, Trevor Dar-
+     Lopez, and Vladlen Koltun. Carla: An open urban driving             rell, Fisher Yu, and Min Sun. Monocular quasi-dense 3d
+     simulator. In CoRL, pages 1–16. PMLR, 2017. 2                       object tracking. PAMI, 45(2):1992–2008, 2022. 7
+[13] Alberto Elfes. Using occupancy grids for mobile robot per-     [30] Shengchao Hu, Li Chen, Penghao Wu, Hongyang Li, Junchi
+     ception and navigation. Computer, 22(6):46–57, 1989. 3,             Yan, and Dacheng Tao. St-p3: End-to-end vision-based au-
+     5                                                                   tonomous driving via spatial-temporal feature learning. In
+[14] Ben Fei, Weidong Yang, Liwen Liu, Tianyue Luo, Rui                  ECCV, pages 533–549. Springer, 2022. 3, 7
+     Zhang, Yixuan Li, and Ying He. Self-supervised learning        [31] Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima,
+     for pre-training 3d point clouds: A survey. arXiv preprint          Xizhou Zhu, Siqi Chai, Senyao Du, Tianwei Lin, Wenhai
+     arXiv:2305.04691, 2023. 2                                           Wang, Lewei Lu, Xiaosong Jia, Qiang Liu, Jifeng Dai, Yu
+[15] Craig R Fox and Gülden Ülkümen. Distinguishing two di-           Qiao, and Hongyang Li. Planning-oriented autonomous driv-
+     mensions of uncertainty. 2011. 2                                    ing. In CVPR, 2023. 1, 2, 3, 6, 7, 8
+[32] Junjie Huang and Guan Huang. Bevdet4d: Exploit tempo-           [47] Xiwen Liang, Yangxin Wu, Jianhua Han, Hang Xu, Chun-
+     ral cues in multi-camera 3d object detection. arXiv preprint         jing Xu, and Xiaodan Liang. Effective adaptation in multi-
+     arXiv:2203.17054, 2022. 3                                            task co-training for unified autonomous driving. In NIPS,
+[33] Junjie Huang, Guan Huang, Zheng Zhu, and Dalong Du.                  pages 19645–19658, 2022. 2
+     Bevdet: High-performance multi-camera 3d object detection       [48] Xiwen Liang, Minzhe Niu, Jianhua Han, Hang Xu, Chun-
+     in bird-eye-view. arXiv preprint arXiv:2112.11790, 2021. 2,          jing Xu, and Xiaodan Liang. Visual exemplar driven task-
+     3                                                                    prompting for unified perception in autonomous driving. In
+[34] Siyuan Huang, Yichen Xie, Song-Chun Zhu, and Yixin Zhu.              CVPR, pages 9611–9621, 2023. 5
+     Spatio-temporal self-supervised representation learning for     [49] Jihao Liu, Tai Wang, Boxiao Liu, Qihang Zhang, Yu Liu,
+     3d point clouds. In ICCV, pages 6535–6545, 2021. 2                   and Hongsheng Li. Towards better 3d knowledge transfer
+[35] Jacob Devlin Ming-Wei Chang Kenton and Lee Kristina                  via masked image modeling for multi-view 3d understand-
+     Toutanova. Bert: Pre-training of deep bidirectional trans-           ing. arXiv preprint arXiv:2303.11325, 2023. 2
+     formers for language understanding. In ACL, page 2, 2019.       [50] Xinhao Liu, Moonjun Gong, Qi Fang, Haoyu Xie, Yim-
+     1, 5                                                                 ing Li, Hang Zhao, and Chen Feng. Lidar-based 4d
+[36] Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler,                occupancy completion and forecasting. arXiv preprint
+     and George Drettakis. 3d gaussian splatting for real-time            arXiv:2310.11239, 2023. 5
+     radiance field rendering. ToG, 42(4):1–14, 2023. 15             [51] Yingfei Liu, Tiancai Wang, Xiangyu Zhang, and Jian Sun.
+                                                                          Petr: Position embedding transformation for multi-view 3d
+[37] Tarasha Khurana, Peiyun Hu, Achal Dave, Jason Ziglar,
+                                                                          object detection. In ECCV, pages 531–548. Springer, 2022.
+     David Held, and Deva Ramanan. Differentiable raycasting
+                                                                          2
+     for self-supervised occupancy forecasting. In ECCV, pages
+     353–369. Springer, 2022. 5                                      [52] Yingfei Liu, Junjie Yan, Fan Jia, Shuailin Li, Aqi Gao, Tian-
+                                                                          cai Wang, and Xiangyu Zhang. Petrv2: A unified framework
+[38] Diederik P Kingma and Max Welling. Auto-encoding varia-
+                                                                          for 3d perception from multi-camera images. In ICCV, pages
+     tional bayes. arXiv preprint arXiv:1312.6114, 2013. 4, 5
+                                                                          3262–3272, 2023. 3
+[39] Yann LeCun. A path towards autonomous machine intelli-          [53] Reza Mahjourian, Jinkyu Kim, Yuning Chai, Mingxing Tan,
+     gence version 0.9. 2, 2022-06-27. Open Review, 62, 2022. 2,          Ben Sapp, and Dragomir Anguelov. Occupancy flow fields
+     3                                                                    for motion forecasting in autonomous driving. RA-L, 7(2):
+[40] Hongyang Li, Chonghao Sima, Jifeng Dai, Wenhai Wang,                 5639–5646, 2022. 5
+     Lewei Lu, Huijie Wang, Enze Xie, Zhiqi Li, Hanming Deng,        [54] Russell Mendonca, Shikhar Bahl, and Deepak Pathak. Struc-
+     Hao Tian, et al. Delving into the devils of bird’s-eye-view          tured world models from human videos. arXiv preprint
+     perception: A review, evaluation and recipe. PAMI, 2023. 2           arXiv:2308.10901, 2023. 2, 3
+[41] Yanwei Li, Yilun Chen, Xiaojuan Qi, Zeming Li, Jian Sun,        [55] Ben Mildenhall, Pratul P Srinivasan, Matthew Tancik,
+     and Jiaya Jia. Unifying voxel-based representation with              Jonathan T Barron, Ravi Ramamoorthi, and Ren Ng. Nerf:
+     transformer for 3d object detection. NIPS, 35:18442–18455,           Representing scenes as neural radiance fields for view syn-
+     2022. 6                                                              thesis. Communications of the ACM, 65(1):99–106, 2021.
+[42] Yinhao Li, Han Bao, Zheng Ge, Jinrong Yang, Jianjian Sun,            15
+     and Zeming Li. Bevstereo: Enhancing depth estimation            [56] Chen Min, Liang Xiao, Dawei Zhao, Yiming Nie, and Bin
+     in multi-view 3d object detection with temporal stereo. In           Dai. Occupancy-mae: Self-supervised pre-training large-
+     AAAI, pages 1486–1494, 2023. 3                                       scale lidar point clouds with masked occupancy autoen-
+[43] Yinhao Li, Zheng Ge, Guanyi Yu, Jinrong Yang, Zengran                coders. TIV, 2023. 2
+     Wang, Yukang Shi, Jianjian Sun, and Zeming Li. Bevdepth:        [57] Chen Min, Liang Xiao, Dawei Zhao, Yiming Nie, and Bin
+     Acquisition of reliable depth for multi-view 3d object detec-        Dai. Multi-camera unified pre-training via 3d scene recon-
+     tion. In AAAI, pages 1477–1485, 2023. 2                              struction. RA-L, 2024. 2, 5, 6, 7, 15
+[44] Zhiqi Li, Wenhai Wang, Hongyang Li, Enze Xie, Chong-            [58] Lucas Nunes, Louis Wiesmann, Rodrigo Marcuzzi,
+     hao Sima, Tong Lu, Yu Qiao, and Jifeng Dai. Bevformer:               Xieyuanli Chen, Jens Behley, and Cyrill Stachniss. Tempo-
+     Learning bird’s-eye-view representation from multi-camera            ral consistent 3d lidar representation learning for semantic
+     images via spatiotemporal transformers. In ECCV, pages 1–            perception in autonomous driving.          In CVPR, pages
+     18. Springer, 2022. 2, 3, 6                                          5217–5228, 2023. 1
+[45] Hanxue Liang, Chenhan Jiang, Dapeng Feng, Xin Chen,             [59] Minting Pan, Xiangming Zhu, Yunbo Wang, and Xiaokang
+     Hang Xu, Xiaodan Liang, Wei Zhang, Zhenguo Li, and Luc               Yang. Iso-dream: Isolating and leveraging noncontrollable
+     Van Gool. Exploring geometry-aware contrast and cluster-             visual dynamics in world models. In NIPS, pages 23178–
+     ing harmonization for self-supervised 3d object detection. In        23191, 2022. 3
+     ICCV, pages 3293–3302, 2021. 2                                  [60] Dennis Park, Rares Ambrus, Vitor Guizilini, Jie Li, and
+[46] Ming Liang, Bin Yang, Wenyuan Zeng, Yun Chen, Rui Hu,                Adrien Gaidon. Is pseudo-lidar needed for monocular 3d
+     Sergio Casas, and Raquel Urtasun. Pnpnet: End-to-end per-            object detection? In ICCV, pages 3142–3152, 2021. 2, 5
+     ception and prediction with tracking in the loop. In CVPR,      [61] Jinhyung Park, Chenfeng Xu, Shijia Yang, Kurt Keutzer,
+     pages 11553–11562, 2020. 7                                           Kris M Kitani, Masayoshi Tomizuka, and Wei Zhan. Time
+     will tell: New outlooks and a baseline for temporal multi-      [76] Xiaofeng Wang, Zheng Zhu, Guan Huang, Xinze Chen,
+     view 3d object detection. In ICLR, 2022. 3                           and Jiwen Lu. Drivedreamer: Towards real-world-driven
+[62] Jonah Philion and Sanja Fidler. Lift, splat, shoot: Encoding         world models for autonomous driving. arXiv preprint
+     images from arbitrary camera rigs by implicitly unprojecting         arXiv:2309.09777, 2023. 2, 3
+     to 3d. In ECCV, pages 194–210. Springer, 2020. 4                [77] Yue Wang, Vitor Campagnolo Guizilini, Tianyuan Zhang,
+[63] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya                   Yilun Wang, Hang Zhao, and Justin Solomon. Detr3d:
+     Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,                3d object detection from multi-view images via 3d-to-2d
+     Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learn-             queries. In CoRL, pages 180–191, 2022. 2, 4, 6
+     ing transferable visual models from natural language super-     [78] Zengran Wang, Chen Min, Zheng Ge, Yinhao Li, Zeming
+     vision. In ICML, pages 8748–8763, 2021. 5                            Li, Hongyu Yang, and Di Huang. Sts: Surround-view tem-
+[64] Sylvestre-Alvise Rebuffi, Hakan Bilen, and Andrea Vedaldi.           poral stereo for multi-view 3d detection. arXiv preprint
+     Learning multiple visual domains with residual adapters. In          arXiv:2208.10145, 2022. 3
+     NIPS, 2017. 1                                                   [79] Zeyu Wang, Dingwen Li, Chenxu Luo, Cihang Xie, and Xi-
+[65] Corentin Sautier, Gilles Puy, Alexandre Boulch, Renaud               aodong Yang. Distillbev: Boosting multi-camera 3d object
+     Marlet, and Vincent Lepetit. Bevcontrast: Self-supervision           detection with cross-modal knowledge distillation. In ICCV,
+     in bev space for automotive lidar point clouds. In 3DV, 2024.        pages 8637–8646, 2023. 2
+     2                                                               [80] Zizhuang Wei, Qingtian Zhu, Chen Min, Yisong Chen, and
+                                                                          Guoping Wang. Aa-rmvsnet: Adaptive aggregation recur-
+[66] Younggyo Seo, Junsu Kim, Stephen James, Kimin Lee, Jin-
+                                                                          rent multi-view stereo network. In ICCV, pages 6187–6196,
+     woo Shin, and Pieter Abbeel. Multi-view masked world
+                                                                          2021. 15
+     models for visual robotic manipulation. In ICML, 2023. 3
+                                                                     [81] Zizhuang Wei, Qingtian Zhu, Chen Min, Yisong Chen, and
+[67] Xiaoxiao Sheng, Zhiqiang Shen, and Gang Xiao. Con-
+                                                                          Guoping Wang. Bidirectional hybrid lstm based recurrent
+     trastive predictive autoencoders for dynamic point cloud
+                                                                          neural network for multi-view stereo. TVCG, 2022. 15
+     self-supervised learning. In AAAI, 2023. 2
+                                                                     [82] Jialong Wu, Haoyu Ma, Chaoyi Deng, and Mingsheng Long.
+[68] Xiaoyu Tian, Haoxi Ran, Yue Wang, and Hang Zhao. Geo-                Pre-training contextualized world models with in-the-wild
+     mae: Masked geometric target prediction for self-supervised          videos for reinforcement learning. In NIPS, 2023. 2, 3, 4
+     point cloud pre-training. In CVPR, pages 13570–13580,
+                                                                     [83] Penghao Wu, Li Chen, Hongyang Li, Xiaosong Jia, Junchi
+     2023. 2
+                                                                          Yan, and Yu Qiao. Policy pre-training for end-to-end au-
+[69] Wenwen Tong, Chonghao Sima, Tai Wang, Li Chen, Silei                 tonomous driving via self-supervised geometric modeling. In
+     Wu, Hanming Deng, Yi Gu, Lewei Lu, Ping Luo, Dahua Lin,              ICLR, 2023. 2, 5
+     et al. Scene as occupancy. In ICCV, pages 8406–8415, 2023.
+                                                                     [84] Yanhao Wu, Tong Zhang, Wei Ke, Sabine Süsstrunk, and
+     2, 5, 6, 7, 15
+                                                                          Mathieu Salzmann. Spatiotemporal self-supervised learning
+[70] Luequan Wang, Hongbin Xu, and Wenxiong Kang. Mv-                     for point clouds in the wild. In CVPR, pages 5251–5260,
+     contrast: Unsupervised pretraining for multi-view 3d object          2023. 1
+     recognition. MIR, pages 1–12, 2023. 1                           [85] Runsen Xu, Tai Wang, Wenwei Zhang, Runjian Chen, Jinkun
+[71] Pengqin Wang, Meixin Zhu, Hongliang Lu, Hui Zhong, Xi-               Cao, Jiangmiao Pang, and Dahua Lin. Mv-jar: Masked voxel
+     anda Chen, Shaojie Shen, Xuesong Wang, and Yinhai Wang.              jigsaw and reconstruction for lidar-based self-supervised
+     Bevgpt: Generative pre-trained large model for autonomous            pre-training. In CVPR, pages 13445–13454, 2023. 2
+     driving prediction, decision-making, and planning. arXiv        [86] Xiangchao Yan, Runjian Chen, Bo Zhang, Jiakang Yuan,
+     preprint arXiv:2310.10357, 2023. 7                                   Xinyu Cai, Botian Shi, Wenqi Shao, Junchi Yan, Ping Luo,
+[72] Shuo Wang, Jing Li, Zibo Zhao, Dongze Lian, Bin-                     and Yu Qiao. Spot: Scalable 3d pre-training via occu-
+     bin Huang, Xiaomei Wang, Zhengxin Li, and Shenghua                   pancy prediction for autonomous driving. arXiv preprint
+     Gao. Tsp-transformer: Task-specific prompts boosted trans-           arXiv:2309.10527, 2023. 2
+     former for holistic scene understanding. arXiv preprint         [87] Honghui Yang, Tong He, Jiaheng Liu, Hua Chen, Boxi Wu,
+     arXiv:2311.03427, 2023. 5                                            Binbin Lin, Xiaofei He, and Wanli Ouyang. Gd-mae: gener-
+[73] Shihao Wang, Yingfei Liu, Tiancai Wang, Ying Li, and Xi-             ative decoder for mae pre-training on lidar point clouds. In
+     angyu Zhang. Exploring object-centric temporal modeling              CVPR, pages 9403–9414, 2023. 2
+     for efficient multi-view 3d object detection. In ICCV, 2023.    [88] Honghui Yang, Sha Zhang, Di Huang, Xiaoyang Wu, Haoyi
+     3, 4                                                                 Zhu, Tong He, Shixiang Tang, Hengshuang Zhao, Qibo Qiu,
+[74] Tai Wang, Xinge Zhu, Jiangmiao Pang, and Dahua Lin.                  Binbin Lin, et al. Unipad: A universal pre-training paradigm
+     Fcos3d: Fully convolutional one-stage monocular 3d object            for autonomous driving. arXiv preprint arXiv:2310.08370,
+     detection. In ICCV, pages 913–922, 2021. 6, 7                        2023. 2
+[75] Tsun-Hsuan Wang, Alaa Maalouf, Wei Xiao, Yutong Ban,            [89] Yao Yao, Zixin Luo, Shiwei Li, Tian Fang, and Long Quan.
+     Alexander Amini, Guy Rosman, Sertac Karaman, and                     Mvsnet: Depth inference for unstructured multi-view stereo.
+     Daniela Rus. Drive anywhere: Generalizable end-to-end                In ECCV, pages 767–783, 2018. 15
+     autonomous driving with multi-modal foundation models.          [90] Junbo Yin, Dingfu Zhou, Liangjun Zhang, Jin Fang, Cheng-
+     arXiv preprint arXiv:2310.17642, 2023. 1                             Zhong Xu, Jianbing Shen, and Wenguan Wang. Proposal-
+     contrast: Unsupervised pre-training for lidar-based 3d object
+     detection. In ECCV, pages 17–33. Springer, 2022. 2
+[91] Jiakang Yuan, Bo Zhang, Xiangchao Yan, Tao Chen, Botian
+     Shi, Yikang Li, and Yu Qiao. Ad-pt: Autonomous driving
+     pre-training with large-scale point cloud dataset. In NIPS,
+     2023. 2
+[92] Bo Zhang, Jiakang Yuan, Botian Shi, Tao Chen, Yikang Li,
+     and Yu Qiao. Uni3d: A unified baseline for multi-dataset 3d
+     object detection. In CVPR, pages 9253–9262, 2023. 2
+[93] Lunjun Zhang, Yuwen Xiong, Ze Yang, Sergio Casas, Rui
+     Hu, and Raquel Urtasun. Learning unsupervised world mod-
+     els for autonomous driving via discrete diffusion. arXiv
+     preprint arXiv:2311.01017, 2023. 3
+[94] Tianyuan Zhang, Xuanyao Chen, Yue Wang, Yilun Wang,
+     and Hang Zhao. Mutr3d: A multi-camera tracking frame-
+     work via 3d-to-2d queries. In CVPR, pages 4537–4546,
+     2022. 7
+[95] Yunpeng Zhang, Zheng Zhu, Wenzhao Zheng, Junjie Huang,
+     Guan Huang, Jie Zhou, and Jiwen Lu. Beverse: Unified per-
+     ception and prediction in birds-eye-view for vision-centric
+     autonomous driving. arXiv preprint arXiv:2205.09743,
+     2022. 2, 6, 7
+[96] Zaiwei Zhang, Min Bai, and Erran Li. Implicit surface con-
+     trastive clustering for lidar point clouds. In CVPR, pages
+     21716–21725, 2023. 2
+[97] Wenxuan Zhou, Sujay Bajracharya, and David Held. Plas:
+     Latent action space for offline reinforcement learning. In
+     CoRL, pages 1719–1735, 2021. 4, 6, 13
+[98] Haoyi Zhu, Honghui Yang, Xiaoyang Wu, Di Huang, Sha
+     Zhang, Xianglong He, Tong He, Hengshuang Zhao, Chun-
+     hua Shen, Yu Qiao, et al. Ponderv2: Pave the way for 3d
+     foundataion model with a universal pre-training paradigm.
+     arXiv preprint arXiv:2310.08586, 2023. 1, 2
+[99] Qingtian Zhu, Chen Min, Zizhuang Wei, Yisong Chen, and
+     Guoping Wang. Deep learning for multi-view stereo via
+     plane sweep: A survey. arXiv preprint arXiv:2106.15328,
+     2021. 3
+                        DriveWorld: 4D Pre-trained Scene Understanding via World Models for
+                                                Autonomous Driving
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  Supplementary Material
+6. Pre-training Objective
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \label {vae} \begin {aligned} &{\rm log} p(y_{1:T+L},a_{1:T+L})\ge \mathcal {L}(y_{1:T+L},a_{1:T+L};\theta ,\phi ) \\ &\triangleq \displaystyle \sum _{t=1}^{T}\mathbb {E}_{h_{1:t},s_{1:t}\backsim q(h_{1:t},s_{1:t}|o_{\leq t},a_{<t})}[\underbrace {\log p(y_t|h_t,s_t,\hat {b})}_{{\rm past \ occupancy\, loss}}\\ &\qquad +\underbrace {\log p(a_t|h_t,s_t)}_{{\rm past \ action\, loss}}] +\displaystyle \sum _{k=1}^{L}\mathbb {E}_{h_{T},s_{T}\backsim q(h_{T},s_{T}|o_{\leq T},a_{<T})}\\ &\qquad [\underbrace {\log p(y_{T+k}|h_T,s_T,\hat {b})}_{{\rm future \ occupancy\, loss}}+\underbrace {\log p(a_{T+k}|h_T,s_T)}_{{\rm future \ action\, loss}}] \\ &\quad -\displaystyle \sum _{t=1}^{T}\mathbb {E}_{h_{1:t-1},s_{1:t-1}\backsim q(h_{1:t-1},s_{1:t-1}|o_{\leq t-1},a_{<t-1} )}\\ &\qquad [\underbrace {D_{KL}(q(s_t|o_{\leq t},a_{<t})\parallel p(s_t|h_{t-1},s_{t-1}))}_{{\rm posterior\, and\, prior\, matching\, KL\, loss}}]. \end {aligned} 
+The proposed DriveWorld for 4D driving pre-training en-
+compasses the following five components:
+
+
+         \label {world_model} \begin {aligned} {\rm BEV \, Representation \, Model:}\, &b_t\sim q_\phi (b_t\mid o_t) \\ {\rm Stochastic \, State \, Model:}\, &s_t\sim q_\phi (s_t\mid h_{t},a_{t-1},o_t) \\ {\rm Dynamic \, Transition \, Model:}\, &s_t\sim p_\theta (s_t\mid h_t,\hat {a}_{t-1}) \\ {\rm Static \, Propagation \, Model:}\, &\hat {b}\sim p_\theta (\hat {b}\mid b^{'}) \\ {\rm Action \, Decoder:}\, &\hat {a}_t\sim p_\theta (\hat {a}_t\mid h_{t},s_t) \\ {\rm 3D \, Occupancy \, Decoder:}\, &\hat {y}_t\sim p_\theta (\hat {y}_t\mid h_{t},s_t,\hat {b}). \\ \end {aligned} 
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         (10)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       (4)
+
+
+
+
+   The joint probability distribution for DriveWorld is:
+
+                                                    \label {v1} \begin {aligned} &p(h_{1:T},s_{1:T},y_{1:T+L},a_{1:T+L})=\\&\displaystyle \prod _{t=1}^{T}p(h_t,s_t|h_{t-1},s_{t-1},a_{t-1})p(y_t,a_t|h_t,s_t,\hat {b})\\ &\displaystyle \prod _{k=1}^{L}p(h_k,s_k|h_{T},s_{T},a_{k-1})p(y_k,a_k|h_T,s_T,\hat {b}), \end {aligned}                                                                                                                                                                                                                                                                              In Eqn. 10, we model q(st |o1:t , a1:t−1 ) as a Gaussian
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             distribution, allowing for the closed-form computation of
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       (5)   the Kullback-Leibler (KL) divergence. The modelling of
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             actions as a Laplace distribution and 3D occupancy labels
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             as a categorical distribution results in L1 and cross-entropy
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             losses, respectively.
+   with
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             7. Lower Bound Derivation
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Next, we will derive the variational lower bound in Eqn. 10.
+   \label {v21} p(h_t,s_t|h_{t-1},s_{t-1},a_{t-1})=p(h_t|h_{t-1},s_{t-1})p(s_t|h_t,a_{t-1}),  (6)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             Let qH,S ≜ q(h1:T , s1:T |o1:T , y1:T +L , a1:T +L ) be the vari-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             ational distribution and p(h1:T , s1:T |a1:T +L , y1:T +L ) be
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             the posterior distribution. The Kullback-Leibler divergence
+                                                                         \label {v22} p(y_t,a_t|h_{t},s_{t})=p(y_t|h_{t},s_{t},\hat {b})p(a_t|h_t,s_{t}),                                                                                                                                                                                                                                                                                                                                                                                                                                              (7)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             between these two distributions is:
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 \label {1} \begin {aligned} &D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L}) \\ &\quad \parallel p(h_{1:T},s_{1:T}|y_{1:T+L},a_{1:T+L}))\\ &=\mathbb {E}_{h_{1:T},s_{1:T}\backsim q_{H,S}}[{\log }\tfrac {q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L})}{p(h_{1:T},s_{1:T}|y_{1:T+L},a_{1:T+L})}]\\ &=\mathbb {E}_{h_{1:T},s_{1:T}\backsim q_{H,S}}\\ &\quad [{\log }\tfrac {q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L})p(y_{1:T+L},a_{1:T+L})}{p(h_{1:T},s_{1:T})p(y_{1:T+L},a_{1:T+L}|h_{1:T},s_{1:T})}]\\ &=\log p(y_{1:T+L},a_{1:T+L})- \\ &\quad \mathbb {E}_{h_{1:T},s_{1:T}\backsim q_{H,S}}[\log p(y_{1:T+L},a_{1:T+L}|h_{1:T},s_{1:T})]+ \\ &\quad D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L})\parallel p(h_{1:T},s_{1:T})). \end {aligned} 
+                                          \label {v23} p(y_k,a_k|h_{T},s_{T})=p(y_k|h_{T},s_{T},\hat {b})p(a_{k}|h_T,s_{T}).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           (8)
+
+   Given that ht is deterministic [22, 27, 97], we
+have p(ht |ht−1 , st−1 ) = δ(ht − fθ (ĥt−1 , MLN(st−1 ))).
+Consequently, to maximize the marginal likelihood of
+p(y1:T +L , a1:T +L ), it is imperative to infer the latent vari-
+ables s1:T . This is achieved through deep variational infer-
+ence, wherein we introduce a variational distribution qH,S
+defined and factorized as follows:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         (11)
+                                                                      \label {v3} \begin {aligned} q_{H,S}&\triangleq q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L})\\ &=\displaystyle \prod _{t=1}^{T}q(h_t|h_{t-1},s_{t-1})q(s_t|o_{\le t},a_{< t}). \end {aligned} 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Since DKL (q(h1:T , s1:T |o1:T , y1:T +L , a1:T +L )      ∥
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       (9)   p(h1:T , s1:T |y1:T +L , a1:T +L )) ≥ 0, we derive the follow-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             ing evidence lower bound:
+
+    We parameterise this variational distribution with a neu-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    \label {3} \begin {aligned} &\log p(y_{1:T+L},a_{1:T+L}) \geq \\ &\mathbb {E}_{h_{1:T},s_{1:T}\backsim q_{H,S}}[\log p(y_{1:T+L},a_{1:T+L}|h_{1:T},s_{1:T})] \\ &- D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L})\parallel p(h_{1:T},s_{1:T})).\\ \end {aligned} 
+ral network with weights ϕ. By formalizing the above pro-
+cess as a generative probabilistic model, we can obtain a
+variational lower bound on the log evidence:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             (12)
+   The two terms of this lower bound can be calculated sep-
+arately. Firstly:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                \label {6} \begin {aligned} &D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1})\parallel p(h_{1:T},s_{1:T}))\\ &= \int _{{h_{1:T},s_{1:T}}}\displaystyle \prod _{t=1}^{T}q(h_{t}|h_{t-1},s_{t-1})q(s_t|o_{\leq t},a_{<t})\\ &\quad (\displaystyle \sum _{t=1}^{T}\log \frac {q(s_t|o_{\leq t},a_{<t})}{p(s_t|h_{t-1},s_{t-1})}) d h_{1:T} d s_{1:T} \\ &=\int _{{h_{1:T},s_{1:T}}}\displaystyle \prod _{t=1}^{T}q(h_{t}|h_{t-1},s_{t-1})q(s_t|o_{\leq t},a_{<t}) \\ &\quad (\log \frac {q(s_1|o_1)}{p(s_1)} \\ &\qquad + \displaystyle \sum _{t=2}^{T}\log \frac {q(s_t|o_{\leq t},a_{<t})}{p(s_t|h_{t-1},s_{t-1})}) d h_{1:T} d s_{1:T} \\ &= E_{s_1\backsim q(s_1|0_1)}[\log \frac {q(s_1|o_1)}{p(s_1)}]\\ &\quad +\int _{{h_{1:T},s_{1:T}}} (\displaystyle \prod _{t=1}^{T}q(h_{t}|h_{t-1},s_{t-1})q(s_t|o_{\leq t},a_{<t})) \\ &\qquad ( \displaystyle \sum _{t=2}^{T}\log \frac {q(s_t|o_{\leq t},a_{<t})}{p(s_t|h_{t-1},s_{t-1})}) d h_{1:T} d s_{1:T} \\ &=D_{KL}(q(s_1|o_1)\parallel p(s_1))\\ &\quad +\int _{{h_{1:T},s_{1:T}}} (\displaystyle \prod _{t=1}^{T}q(h_{t}|h_{t-1},s_{t-1})q(s_t|o_{\leq t},a_{<t})) \\ &\qquad ( \log \frac {q(s_2|o_{1:2},a_1)}{p(s_2|h_1,s_1)} \\ &\qquad +\displaystyle \sum _{t=3}^{T}\log \frac {q(s_t|o_{\leq t},a_{<t})}{p(s_t|h_{t-1},s_{t-1})}) d h_{1:T} d s_{1:T} \\ &= D_{KL}(q(s_1|o_1)\parallel p(s_1))\\ &\quad +\mathbb {E}_{h_1,s_1\backsim q(h_1,s_1|o_1}[D_{KL}(q(s_q|o_{1:2},a_1)\parallel p(s_2|h_1,s_1))] \\ &\quad +\int _{{h_{1:T},s_{1:T}}} (\displaystyle \prod _{t=1}^{T}q(h_{t}|h_{t-1},s_{t-1})q(s_t|o_{\leq t},a_{<t})) \\ &\qquad ( \displaystyle \sum _{t=3}^{T}\log \frac {q(s_t|o_{\leq t},a_{<t})}{p(s_t|h_{t-1},s_{t-1})}) d h_{1:T} d s_{1:T}. \end {aligned} 
+
+
+
+
+  \label {4} \begin {aligned} &\mathbb {E}_{h_{1:T},s_{1:T}\backsim q_{H,S}}[\log p(y_{1:T+L},a_{1:T+L}|h_{1:T},s_{1:T})]\\ &=\mathbb {E}_{h_{1:T},h_{1:T}\backsim q_{H,S}}[\log \displaystyle \prod _{t=1}^{T}p(y_t|h_t,s_t,\hat {b})p(a_t|h_t,s_t)\\ &\quad \displaystyle \prod _{k=1}^{L}p(y_k|h_T,s_T,\hat {b})p(a_k|h_T,s_T)] \\ &=\displaystyle \sum _{t=1}^{T}\mathbb {E}_{h_{1:t},s_{1:t}\backsim q(h_{1:t},s_{1:t}|o_{\leq t},a_{<t})}[\log p(y_t|h_t,s_t,\hat {b})p(a_t|h_t,s_t)]\\ &\quad + \displaystyle \sum _{k=1}^{L}\mathbb {E}_{h_{T},s_{T}\backsim q(h_{T},s_{T}|o_{\leq t},a_{<t})} \\ &\qquad [\log p(y_{T+k}|h_T,s_T,\hat {b})p(a_{T+k}|h_T,s_T)].\\ \end {aligned} 
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     (15)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (13)
+
+
+
+   Secondly, with q(ht |ht−1 , st−1 ) = p(ht |ht−1 , st−1 ), we
+obtain:
+
+
+
+
+                                  \label {5} \begin {aligned} &D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},y_{1:T+L},a_{1:T+L})\parallel p(h_{1:T},s_{1:T}))\\ &=D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1})\parallel p(h_{1:T},s_{1:T}))\\ &=\int _{{h_{1:T},s_{1:T}}}q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1}) \\ &\quad \log \frac {q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1})}{p(h_{1:T},s_{1:T})} d h_{1:T} d s_{1:T} \\ &=\int _{{h_{1:T},s_{1:T}}}q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1}) \\ &\quad \log [\displaystyle \prod _{t=1}^{T}\frac {q(h_{t}|h_{t-1},s_{t-1})q(s_t|o_{\leq t},a_{<t})}{p(h_t|h_{t-1},s_{t-1})p(s_t|h_{t-1},s_{t-1})}] d h_{1:T} d s_{1:T}\\ &= \int _{{h_{1:T},s_{1:T}}}q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1}) \\ &\quad \log [\displaystyle \prod _{t=1}^{T}\frac {q(s_t|o_{\leq t},a_{<t})}{p(s_t|h_{t-1},s_{t-1})}] d h_{1:T} d s_{1:T}.\\ \end {aligned} 
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (14)
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Through recursive application of this process to the sum
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             of logarithms indexed by t, we obtain:
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \label {7} \begin {aligned} &D_{KL}(q(h_{1:T},s_{1:T}|o_{1:T},a_{1:T-1})\parallel p(h_{1:T},s_{1:T}))\\ &=\displaystyle \sum _{t=1}^{T}\mathbb {E}_{h_{1:t-1},s_{1:t-1}\backsim q(h_{1:t-1},s_{1:t-1}|o_{\leq t-1},a_{<t-1} )}\\ &\quad [D_{KL}(q(s_t|o_{\leq t},a_{<t})\parallel p(s_t|h_{t-1},s_{t-1}))]. \end {aligned} 
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     (16)
+
+
+
+
+                                                    Thus:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   Finally, we achieve the intended lower bound:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    b̂       y1           y2            y3              yT
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             s1            s2           s3             sT
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   a1            a2            a3             aT
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             h1           h2            h3     …       hT
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                Figure 6. Graphical model of Memory State-Space Model. Deter-
+                        (a) BEV Features before Prompt                                                                                                                                                                                                                                                                    (b) Prompt with Mapping                                                                                                                                                                                                                                   (c) Prompt with Forecasting                 ministic states are denoted by squares, while stochastic states are
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                represented by circles. The observed states are highlighted in grey
+Figure 5. Visualization of BEV feature maps when prompting with                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 for clarity. Solid lines represent the generative model, while dotted
+different tasks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                lines depict variational inference.
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                niques such as NeRF [2, 55], 3D Gaussian Splatting [36],
+  \label {8} \begin {aligned} &\log p(y_{1:T+L},a_{1:T+L}) \\ & \geq \displaystyle \sum _{t=1}^{T}\mathbb {E}_{h_{1:t},s_{1:t}\backsim q(h_{1:t},s_{1:t}|o\leq t,a<t)}[\log p(y_t|h_t,s_t,\hat {b})+p(a_t|h_t,s_t)] \\ &\quad +\displaystyle \sum _{k=1}^{L}\mathbb {E}_{h_{T},s_{T}\backsim q(h_{T},s_{T}|o\leq T,a<T)}[\log p(y_{T+k}|h_T,s_T,\hat {b})\\ &\qquad +p(a_{T+k}|h_T,s_T)] \\ &\quad -\displaystyle \sum _{t=1}^{T}\mathbb {E}_{h_{1:t-1},s_{1:t-1}\backsim q(h_{1:t-1},s_{1:t-1}|o_{\leq t-1},a_{<t-1} )}\\ &\qquad [D_{KL}(q(s_t|o_{\leq t},a_{<t})\parallel p(s_t|h_{t-1},s_{t-1}))]. \end {aligned}           and MVS [80, 81, 89].
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                9. Task Prompt
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                During fine-tuning, we add task prompts to BEV maps be-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                fore each downstream task’s decoder. For 3D object de-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                tection, the task prompt is “The task is for 3D object de-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                tection of the current scene.” For planning, the task prompt
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                is “The task involves planning with consideration for both
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                the current and future scenes.” The encoder network of task
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                prompts is transferred to downstream tasks, and fine-tuning
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         (17)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                includes downstream task prompts. This enables different
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                downstream tasks with semantic connections to decouple
+8. Dataset
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                task-aware features. While basic embeddings for specific
+The nuScenes dataset [5] is a large-scale autonomous driv-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      tasks are optional, large language model captures complex
+ing dataset that consists of 700, 150, and 150 sequences for                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    semantic relationships, providing a nuanced representation
+training, validation, and testing, respectively. The scenes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     of task prompts. Additionally, the strong generalization
+are recorded in Boston and Singapore, encompassing a di-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        abilities of such models enhance performance across a wide
+verse array of weather and lighting conditions, as well as                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      array of tasks when needed. However, it’s worth noting that
+various traffic scenarios.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      the current Task Prompt design is relatively simple, and the
+    The OpenScene dataset [11] is the largest 3D occupancy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      task number for autonomous driving is limited.
+dataset, covering a wide span of over 120 hours of occu-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            In Fig. 5, we present visualizations of BEV feature
+pancy labels collected in various cities, from Boston, Pitts-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   maps both before and after the integration of various task
+burgh, Las Vegas to Singapore. OpenScene provides a se-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         prompts. Notably, as shown in Fig. 5 (a), the BEV feature
+mantic label for each foreground grid and incorporates the                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      map based on 4D pre-training captures abundant informa-
+motion information of occupancy flow that helps bridge the                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      tion from both the current and future scenes. While, for
+gap between decision-making and scene representation. we                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        specific downstream tasks, some information could be re-
+utilize both semantic occupancy labels and occupancy flow                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       dundant or even detrimental. We utilize task prompts to al-
+for the supervision of 4D pre-training.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         leviate the effect of redundant information. In online map-
+    The dense 3D occupancy ground truth is derived by                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           ping tasks, the feature map, guided by the task prompt, em-
+fusing multiple frames of LiDAR point clouds [57, 69].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          phasizes the current spatio-aware information. The targets
+This approach offers a more comprehensive representation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        has more accurate location information in feature map to
+of objects, encompassing details about occluded areas, in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       achieve higher precision . For motion forecasting task, the
+contrast to single-frame point clouds. In the future, it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        feature map, guided by the task prompt, conserves both spa-
+may become feasible to directly reconstruct 3D occupancy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        tial and temporal information. The targets cover a broader
+ground truth from autonomous driving videos using tech-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         region in feature map to achieve more robust prediction.
+      Pred (time t)            Pred (t+0.5s)                 Pred (t+1s)               Pred (t+1.5s)             Pred (t+2s)
+
+                       Figure 7. Qualitative example of 3D occupancy predictions, for 2 seconds in the future.
+
+
+10. Differences between RSSM and MSSM
+In world model-based methods such as Dreamers [20, 22,
+23] and MILE [27], the RSSM [21] is commonly employed
+to learn latent variables. However, RSSM, relying on RNN
+networks, may encounter challenges related to long-term in-
+formation retention. In contrast, our designed Dynamics
+Memory Bank in MSSM excels in modelling and preserv-
+ing long-term information. RSSM compresses features into
+1D tensor, while MSSM utilizes context BEV features to
+reconstruct 3D scenes. Besides, MSSM separates dynamic
+and static information, addressing them independently.
+
+11. Graphical Model
+In Fig. 6, we illustrate the graphical model of the pro-
+posed Memory State-Space Model. The update of the de-
+terministic state ht is dependent on the historical states in
+Dynamics Memory Bank, facilitating the transmission of
+temporal-aware features. Spatial-aware features are pre-
+served through the retention of BEV feature b̂.
+
+12. Qualitative Results
+Fig. 7 presents the reconstruction of both the current and
+future 3D scenes. This visual representation effectively il-
+lustrates DriveWorld’s capacity for reconstructing the 3D
+scene and predicting future changes, thus enhancing down-
+stream task performance after 4D pre-training.
+

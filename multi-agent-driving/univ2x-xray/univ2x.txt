@@ -1,0 +1,895 @@
+                                                           End-to-End Autonomous Driving through V2X Cooperation
+                                                                Haibao Yu1,2 * , Wenxian Yang2 * , Jiaru Zhong2,3 * , Zhenwei Yang2,4 ,
+                                                                                 Siqi Fan2 , Ping Luo1 , Zaiqing Nie2†
+                                                                               1
+                                                                                 The University of Hong Kong, 2 AIR, Tsinghua University
+                                                                  3
+                                                                      Beijing Institute of Technology, 4 University of Science and Technology Beijing
+                                                                                   yuhaibao94@gmail.com, zaiqing@air.tsinghua.edu.cn
+arXiv:2404.00717v3 [cs.RO] 24 Dec 2024
+
+
+
+
+                                                                       Abstract
+                                                                                                                                                               No Fusion     UniV2X
+                                           Cooperatively utilizing both ego-vehicle and infrastructure
+                                           sensor data via V2X communication has emerged as a
+                                           promising approach for advanced autonomous driving. How-
+                                           ever, current research mainly focuses on improving individ-
+                                           ual modules, rather than taking end-to-end learning to opti-
+                                           mize final planning performance, resulting in underutilized
+                                           data potential. In this paper, we introduce UniV2X, a pioneer-                                               Detection   Mapping Occupancy Planning
+                                           ing cooperative autonomous driving framework that seam-                           (a) VICAD                          (b) Evaluation Results.
+                                           lessly integrates all key driving modules across diverse views
+                                           into a unified network. We propose a sparse-dense hybrid
+                                           data transmission and fusion mechanism for effective vehicle-        Figure 1: (a) VICAD: Infrastructure sensor installed highly has a broad perception
+                                           infrastructure cooperation, offering three advantages: 1) Ef-        field (Yu et al. 2022, 2023c; Yang et al. 2023d), which can supplement the blind and
+                                           fective for simultaneously enhancing agent perception, on-           long-range spots of single vehicle. (b) Performance Enhancement: Compared with No
+                                           line mapping, and occupancy prediction, ultimately improv-           Fusion solution, UniV2X achieves significant gains in various tasks, such as detection
+                                           ing planning performance. 2) Transmission-friendly for prac-         (+13%), mapping (+11.4%), occupancy prediction (+5.7%), and collision rate (-0.5%).
+                                           tical and limited communication conditions. 3) Reliable data
+                                           fusion with interpretability of this hybrid data. We implement
+                                           UniV2X, as well as reproducing several benchmark methods,            2024). However, existing solutions primarily emphasize in-
+                                           on the challenging DAIR-V2X, the real-world cooperative
+                                                                                                                dividual task optimization, neglecting the overall planning
+                                           driving dataset. Experimental results demonstrate the effec-
+                                           tiveness of UniV2X in significantly enhancing planning per-          enhancement. This creates challenges in comprehensive data
+                                           formance, as well as all intermediate output performance. The        exploitation, driven by a misalignment between individual
+                                           project is available at https://github.com/AIR-THU/UniV2X.           task goals and final planning objectives. Thus, end-to-end
+                                                                                                                learning exploration, which directly optimizes the final plan-
+                                                                                                                ning output by harnessing both onboard and external sensor
+                                                                Introduction                                    data, becomes necessary. In this paper, we focus on vehicle-
+                                         Despite significant progress achieved through the integration          infrastructure cooperative autonomous driving (VICAD).
+                                         of deep learning, single-vehicle autonomous driving still                 The VICAD problem can be formulated as a planning-
+                                         faces great safety challenges due to limited perceptual range          centric optimization with multiple-view sensor inputs un-
+                                         and inadequate information, especially for vehicles rely-              der constrained communication bandwidth. Compared with
+                                         ing on cost-effective cameras. Leveraging external sensors,            single-vehicle autonomous driving, VICAD poses additional
+                                         particularly infrastructure sensors with a broader percep-             challenges when addressed through end-to-end learning.
+                                         tion field, has shown promising potential for advancing au-            Firstly, the transmitted infrastructure data must be effec-
+                                         tonomous driving capacities through Vehicle-to-Everything              tive. It should enhance both critical modules and the final
+                                         (V2X) communication (see Fig. 1 (a)). Several research                 planning performance in autonomous driving. These criti-
+                                         studies have investigated the efficacy of external sensor data         cal modules encompass dynamic obstacle perception, on-
+                                         in diverse tasks such as detection (Wang et al. 2020; Hu               line mapping, and grid occupancy-based general obstacle
+                                         et al. 2023a; Yu et al. 2023a; Tianhang et al. 2023; Qiu et al.        detection, providing an explicit scene representation crucial
+                                         2022), tracking (Yu et al. 2023c), segmentation (Xu et al.             for ensuring the safety of autonomous driving. Second, the
+                                         2022a), localization (Jiang et al. 2023; Dong et al. 2023),            data must be friendly. Driven by real-time requirements and
+                                         and forecasting (Yu et al. 2023c; Ruan et al. 2023; Song et al.        limited communication conditions, minimizing transmission
+                                            * Equal contribution. Work done while at AIR, Tsinghua.             costs becomes crucial to mitigate communication bandwidth
+                                            †
+                                              Corresponding author.                                             consumption and reduce latency. Thirdly, the transmitted
+                                         Copyright © 2025, Association for the Advancement of Artificial        data must be reliable. it should be reliable. Vehicles need
+                                         Intelligence (www.aaai.org). All rights reserved.                      interpretable information that can be validated and used ju-
+Table 1: Comparison with the existing methods for cooperative autonomous driving. “AgentP” denotes dynamic object percep-
+tion.“Map” denotes online mapping. “Occ” denotes occupancy prediction. “-” denotes that the information is not verified.
+
+                                                                       Transmission                                   Task
+ Approach                             Sensor Data                                                                                           End-to-End
+                                                         Type          Effective Friendly   Reliable   AgentP   Map    Occ   Plan/Control
+ V2VNet (Wang et al. 2020)            Point Cloud     BEV Feature         -      Medium       No        !                                       No
+ CoCa3D (Hu et al. 2023a)               Image         BEV Feature         -      Medium       No        !                                       No
+ CoBEVT (Xu et al. 2022a)               Image         BEV Feature         -      Medium       No        !       !                               No
+ PP-VIC (Yu et al. 2023c)             Point Cloud   Detected Result       -       High        Yes       !                                       No
+ DeepA (Wang et al. 2023)               Image         BEV Feature         -      Medium       No        !       !                               No
+ TransIFF (Chen, Shi, and Jia 2023)   Point Cloud   Instance Feature      -       High        Yes       !                                       No
+ Where2Comm (Hu et al. 2022)          Point Cloud   Instance Feature      -       High        Yes       !                                       No
+ CSA (Valiente et al. 2019)             Image          Raw Image         Yes      Low         Yes                                !          Non-Explicit
+ CooperNaut (Cui et al. 2022)         Point Cloud     BEV Feature        Yes     Medium       No                                 !          Non-Explicit
+ UniV2X (Ours)                          Image       Hybrid Feature       Yes       High       Yes       !       !      !         !            Explicit
+
+
+
+diciously to avoid safety issues such as communication at-                        view data fusion, such as agent fusion, mainly involves tem-
+tacks or data corruption. Addressing these challenges neces-                      poral and spatial synchronization, cross-view data match-
+sitates a well-designed solution for data transmission and                        ing and fusion, data adaptation for planning and intermedi-
+cross-view data fusion.                                                           ate outputs. The resulting lightweight approach strengthens
+   Here are a few straightforward attempts to address the                         dynamic object perception, online mapping, and occupancy
+cooperative driving problem through end-to-end learning.                          modules, thereby enhancing planning performance. More-
+CSA (Valiente et al. 2019) directly shares and feeds raw im-                      over, the interpretability of queries and occupied probability
+ages received from other vehicles into basic neural networks                      maps at the instance and scene levels, respectively, fortifies
+for control output. CooperNaut (Cui et al. 2022) shares fea-                      the reliability of the VICAD system, bolstering its transmis-
+tures derived from point clouds among vehicles and inputs                         sion integrity and fusion safety.
+them into a basic CNN network for the final output. How-                             The contributions are summarized as follows:
+ever, these existing solutions rely on a vanilla approach, uti-                   • We pioneer a first explicitly end-to-end framework that
+lizing simple networks to optimize planning and control out-                        unifies vital modules within a single model, advancing the
+puts. This paradigm lacks explicit modules, compromising                            landscape of cooperative autonomous driving. Notably,
+safety assurance and interpretability. Especially within intri-                     UniV2X is the first end-to-end framework for VICAD.
+cate urban settings, this approach falls short in ensuring the                    • We design a sparse-dense hybrid transmission and cross-
+reliability of the driving system. More comparisons are in                          view data interaction approach, aligning with effective-
+Table 1, and related work is discussed in the appendix.                             ness, transmission-friendliness, and reliability prerequi-
+   To this end, we introduce UniV2X, an innovative coop-                            sites for end-to-end cooperative autonomous driving.
+erative autonomous driving framework that seamlessly inte-                        • We reproduce several cooperative methods as bench-
+grates pivotal modules and cross views into a unified net-                          marks, as well as instantiating the UniV2X on DAIR-
+work, as depicted in Figure 2. Beyond the final planning                            V2X (Yu et al. 2022). Experimental results underscore the
+task, we address three common tasks for scene represen-                             efficacy of our end-to-end paradigm (see Fig. 1 (b)).
+tation in autonomous driving: 1) agent perception, encom-
+passing 3D object detection, tracking, and motion forecast-                                                     Method
+ing for dynamic obstacle perception, 2) road element (es-
+pecially lane) detection for online mapping, and 3) grid-                         In this section, we introduce UniV2X, an all-in-one solu-
+occupancy prediction for general obstacle perception. In-                         tion for vehicle and infrastructure cooperative autonomous
+spired by UniAD (Hu et al. 2023b), we adopt a query-                              driving (VICAD), together with the proposed sparse-dense
+based architecture to establish connections across nodes, en-                     hybrid data transmission and fusion design, as shown in Fig-
+compassing internal modules within infrastructure and ego-                        ure 2. We start by presenting the VICAD problem and in-
+vehicle systems, as well as cross-view interactions. In trans-                    troduce the background. Following that, we describe how
+mission and cross-view interaction, we classify agent per-                        to generate sparse-dense hybrid data for transmission and
+ception and road element detection as instance-level rep-                         cross-view data fusion. The training process is also outlined.
+resentation and occupancy prediction as scene-level repre-
+sentation. We transmit agent queries and lane queries for                         VICAD Problem Formulation
+cross-view agent perception interaction and online mapping                        The VICAD problem is planning-oriented, aiming to im-
+interaction. We transmit the occupied probability map, rec-                       prove planning performance by utilizing both infrastruc-
+ognizing its dense nature at the scene-level occupancy, for                       ture sensor data and ego-vehicle sensor data through V2X
+cross-view occupancy interaction. This transmission, termed                       communication. This paper focuses on the images as in-
+sparse-dense hybrid transmission, balances sparsity and den-                      puts. The input of VICAD consists of two parts: (a) Ego-
+sity in spatial and feature dimensions, respectively. Cross-                      vehicle images {Iv (t)|t ≤ tv } and the relative pose Mv (tv )
+       Infrastructure System                              Track Q                                             Ego-vehicle System: Fusion Process
+                                                                      TrackFormer
+
+                                                          Lane Q                                                    Temporal                  Spatial
+                                                                      MapFormer                                  Synchronization          Synchronization
+
+                                          BEV Feature      Occ Q
+                                                                      OccFormer             OccFlowNet
+                               BackBone
+                                                                                                                  Cross-View Data
+                                                                                                                                          Data Adaptation
+                                                                                                                 Matching and Fusion
+        V2X Communication
+                                          Agent Queries       Lane Queries          Occupied Prob. Map
+
+       Ego-vehicle System                                 Track Q
+                                                                      TrackFormer               AgentFusion
+                                                                                                                   Motion Q
+                                                                                                                              Motion
+                                                          Lane Q                                                              Former
+                                                                      MapFormer                 LaneFusion
+                                                                                                                                                   Planner
+                                          BEV Feature      Occ Q
+                                                                      OccFormer                  OccFusion                                    Plan Q
+                               BackBone
+
+
+Figure 2: Pipeline of Unified Autonomous Driving through V2X Cooperation (UniV2X). UniV2X aims to connect and jointly
+optimize all essential modules across diverse views for enhanced planning performance. Cross-view data interaction bolsters
+pivotal components in autonomous driving like agent perception, online mapping, and occupancy prediction. Additional flow
+prediction enables minimizing transmission costs for transmitting occupied probability map. Cross-view data fusion involves
+temporal and spatial synchronization, cross-view data matching and fusion, and data adaptation.
+
+
+at the current vehicle timestamp tv . (b) Infrastructure im-                        tations. Occupied probability maps, channel-sparse scene-
+ages {Ii (t)|t ≤ ti } and the relative pose Mi (ti ) at the cur-                    level features, improve occupancy prediction. Compared
+rent infrastructure timestamp ti . Note that in a practical sce-                    to less interpretable and high-cost BEV features, occupied
+nario, the timestamp ti should be earlier than the timestamp                        probability maps offer pixel-level interpretability and lower
+tv due to the communication latency. The output of VICAD                            transmission costs.
+is to predict future coordinates of ego vehicle for time steps
+t = tv + 1, · · · , tpred .                                                         Sparse-Dense Hybrid Data Generation
+Evaluation Metrics. We evaluate the planning perfor-                                This part illustrates how to generate sparse-dense hybrid
+mance with L2 Error, Collision Rate and Off-Road Rate, and                          data for transmission in infrastructure system.
+measure transmission cost with Bytes Per Second (BPS), as                              BEVFormer(Li et al. 2022b) is adopted as the backbone
+suggested in (Yu et al. 2022, 2023c). We provide detailed                           to extract image features and transform them into bird’s-
+explanations for these metrics in the Appendix.                                     eye-view (BEV) features Binf with size of (200, 200, 256)
+Challenges. Compared with single-vehicle autonomous                                 by incorporating spatial cross-attention and temporal self-
+driving, VICAD presents additional challenges: (1) Limited                          attention. TrackFormer is based on DETR (Carion et al.
+by practical communication conditions, fewer infrastructure                         2020), which optimizes detection and multi-object track-
+data should be transmitted to vehicles to minimize band-                            ing together, eliminating the need for non-differentiable
+width usage and reduce latency. (2) Wireless communication                          post-processing like NMS (Bodla et al. 2017). The ulti-
+causes latency, potentially leading to temporal misalignment                        mate filtered output from TrackFormer contains Nainf valid
+in data fusion. (3) Potential communication attacks and data                        agent queries {Qinf
+                                                                                                      A } with a feature dimension of 256 and
+corruption can render transmitted data untrustworthy. This                          their corresponding assigned tracking IDs and reference
+highlights the need for interpretable transmitted data.                             points. MapFormer is based on Panoptic SegFormer (Li
+Data for Transmission. It involves three primary types                              et al. 2022c). We mainly focus on the lane line and cross-
+in V2X cooperation: raw data like raw images, perception                            walk elements. During transmission, we filter out low-
+outputs like detection results, and intermediate-level data                         scoring queries using boxes generated from the classifi-
+such as Bird’s Eye View (BEV) features and queries (Fan                             cation decoder, and exclusively transmit Nlinf valid lane
+et al. 2024; Chen, Shi, and Jia 2023; Zhong et al. 2024).                           queries {Qinf
+                                                                                                L } with a feature dimension of 256, along with
+Compared to raw data and detection results, intermediate-                           their corresponding reference points. Original OccFormer
+level data achieves a balance between preserving valuable                           in UniAD (Hu et al. 2023b) solely considers instance-level
+information and reducing redundant transmission. To en-                             occupancy associated with agent queries, predicting multi-
+sure effective, transmission-friendly, and reliable transmit-                       ple steps. However, occupancy serves as a complementary
+ted data, we propose a sparse-dense hybrid transmission                             factor to object perception for general obstacle detection,
+mechanism. Queries, as lightweight instance-level features,                         and transmitting multiple probability maps incurs significant
+enhance agent perception and online mapping, as dynamic                             transmission costs. To address these challenges, we retain
+obstacles and lanes can be treated as instance-level represen-                      the dense feature obtained through pixel-level attention with
+a size of (200, 200, 256). Initially, a Multi-layer Perception     the location is explicitly denoted by reference points, while
+(MLP) is employed to transform the dense feature into BEV          the rotation is implicitly encoded within the query’s fea-
+occupied probability map denoted as P inf with a size of           ture, as illustrated in Figure 3. To address this issue, we pro-
+(200, 200). Subsequently, adopting the feature flow predic-        pose a solution termed rotation-aware query transformation
+tion approach (Yu et al. 2023b,c), an additional probability       to achieve spatial synchronization. This involves inputting
+flow module is utilized to represent T-step maps via a linear      the infrastructure query, along with its rotation R in the rel-
+operation as                                                       ative pose, into a three-layer MLP to update the feature with
+                 Pf uture (t) = P0 + t ∗ P1 ,              (1)     rotation awareness, achieving explicit spatial synchroniza-
+                                                                   tion as
+where P0 signifies the present BEV probability map, and P1
+indicates the corresponding BEV probability flow. Transmit-                   spatial update(Qinf                inf
+                                                                                                A ) = MLP([QA , R]),            (3)
+ting T-step occupied probability maps requires T*200*200           where the rotation matrix R is reshaped into 9 dimensions.
+floats, while UniV2X only requires 2*200*200 floats.               Finally, we transform the infrastructure agent query data into
+                                                                   the ego-vehicle coordinate system.
+Cross-View Data Fusion (Agent Fusion)
+                                                                   Cross-View Query Matching and Fusion. At this stage,
+In the ego-vehicle system, the BEV features Bveh are first         cross-view agent queries are temporally and spatially syn-
+extracted from the images captured by onboard sensors.             chronized. To match corresponding queries from different
+We also adopt TrackFormer, MapFormer, and OccFormer                sides, we calculate the Euclidean distance of their reference
+to generate the corresponding agent queries {Qveh  A }, lane       points and employ the Hungarian method (Kuhn 1955). For
+queries {Qveh   }, and the  occupied  probability map P veh .
+             L                                                     the matched query pairs Qinf            veh
+                                                                                                 A and QA , they are fed into
+The network for these modules aligns with that of the in-
+                                                                   a three-layer MLP to generate the cooperated query QA ,
+frastructure system. In this section, we describe how to im-
+                                                                   which is used to update the ego-vehicle agent query Qveh  A .
+plement cross-view agent fusion. Cross-view agent fusion is
+                                                                   For the unmatched queries from infrastructure, they are uti-
+mainly composed of temporal synchronization for latency
+                                                                   lized to be added to the ego-vehicle queries. Finally, we as-
+compensation, spatial synchronization to unify the cross-
+                                                                   sign tracking IDs and filter out cross-view fused queries with
+view coordinates, data matching and fusing, and data adap-
+                                                                   low detection confidence, obtaining the final agent queries.
+tation for planning and intermediate outputs.
+Temporal Synchronization with Flow Prediction. The                 Ego Identification and Removing. This module is used
+transmission delay in wireless communication, as ti is ear-        to eliminate the problem of false detection in the ego-vehicle
+lier than tv , is significant in complex traffic systems, espe-    area. From the infrastructure view, the ego vehicle can be
+cially for the busy intersection scenario. Due to the move-        perceived either as a distinct obstacle in agent perception
+ment of dynamic objects, there is a temporal misalignment          or as part of the occupied area in occupancy prediction.
+when fusing data from different sources. To address that,          Following cross-view data fusion, there is a possibility of
+we incorporate feature prediction into infrastructure agent        generating an obstacle query within the region where the
+queries to mitigate latency, following feature flow predic-        ego vehicle is located, thereby marking the ego-vehicle area
+tion as (Yu et al. 2023b,c). Specifically, we input both agent     as occupied. Such an occurrence can significantly disrupt
+                                                                   decision-making processes and ultimately impact decision-
+query QinfA     and query associated in the previous frame         making performance. To mitigate this issue, we define the
+into QueryFlowNet, a three-layer Multi-Layer Perceptron            ego-vehicle area as a rectangle, filter queries within this
+(MLP), to generate the agent query flow Qinf    AF low . The di-   area, and designate this region as unoccupied. However, this
+mensions of the agent query flow match those of the agent          straightforward solution may not consistently perform opti-
+query. Subsequently, a linear operation forecasts future fea-      mally due to relative position errors between infrastructure
+tures can be used to mitigate latency tv − ti , depicted as        and ego vehicle, stemming from positioning and calibration
+                                                                   inaccuracies (Yang et al. 2023b; Gu et al. 2023). Further ex-
+        Qinf        inf                     inf
+         A (tv ) = QA (ti ) + (tv − ti ) ∗ QAF low .        (2)    ploration and refinement are essential to contribute to coop-
+Notably, QueryFlowNet of the Flow Prediction module is             erative autonomous driving.
+not trained in an end-to-end manner in UniV2X. We adopt
+                                                                   Decoder Input Augmentation for Intermediate Output.
+self-supervised learning following (Yu et al. 2023b,c).
+                                                                   Through cross-attention between ultimately fused agent
+Spatial Synchronization with Rotation-Aware Query                  queries and the output from the encoder in the ego-vehicle
+Transformation. We initially transform the reference               TrackFormer, we can obtain intermediate outputs for agents,
+points of infrastructure agent queries Qinf                        such as 3D detection outputs, to enhance the interpretabil-
+                                         A from the infras-
+tructure to the ego-vehicle using the relative pose [R, T ]        ity of UniV2X. However, the output of the encoder is all
+between the infrastructure system and ego-vehicle system.          generated from ego-vehicle sensor data information, ren-
+Here, the relative pose is generated from the global relative      dering queries from the infrastructure unable to produce
+poses of the two systems, with R representing a rotation ma-       corresponding agent outputs. To address this issue, we use
+trix and T denoting translation. However, each object inher-       synchronized infrastructure queries to enhance ego-vehicle
+ently possesses 3D information about its location, size, and       BEV features, the output of the encoder, as:
+rotation. In the context of a query representing a 3D object,        update(B veh ) = B veh + MLP(synchronized(QinfA )). (4)
+                                        𝑥!"#                                          𝑥!"#                                         𝑥!"#
+
+                                                𝑦$%&                                         𝑦$%&                                         𝑦$%&
+
+
+
+
+            𝑦!"#                                       𝑦!"#                                         𝑦!"#
+
+                     𝑥$%&                                          𝑥$%&                                        𝑥$%&
+
+              (a) BEV Features Transformation                 (b) 3D Boxes Transformation                  (c) Queries Transformation
+
+
+Figure 3: Object orientation is explicitly encoded in BEV feature maps (a) and bounding box (b), while the orientation is implic-
+itly embedded in the feature of queries (c), resulting in the challenge of cross-view rotation alignment in spatial synchronization.
+
+
+Cross-View Data Fusion (Lane Fusion)                                              query obtained from MotionFormer is combined with com-
+The LaneFusion module is utilized to fuse lane queries                            mand embeddings to shape a ”plan query”. These commands
+across different sides. In this context, we omit temporal syn-                    comprise turning left, turning right, and moving forward.
+chronization in lane fusion, as the road lane elements re-                        This plan query, along with the BEV feature, is input into
+main unaffected by latency and maintain stability. Similar to                     the decoder to produce future waypoints.
+AgentFusion, LaneFusion incorporates spatial synchroniza-                            The final planning trajectory is determined by: 1) adjust-
+tion through the rotation-aware query transformation. This                        ing the future waypoints on the roads to ensure adherence to
+process converts infrastructure lane queries, comprising ref-                     traffic rules and staying within driving areas with the gener-
+erence points and query features, into the ego-vehicle co-                        ated lanes and other road elements, and 2) minimizing a cost
+ordinate system. We then match and fuse the synchronized                          function to avoid collisions with occupied grids Ô.
+infrastructure lane queries with ego-vehicle lane queries,
+as done in AgentFusion. To accelerate training, we also                                                       Experiments
+choose to directly concatenate synchronized queries with
+ego-vehicle lane queries. The synchronized queries are also                       In this section, we implement UniV2X, alongside repro-
+used for decoder input augmentation.                                              ducing various perception, online mapping, and end-to-end
+                                                                                  methods on DAIR-V2X (Yu et al. 2022, 2023c). More im-
+Cross-View Data Fusion (Occupancy Fusion)                                         plementation details, ablation studies, visualizations and
+                                                                                  analysis are provided in the Appendix. We also conduct
+We first generate multiple-step infrastructure occupied prob-                     UniV2X on more V2X datasets such as V2X-Sim (Li et al.
+ability maps through linear operations, aligning them with                        2022a), and present the experiment results in the Appendix.
+ego-vehicle multiple-step occupancy predictions. Leverag-
+ing the explicit representation of rotation in the dense prob-
+ability map, we directly transform the infrastructure occu-
+                                                                                  Experiment Settings
+pied probability maps to the ego-vehicle system using the                         DAIR-V2X Dataset comprises approximately 100 scenes
+relative pose. Subsequently, we fuse the synchronized occu-                       captured at 28 complex traffic intersections, recorded using
+pied probability maps with ego-vehicle occupied probabil-                         both infrastructure and vehicle sensors. Each scene has a du-
+ity maps using simple max operations, generating the fused                        ration ranging from 10 to 25 seconds, capturing data at a rate
+probability map P̂ . Grids with a probability exceeding a cer-                    of 10 Hz, and is equipped with a high-definition (HD) map.
+tain threshold are marked as occupied.                                            This dataset provides a diverse range of driving behaviors,
+                                                                                  including actions such as moving forward, turning left, and
+Planning Output                                                                   turning right. To align with nuScenes (Caesar et al. 2020),
+With the fused agent queries, lane queries, and occupancy                         we categorize object classes into four categories (car, bicy-
+features, we first generate rough future waypoints by reusing                     cle, pedestrian, traffic cone).
+the implementations in UniAD (Hu et al. 2023b). Motion-                           Implementation. We establish the interest range of the
+Former is used to generate a set of Na motion queries                             ego vehicle as [-50, 50, -50, 50] meters. The ego-vehicle
+with a prediction horizon of tpred . These queries are cre-                       BEV range shares the same area spanning [-50, 50, -50, 50]
+ated by capturing the interactions among agents, lanes, and                       meters, with each grid measuring 0.25m by 0.25m. The in-
+goals. Notably, these agent queries encompass the ego-                            frastructure BEV range is set as [0, 100, -50, 50] meters,
+vehicle query, thereby enabling MotionFormer to generate                          accounting for the camera’s forward sensing range and facil-
+ego-vehicle queries with multimodal intentions. The BEV                           itating more effective utilization of infrastructure data. The
+occupied probability map P̂ is utilized to create a binary                        experiments are conducted utilizing 8 NVIDIA A100 GPUs.
+occupancy map Ô. In the planning phase, the ego-vehicle                          More implementation details are provided in the appendix.
+Table 2: Planning Evaluation Results. We do not report the results at 0.5s and 1.5s because most of the collision rate is zero.
+Although CooperNaut achieves a lower off-road rate, it has a much larger L2 error compared to other methods. This is
+because its planning length is relatively conservative, ensuring it is easier to remain within the drivable area over a given period.
+
+                                        L2 Error (m)↓       Col. Rate (%)↓    Off-Road Rate (%)↓
+     Method                                                                                      Transm. Cos (BPS)↓
+                                    2.5s 3.5s 4.5s Avg. 2.5s 3.5s 4.5s Avg. 2.5s 3.5s 4.5s Avg.
+     No Fusion                      2.58   3.37   4.36   3.44 0.15 1.04 1.48 0.89 0.44    0.59   2.22   1.08         0
+     Vanilla                        2.33   3.69   5.12   3.71 0.59 2.07 3.70 2.12 0.15    1.33   4.74   2.07     8.19×107
+     BEV Feature Fusion             2.31   3.29   4.31   3.30 0.0 1.04 1.48 0.83 0.44     0.44   1.91   0.93     8.19×107
+     CooperNaut (Cui et al. 2022)   3.84   5.33   6.87   5.35 0.44 1.33 1.93 1.23 0.15    0.15   1.33   0.54     8.19×107
+     UniV2X (Ours)                  2.59   3.35   4.49   3.48 0.0 0.44 0.59 0.34 0.74     0.74   1.19   0.89     8.09×105
+
+
+Baseline Settings. No Fusion only utilizes ego-vehicle                 mission cost compared to the baseline solutions (8.09 × 105
+images as sensor data input, without any infrastructure data           vs 8.19×107 ), making it far more transmission-efficient and
+input. In Vanilla approach, we employ a simple CNN to fuse             transmission-friendly.
+infrastructure and ego-vehicle BEV features. The fused BEV
+                                                                       Agent Perception Results. We employ various fusion
+feature is reshaped into one dimension and subsequently
+                                                                       strategies on DAIR-V2X, including No Fusion, Early Fu-
+fed into a Multi-Layer Perceptron (MLP) to generate the
+                                                                       sion (fusing raw infrastructure BEV feature), and Late Fu-
+planning path. In BEV Feature Fusion, we use a CNN to
+                                                                       sion (fusing infrastructure detection results with Hungar-
+fuse two-side BEV features into a new ego-vehicle BEV
+                                                                       ian method(Kuhn 2010)). Additionally, we reproduce cur-
+feature, and send this new feature into UniAD (Hu et al.
+                                                                       rent SOTA cooperative perception methods on DAIR-V2X,
+2023b). CooperNaut (Cui et al. 2022) originally employs
+                                                                       namely V2X-ViT (Xu et al. 2022b), Where2comm (Hu
+Point Transformer to aggregate cross-view feature by using
+                                                                       et al. 2022), DiscoNet (Li et al. 2021), and CoAlign (Lu
+the sparse characteristics of point clouds. However, the im-
+                                                                       et al. 2023). For a fair comparison, we standardize inputs
+age is a dense representation, and conducting similar sparse
+                                                                       (image-only) and evaluation settings. All methods, except
+operations, as seen with Where2comm (Hu et al. 2022) in
+                                                                       for CoCa3D (Hu et al. 2023a) based on depth estimation,
+Table 3, results in poor performance. Therefore, we directly
+                                                                       are re-implemented using BEVFormer (Li et al. 2022b).
+transmit dense BEV features and use CNN to fuse features
+from both sides, with only one frame input each time to                Table 3: Detection and Multi-Object Tracking Evaluation
+achieve better comparison. Given the significant role of ego           Results.
+status, such as ego-vehicle velocity, in open-loop end-to-end
+autonomous driving, as illustrated in (Li et al. 2024), we re-                 Method             mAP ↑        AMOTA ↑    Trans. Cost ↓
+move the ego-vehicle velocity embedding in all baseline set-
+                                                                             No Fusion         0.165         0.163              0
+tings for a fair comparison. Additionally, we explore the role
+                                                                            Early Fusion       0.243         0.209          8.19×107
+of ego-vehicle velocity for UniV2X in the appendix.                          Late Fusion       0.196         0.263          6.60×102
+                                                                              CoAlign          0.240         0.234          8.19×107
+Experiment Results on DAIR-V2X                                                CoCa3D           0.226            -           4.63×106
+                                                                              V2X-ViT          0.268         0.287          2.56×106
+Planning Results. We report the planning results in Ta-                     Where2comm         0.162         0.106          5.40×105
+ble 2. Compared to No Fusion, UniV2X achieves a 61% re-                       DiscoNet         0.216         0.203          1.60×105
+duction in the average collision rate and a 9.3% reduction in           V2X-ViT+Where2comm     0.178         0.071          7.22×104
+the average off-road rate, as shown in Table 2. Notably, as                UniV2X (Ours)   0.295 (+0.13) 0.239 (+0.076)     6.96×104
+the planning time increases, the performance improvement
+becomes more pronounced. This result effectively demon-                   We present the evaluation results (car class) for detection
+strates that utilizing infrastructure information can enhance          and tracking in Table 3. (1) UniV2X demonstrates a notable
+autonomous driving performance, particularly for low-cost              enhancement of +7.6 and +3.0 in AMOTA(%) compared
+monocular solutions. When compared to Vanilla and BEV                  to No Fusion and Early Fusion. (2) UniV2X outperforms
+Feature Fusion methods, UniV2X significantly outperforms               CoCa3D, Where2comm, and DiscoNet at similar or less
+them in terms of average collision rate (0.34 vs 2.12, 0.34 vs         transmission cost. (3) UniV2X achieves inferior tracking
+0.83) and average off-road rate (0.89 vs 2.07, 0.89 vs 0.93).          performance compared to tracking-by-detection methods
+Even when compared to CooperNaut, UniV2X still achieves                with complex association, such as Late Fusion+AB3DMOT
+a better average collision rate (0.34 vs 1.23). However, there         (0.239 vs 0.263 at AMOTA), but it significantly outperforms
+is an abnormal phenomenon where CooperNaut exhibits a                  this tracking-by-detection solution in detection (0.295 vs
+much larger L2 error than all other methods up to 5.35m.               0.196). It is important to note that this tracking-by-detection
+This is because its planning length is relatively conservative,        solution is not suitable for end-to-end autonomous driving.
+resulting in a shorter planning path that more easily stays            (4) V2X-ViT exhibits better performance than UniV2X at
+within the drivable area, thereby achieving a lower off-road           AMOTA (0.287 vs 0.239), but it requires much more trans-
+rate. Furthermore, UniV2X requires significantly less trans-           mission cost (2.56×106 vs 6.94×104 ). When we further
+       Table 4: Online Mapping Evaluation Results.
+                                                                                                                                                                                             
+    Method    IoU-Lane (%)↑IoU-Crosswalk (%)↑Trans. Cost (BPS)↓                                                                                        P $ 3   8 Q L 9  ; 
+                                                                                                                                                  P $ 3   1 R  ) X V L R Q               
+  No Fusion       6.4              2.7                  0                         
+                                                                                                                                                       $ 0 2 7 $   8 Q L 9  ;                 
+ Ealry Fusion     16.7             17.8             8.19×107                                                                                           $ 0 2 7 $   1 R  ) X V L R Q 
+  CoBEVT          15.6             16.4             2.56×106                                                                                                                                 
+UniV2X (Ours) 17.8 (+11.4)     19.8 (+17.1)         1.47×105                                                                                                                                 
+
+
+
+
+                                                                                                                                                                                                       $ 0 2 7 $
+                                                                     P $ 3
+                                                                                                                                                                                             
+
+                                                                                                                                                                                             
+compress the V2X-ViT transmission to a level similar to
+UniV2X with Where2comm, there is a significant perfor-                                                                                                                                       
+mance drop (from 0.287 to 0.071 at AMOTA). These out-                                                                                                                                        
+comes underscore the capability of our infrastructure agent                                                                                                                                  
+queries and agent fusion module in enhancing agent percep-                                                                                                                    
+                                                                                                              ' D W D  ' U R S  5 D W L R    
+tion ability with light transmission cost.
+Online Mapping Results. We implement No Fusion,                                           Figure 4: Reliability on Data Corruption.
+Early Fusion, and CoBEVT(Xu et al. 2022a) for online map-
+ping on DAIR-V2X. All methods are re-implemented using
+BEVFormer (Li et al. 2022b). The mapping performance is           data corruption. Following this, the retained queries are uti-
+reported with Segmentation Intersection over Union (IoU)          lized for cross-view query transmission and interaction, and
+(%) as the evaluation metric in Table 4. UniV2X demon-            the performance of agent perception, encompassing object
+strates notable improvements in lane perception and cross-        detection and tracking, is evaluated accordingly. The evalua-
+ing perception compared No Fusion, Early Fusion and               tion results depicted in Figure 4 unveil a gradual degradation
+CoBEVT, respectively. Moreover, compared with Early Fu-           in agent perception as the data corruption ratio increases.
+sion and CoBEVT, UniV2X requires less than 1/10th of the          When the data corruption ratio reaches 100%, meaning only
+transmission cost. These results indicate that infrastructure     ego-vehicle sensor data can be used, the performance of
+lane queries and cross-view lane fusion are effective in en-      UniV2X becomes comparable to that of the No Fusion
+hancing online mapping ability.                                   model. This decline in performance is anticipated, as data
+Occupancy Prediction Results. Concerning the evalu-               corruption diminishes the complementary information cru-
+ation of occupancy prediction, as depicted in Table 5,            cial for ego-vehicle autonomous driving. Moreover, even in
+UniV2X exhibits notably superior performance compared             the absence of certain data due to corruption, UniV2X can
+to No Fusion in both near and far regions. Particularly,          maintain a basic level of performance comparable to the No
+UniV2X achieves +5.7 and +13.4 improvement in IoU-n               Fusion model. This underscores the reliability of our trans-
+(%) and IoU-f (%) respectively. Here, ”IoU-n” and ”IoU-           mission and cross-view data fusion mechanism.
+f” denote evaluation ranges of 30×30m and 50×50m, re-
+spectively. These results underscore the effectiveness of our                                                Conclusion
+sparse-dense hybrid transmitted data in significantly enhanc-     This paper presents UniV2X, a novel end-to-end framework
+ing occupancy prediction.                                         that integrates crucial tasks from various perspectives into a
+                                                                  single network. With a planning-oriented approach, it lever-
+    Table 5: Occupancy Prediction Evaluation Results.             ages raw sensor data while ensuring network interpretability
+                                                                  for cooperative autonomous driving. Additionally, a sparse-
+              Method     IoU-n (%)↑    IoU-f (%)↑                 dense hybrid data transmission strategy is devised to harness
+                                                                  cross-view data and enhance overall planning performance.
+             No Fusion      16.3           13.1
+                                                                  This transmission approach is both communication-friendly
+              UniV2X     22.0 (+5.7)   26.5 (+13.4)
+                                                                  and reliable, aligning with V2X communication require-
+                                                                  ments. Empirical results on the DAIR-V2X dataset validate
+                                                                  the efficacy of our proposed approach.
+Ablation Study on Reliability
+                                                                  Limitations and Future Work. The framework involves
+We evaluate UniV2X under various communication condi-             multiple modules and different agent perspectives, resulting
+tions. Here we assess the impact of data transmission cor-        in a high degree of complexity. As a result, several inter-
+ruption. Additionally, we assess the robustness of UniV2X         action fusion modules within the framework remain in pre-
+across different communication bandwidths and latencies,          liminary stages. Further refinement is essential for optimiz-
+as detailed in the Appendix. We specifically utilize agent        ing the internal design of the subsequent framework. In this
+queries and fusion to illustrate this reliability.                work, we only consider open-loop evaluation for end-to-end
+   When assessing UniV2X, our initial step involves ran-          autonomous driving. We will conduct more closed-loop ex-
+domly discarding 10%, 30%, 50%, 70%, and 100% of in-              periments to evaluate our UniV2X.
+frastructure agent queries during transmission to simulate
+                   Acknowledgment                               Dong, J.; Chen, Q.; Qu, D.; Lu, H.; Ganlath, A.; Yang, Q.;
+                                                                Chen, S.; and Labi, S. 2023. LiDAR-based Cooperative Rel-
+This work is supported by the Wuxi Research Institute of
+                                                                ative Localization. In 2023 IEEE Intelligent Vehicles Sym-
+Applied Technologies at Tsinghua University under Grant
+                                                                posium (IV), 1–8. IEEE. 1
+No. 20242001120, as well as the General Research Fund of
+Hong Kong under Grants No. 17200622 and 17209324.               Dosovitskiy, A.; Ros, G.; Codevilla, F.; Lopez, A.; and
+                                                                Koltun, V. 2017. CARLA: An open urban driving simula-
+Code — https://github.com/AIR-THU/UniV2X                        tor. In Conference on robot learning, 1–16. PMLR. 13
+                                                                Fan, S.; Yu, H.; Yang, W.; Yuan, J.; and Nie, Z. 2024. Quest:
+                                                                Query stream for vehicle-infrastructure cooperative percep-
+                       References                               tion. IEEE international conference on robotics and au-
+Bodla, N.; Singh, B.; Chellappa, R.; and Davis, L. S.           tomation (ICRA). 3, 11
+2017. Soft-NMS–improving object detection with one line         Gu, J.; Zhang, J.; Zhang, M.; Meng, W.; Xu, S.; Zhang, J.;
+of code. In Proceedings of the IEEE international confer-       and Zhang, X. 2023. FeaCo: Reaching Robust Feature-Level
+ence on computer vision, 5561–5569. 3                           Consensus in Noisy Pose Conditions. In Proceedings of the
+Bojarski, M.; Del Testa, D.; Dworakowski, D.; Firner, B.;       31st ACM International Conference on Multimedia, 3628–
+Flepp, B.; Goyal, P.; Jackel, L. D.; Monfort, M.; Muller, U.;   3636. 4
+Zhang, J.; et al. 2016. End to end learning for self-driving    Hu, A.; Murez, Z.; Mohan, N.; Dudas, S.; Hawke, J.; Badri-
+cars. arXiv preprint arXiv:1604.07316. 11                       narayanan, V.; Cipolla, R.; and Kendall, A. 2021. FIERY:
+Caesar, H.; Bankiti, V.; Lang, A. H.; Vora, S.; Liong, V. E.;   Future Instance Prediction in Bird’s-Eye View From Sur-
+Xu, Q.; Krishnan, A.; Pan, Y.; Baldan, G.; and Beijbom, O.      round Monocular Cameras. 12
+2020. nuscenes: A multimodal dataset for autonomous driv-       Hu, Y.; Fang, S.; Lei, Z.; Zhong, Y.; and Chen, S. 2022.
+ing. In Proceedings of the IEEE/CVF conference on com-          Where2comm: Communication-efficient collaborative per-
+puter vision and pattern recognition, 11621–11631. 5, 11,       ception via spatial confidence maps. Advances in neural in-
+12                                                              formation processing systems, 35: 4874–4886. 2, 6, 11
+Carion, N.; Massa, F.; Synnaeve, G.; Usunier, N.; Kirillov,     Hu, Y.; Lu, Y.; Xu, R.; Xie, W.; Chen, S.; and Wang, Y.
+A.; and Zagoruyko, S. 2020. End-to-end object detection         2023a. Collaboration Helps Camera Overtake LiDAR in 3D
+with transformers. In European conference on computer vi-       Detection. In Proceedings of the IEEE/CVF Conference on
+sion, 213–229. Springer. 3                                      Computer Vision and Pattern Recognition, 9243–9252. 1, 2,
+Chen, C.-J.; Xu, R.; Shao, W.; Zhang, J.; and Tu, Z. 2024.      6, 11
+OpenCDA-∞: A Closed-loop Benchmarking Platform for              Hu, Y.; Yang, J.; Chen, L.; Li, K.; Sima, C.; Zhu, X.; Chai,
+End-to-end Evaluation of Cooperative Perception. In The         S.; Du, S.; Lin, T.; Wang, W.; et al. 2023b. Planning-oriented
+Thirty-eight Conference on Neural Information Processing        autonomous driving. In Proceedings of the IEEE/CVF
+Systems Datasets and Benchmarks Track. 11                       Conference on Computer Vision and Pattern Recognition,
+Chen, Q.; Tang, S.; Yang, Q.; and Fu, S. 2019. Cooper:          17853–17862. 2, 3, 5, 6, 11, 12
+Cooperative perception for connected autonomous vehicles        Jia, X.; Wu, P.; Chen, L.; Xie, J.; He, C.; Yan, J.; and Li, H.
+based on 3d point clouds. In 2019 IEEE 39th International       2023. Think Twice before Driving: Towards Scalable De-
+Conference on Distributed Computing Systems (ICDCS),            coders for End-to-End Autonomous Driving. In Proceed-
+514–524. IEEE. 11                                               ings of the IEEE/CVF Conference on Computer Vision and
+Chen, Z.; Shi, Y.; and Jia, J. 2023. TransIFF: An Instance-     Pattern Recognition, 21983–21994. 11
+Level Feature Fusion Framework for Vehicle-Infrastructure       Jiang, Y.; Javanmard, E.; Nakazato, J.; Tsukada, M.; and
+Cooperative 3D Detection with Transformers. 2, 3, 11            Esaki, H. 2023. Roadside LiDAR Assisted Cooperative Lo-
+                                                                calization for Connected Autonomous Vehicles. ACM In-
+Codevilla, F.; Müller, M.; López, A.; Koltun, V.; and Doso-
+                                                                telligent Computing and its Emerging Applications (ICEA).
+vitskiy, A. 2018. End-to-end driving via conditional imi-
+                                                                1
+tation learning. In 2018 IEEE international conference on
+robotics and automation (ICRA), 4693–4700. IEEE. 11             Kendall, A.; Hawke, J.; Janz, D.; Mazur, P.; Reda, D.; Allen,
+                                                                J.-M.; Lam, V.-D.; Bewley, A.; and Shah, A. 2019. Learn-
+Creß, C.; Zimmer, W.; Strand, L.; Fortkord, M.; Dai, S.; Lak-   ing to drive in a day. In 2019 International Conference on
+shminarasimhan, V.; and Knoll, A. 2022. A9-dataset: Multi-      Robotics and Automation (ICRA), 8248–8254. IEEE. 11
+sensor infrastructure-based dataset for mobility research. In
+2022 IEEE Intelligent Vehicles Symposium (IV), 965–970.         Kuhn, H. W. 1955. The Hungarian method for the assign-
+IEEE. 11                                                        ment problem. Naval research logistics quarterly, 2(1-2):
+                                                                83–97. 4
+Cui, J.; Qiu, H.; Chen, D.; Stone, P.; and Zhu, Y. 2022.
+Coopernaut: End-to-end driving with cooperative perception      Kuhn, H. W. 2010. The Hungarian Method for the Assign-
+for networked vehicles. In Proceedings of the IEEE/CVF          ment Problem. In 50 Years of Integer Programming. 6
+Conference on Computer Vision and Pattern Recognition,          Lei, Z.; Ren, S.; Hu, Y.; Zhang, W.; and Chen, S. 2022.
+17252–17262. 2, 6, 11                                           Latency-aware collaborative perception. In ECCV. 11
+Li, Y.; Ma, D.; An, Z.; Wang, Z.; Zhong, Y.; Chen, S.;            cooperative perception of autonomous vehicles. In 2022
+and Feng, C. 2022a. V2X-Sim: Multi-agent collaborative            IEEE 42nd International Conference on Distributed Com-
+perception dataset and benchmark for autonomous driving.          puting Systems (ICDCS), 1212–1222. IEEE. 1
+IEEE Robotics and Automation Letters, 7(4): 10914–10921.          Ruan, H.; Yu, H.; Yang, W.; Fan, S.; Tang, Y.; and Nie, Z.
+5, 11, 13, 14                                                     2023. Learning Cooperative Trajectory Representations for
+Li, Y.; Ren, S.; Wu, P.; Chen, S.; Feng, C.; and Zhang, W.        Motion Forecasting. arXiv preprint arXiv:2311.00371. 1,
+2021. Learning distilled collaboration graph for multi-agent      11
+perception. Advances in Neural Information Processing Sys-        Sadat, A.; Casas, S.; Ren, M.; Wu, X.; Dhawan, P.; and Ur-
+tems, 34: 29541–29552. 6, 11                                      tasun, R. 2020. Perceive, predict, and plan: Safe motion
+Li, Z.; Wang, W.; Li, H.; Xie, E.; Sima, C.; Lu, T.; Qiao,        planning through interpretable semantic representations. In
+Y.; and Dai, J. 2022b. Bevformer: Learning bird’s-eye-view        Computer Vision–ECCV 2020: 16th European Conference,
+representation from multi-camera images via spatiotemporal        Glasgow, UK, August 23–28, 2020, Proceedings, Part XXIII
+transformers. In European conference on computer vision,          16, 414–430. Springer. 11
+1–18. Springer. 3, 6, 7                                           Shao, H.; Wang, L.; Chen, R.; Li, H.; and Liu, Y. 2023.
+Li, Z.; Wang, W.; Xie, E.; Yu, Z.; Anandkumar, A.; Alvarez,       Safety-enhanced autonomous driving using interpretable
+J. M.; Luo, P.; and Lu, T. 2022c. Panoptic segformer: Delv-       sensor fusion transformer. In Conference on Robot Learn-
+ing deeper into panoptic segmentation with transformers. In       ing, 726–737. PMLR. 11
+Proceedings of the IEEE/CVF Conference on Computer Vi-            Sizhe, W.; Yuxi, W.; Yue, H.; Yifan, L.; Yiqi, Z.; Siheng, C.;
+sion and Pattern Recognition, 1280–1289. 3                        and Zhang, Y. 2023. Asynchrony-Robust Collaborative Per-
+Li, Z.; Yu, Z.; Lan, S.; Li, J.; Kautz, J.; Lu, T.; and Al-       ception via Bird’s Eye View Flow. In Thirty-seventh Con-
+varez, J. M. 2024. Is Ego Status All You Need for Open-           ference on Neural Information Processing Systems. 11
+Loop End-to-End Autonomous Driving? In Proceedings of             Song, R.; Liang, C.; Cao, H.; Yan, Z.; Zimmer, W.; Gross,
+the IEEE/CVF Conference on Computer Vision and Pattern            M.; Festag, A.; and Knoll, A. 2024. Collaborative Semantic
+Recognition. 6                                                    Occupancy Prediction with Hybrid Feature Fusion in Con-
+Liang, X.; Wang, T.; Yang, L.; and Xing, E. 2018. Cirl: Con-      nected Automated Vehicles. Proceedings of the IEEE/CVF
+trollable imitative reinforcement learning for vision-based       Conference on Computer Vision and Pattern Recognition. 1
+self-driving. In Proceedings of the European conference on        Teufel, S.; Gamerdinger, J.; Volk, G.; and Bringmann, O.
+computer vision (ECCV), 584–599. 11                               2023. Collective PV-RCNN: A Novel Fusion Technique us-
+Lin, C.; Tian, D.; Duan, X.; Zhou, J.; Zhao, D.; and Cao, D.      ing Collective Detections for Enhanced Local LiDAR-Based
+2024. V2VFormer: Vehicle-to-Vehicle Cooperative Percep-           Perception. In 2023 IEEE 26th International Conference
+tion with Spatial-Channel Transformer. IEEE Transactions          on Intelligent Transportation Systems (ITSC), 1828–1834.
+on Intelligent Vehicles. 11                                       IEEE. 11
+                                                                  Tianhang, W.; Guang, C.; Kai, C.; Zhengfa, L.; Bo, Z.;
+Liu, G.; Hu, Y.; Xu, C.; Mao, W.; Ge, J.; Huang, Z.; Lu, Y.;
+                                                                  Alois, K.; and Jiang, C. 2023. UMC: A Unified Bandwidth-
+Xu, Y.; Xia, J.; Wang, Y.; et al. 2024. Towards Collaborative
+                                                                  efficient and Multi-resolution based Collaborative Percep-
+Autonomous Driving: Simulation Platform and End-to-End
+                                                                  tion Framework. In Proceedings of the IEEE/CVF Interna-
+System. arXiv preprint arXiv:2404.09496. 11
+                                                                  tional Conference on Computer Vision, 23383–23392. 1
+Lopez, P. A.; Behrisch, M.; Bieker-Walz, L.; Erdmann, J.;
+                                                                  Valiente, R.; Zaman, M.; Ozer, S.; and Fallah, Y. P. 2019.
+Flötteröd, Y.-P.; Hilbrich, R.; Lücken, L.; Rummel, J.; Wag-
+                                                                  Controlling steering angle for cooperative self-driving ve-
+ner, P.; and Wießner, E. 2018. Microscopic traffic simulation
+                                                                  hicles utilizing CNN and LSTM-based deep networks. In
+using sumo. In 2018 21st international conference on intel-
+                                                                  2019 IEEE intelligent vehicles symposium (IV), 2423–2428.
+ligent transportation systems (ITSC), 2575–2582. IEEE. 13
+                                                                  IEEE. 2, 11
+Lu, Y.; Li, Q.; Liu, B.; Dianati, M.; Feng, C.; Chen, S.; and     Wang, T.; Kim, S.; Ji, W.; Xie, E.; Ge, C.; Chen, J.; Li, Z.;
+Wang, Y. 2023. Robust collaborative 3d object detection in        and Luo, P. 2023. DeepAccident: A Motion and Accident
+presence of pose errors. In 2023 IEEE International Con-          Prediction Benchmark for V2X Autonomous Driving. arXiv
+ference on Robotics and Automation (ICRA), 4812–4818.             preprint arXiv:2304.01168. 2
+IEEE. 6
+                                                                  Wang, T.-H.; Manivasagam, S.; Liang, M.; Yang, B.; Zeng,
+Mao, R.; Guo, J.; Jia, Y.; Sun, Y.; Zhou, S.; and Niu, Z. 2022.   W.; and Urtasun, R. 2020. V2vnet: Vehicle-to-vehicle com-
+Dolphins: Dataset for collaborative perception enabled har-       munication for joint perception and prediction. In Computer
+monious and interconnected self-driving. In Proceedings of        Vision–ECCV 2020: 16th European Conference, Glasgow,
+the Asian Conference on Computer Vision, 4361–4377. 11            UK, August 23–28, 2020, Proceedings, Part II 16, 605–621.
+Prakash, A.; Chitta, K.; and Geiger, A. 2021. Multi-modal         Springer. 1, 2, 11
+fusion transformer for end-to-end autonomous driving. In          Wu, P.; Jia, X.; Chen, L.; Yan, J.; Li, H.; and Qiao, Y.
+Proceedings of the IEEE/CVF Conference on Computer Vi-            2022. Trajectory-guided control prediction for end-to-end
+sion and Pattern Recognition, 7077–7087. 11                       autonomous driving: A simple yet strong baseline. Advances
+Qiu, C.; Yadav, S.; Squicciarini, A.; Yang, Q.; Fu, S.; Zhao,     in Neural Information Processing Systems, 35: 6119–6132.
+J.; and Xu, C. 2022. Distributed data-sharing consensus in        11
+Xu, R.; Tu, Z.; Xiang, H.; Shao, W.; Zhou, B.; and Ma,            Zeng, W.; Wang, S.; Liao, R.; Chen, Y.; Yang, B.; and Urta-
+J. 2022a. CoBEVT: Cooperative bird’s eye view seman-              sun, R. 2020. Dsdnet: Deep structured self-driving network.
+tic segmentation with sparse transformers. arXiv preprint         In Computer Vision–ECCV 2020: 16th European Confer-
+arXiv:2207.02202. 1, 2, 7, 11                                     ence, Glasgow, UK, August 23–28, 2020, Proceedings, Part
+Xu, R.; Xiang, H.; Tu, Z.; Xia, X.; Yang, M.-H.; and Ma,          XXI 16, 156–172. Springer. 11
+J. 2022b. V2x-vit: Vehicle-to-everything cooperative per-         Zhang, Y.; Zhu, Z.; Zheng, W.; Huang, J.; Huang, G.; Zhou,
+ception with vision transformer. In European conference on        J.; and Lu, J. 2022. BEVerse: Unified Perception and Pre-
+computer vision, 107–124. Springer. 6, 11                         diction in Birds-Eye-View for Vision-Centric Autonomous
+Xu, R.; Xiang, H.; Xia, X.; Han, X.; Li, J.; and Ma, J. 2022c.    Driving. arXiv preprint arXiv:2205.09743. 12
+Opv2v: An open benchmark dataset and fusion pipeline              Zhong, J.; Yu, H.; Zhu, T.; Xu, J.; Yang, W.; Nie, Z.; and
+for perception with vehicle-to-vehicle communication. In          Sun, C. 2024. Leveraging temporal contexts to enhance
+2022 International Conference on Robotics and Automation          vehicle-infrastructure cooperative perception. In 2024 IEEE
+(ICRA), 2583–2589. IEEE. 11                                       27th International Conference on Intelligent Transportation
+Yang, D.; Yang, K.; Wang, Y.; Liu, J.; Xu, Z.; Yin, R.; Zhai,     Systems (ITSC). IEEE. 3, 11
+P.; and Zhang, L. 2023a. How2comm: Communication-
+Efficient and Collaboration-Pragmatic Multi-Agent Percep-
+tion. In Thirty-seventh Conference on Neural Information
+Processing Systems. 11
+Yang, K.; Yang, D.; Zhang, J.; Li, M.; Liu, Y.; Liu, J.;
+Wang, H.; Sun, P.; and Song, L. 2023b. Spatio-temporal
+domain awareness for multi-agent collaborative perception.
+In Proceedings of the IEEE/CVF International Conference
+on Computer Vision, 23383–23392. 4
+Yang, K.; Yang, D.; Zhang, J.; Wang, H.; Sun, P.; and Song,
+L. 2023c. What2comm: Towards Communication-efficient
+Collaborative Perception via Feature Decoupling. In Pro-
+ceedings of the 31st ACM International Conference on Mul-
+timedia, 7686–7695. 11
+Yang, L.; Yu, K.; Tang, T.; Li, J.; Yuan, K.; Wang, L.; Zhang,
+X.; and Chen, P. 2023d. Bevheight: A robust framework for
+vision-based roadside 3d object detection. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 21611–21620. 1
+Yang, Z.; Mao, J.; Yang, W.; Ai, Y.; Kong, Y.; Yu, H.;
+and Zhang, W. 2024. LiDAR-based End-to-end Tempo-
+ral Perception for Vehicle-Infrastructure Cooperation. arXiv
+preprint arXiv:2411.14927. 11
+Yu, H.; Luo, Y.; Shu, M.; Huo, Y.; Yang, Z.; Shi, Y.; Guo,
+Z.; Li, H.; Hu, X.; Yuan, J.; et al. 2022. Dair-v2x: A large-
+scale dataset for vehicle-infrastructure cooperative 3d object
+detection. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 21361–21370. 1,
+2, 3, 5, 11, 12, 13, 15
+Yu, H.; Tang, Y.; Xie, E.; Mao, J.; Luo, P.; and Nie, Z. 2023a.
+Flow-based Feature Fusion for Vehicle-Infrastructure Coop-
+erative 3D Object Detection. In Advances in Neural Infor-
+mation Processing Systems (NeurIPS). 1
+Yu, H.; Tang, Y.; Xie, E.; Mao, J.; Yuan, J.; Luo, P.; and
+Nie, Z. 2023b. Vehicle-infrastructure cooperative 3d ob-
+ject detection via feature flow prediction. arXiv preprint
+arXiv:2303.10552. 4, 11
+Yu, H.; Yang, W.; Ruan, H.; Yang, Z.; Tang, Y.; Gao, X.;
+Hao, X.; Shi, Y.; Pan, Y.; Sun, N.; et al. 2023c. V2X-Seq:
+A Large-Scale Sequential Dataset for Vehicle-Infrastructure
+Cooperative Perception and Forecasting. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 5486–5495. 1, 2, 3, 4, 5, 11
+Appendix                                                          End-to-End Autonomous Driving. End-to-end au-
+                                                                  tonomous driving involves the extraction of planning output
+Related Works                                               11    directly from raw data in a differentiable and learnable
+                                                                  manner. Pioneering work, such as (Bojarski et al. 2016),
+UniV2X Training                                             11    employs CNNs to generate control outputs from point
+                                                                  cloud data. Others, exemplified by (Sadat et al. 2020; Zeng
+Evaluation Metric Details                                   12    et al. 2020), utilize point clouds and High-definition Maps
+                                                                  as inputs. Concurrently, works like (Shao et al. 2023)
+Ablation Study for Fusion Modules                           12    leverage multi-modal sensor data as input to generate
+                                                                  object density maps for visualization. For acquiring driving
+Ablation Study for Flow Prediction                          12    skills, (Codevilla et al. 2018; Prakash, Chitta, and Geiger
+                                                                  2021; Wu et al. 2022) employ imitation learning (IL) to
+Ablation Study for Communication Constraints                13    learn from expert demonstrations in an open-loop manner.
+                                                                  In contrast, (Liang et al. 2018; Kendall et al. 2019; Jia et al.
+Experiments on More Dataset                                 13    2023) utilize reinforcement learning (RL) to iteratively
+                                                                  learn driving skills by interacting with the environment in
+Qualitative Visualization                                   14    a closed-loop fashion. Among related works, UniAD (Hu
+                                                                  et al. 2023b) is the first to use queries to connect all essential
+                                                                  tasks such as perception, mapping, prediction, and planning.
+                     Related Works                                Through unifying these tasks into a single network and
+Cooperative Autonomous Driving. Leveraging V2X                    employing imitation learning, UniAD achieves remarkable
+communication for cooperative autonomous driving has gar-         performance on the nuScenes dataset (Caesar et al. 2020).
+nered significant attention. Works like (Wang et al. 2020; Li     However, UniAD solely considers single-vehicle sensor
+et al. 2021; Chen et al. 2019; Yang et al. 2023a; Hu et al.       data, while our approach, UniV2X, leverages sensor data
+2023a; Lin et al. 2024; Teufel et al. 2023; Yang et al. 2024)     from diverse views to enhance the overall driving ability.
+emphasize transmitting Bird’s Eye View (BEV) features ex-
+tracted from point clouds or images to improve 3D object de-                          UniV2X Training
+tection or tracking performance. (Xu et al. 2022a) employs
+sparse transformers to enhance segmentation performance,          In our work, we train UniV2X with a four-stage training
+while(Ruan et al. 2023) focuses on utilizing sequential tra-      strategy to ensure comprehensive and stable training.
+jectories for motion forecasting. Addressing the latency is-         In the first stage, we pre-train the infrastructure and ego-
+sue in cooperation detection, (Lei et al. 2022; Yu et al.         vehicle systems separately. Specifically, we pre-train the in-
+2023b; Sizhe et al. 2023; Yang et al. 2023c) utilize historical   frastructure system, which includes tasks such as tracking,
+frames or features. Additionally, (Hu et al. 2022; Fan et al.     online mapping, and occupancy prediction, using annota-
+2024; Chen, Shi, and Jia 2023; Zhong et al. 2024) trans-          tions from the infrastructure view as ground truth. Similarly,
+mit instance-level features or queries to reduce transmis-        we pre-train the ego-vehicle system, which involves tasks
+sion costs and alleviate communication challenges. Datasets       like tracking, online mapping, motion prediction, occupancy
+for cooperative object perception are provided by (Yu et al.      prediction, and planning, using annotations from the ego-
+2022, 2023c; Xu et al. 2022b; Li et al. 2022a; Mao et al.         vehicle view as ground truth.
+2022; Creß et al. 2022; Xu et al. 2022c). (Yu et al. 2023c)          In the second stage, we train the AgentFusion and Lane-
+releases a real-world trajectory dataset generated from in-       Fusion modules. This stage encompasses tasks such as track-
+frastructure and vehicle sensor data. While most of these         ing and online mapping, utilizing cooperative-view annota-
+works concentrate on single tasks, a few also focus on end-       tions as ground truth, with the following combined loss:
+to-end output planning or control tasks. For instance, (Va-                              L = Ltrack + Lmap .                  (5)
+liente et al. 2019) employs multi-vehicle images with a sim-         In the third stage, we train all fusion modules and all
+ple convolutional network to generate control outputs. Sim-       modules within the ego-vehicle system, covering all tasks.
+ilarly, (Cui et al. 2022) adopts a simple MLP to learn plan-      Cooperative-view annotations are used as ground truth for
+ning outputs with BEV features from multi-vehicle point           this stage, with the following combined loss:
+clouds. However, these solutions lack explicit interpretabil-
+                                                                           L = Ltrack + Lmap + Lmotion + Locc + Lplan .  (6)
+ity modules. In this paper, we present UniV2X, a com-
+prehensive framework that integrates all essential modules           Furthermore, we use self-supervised learning to train
+within a single model, utilizing end-to-end learning for op-      QueryFlowNet and OccFlowNet. This involves constructing
+timizing final planning improvement as well as intermedi-         infrastructure frame pairs and employing a similarity loss
+ate outputs. Recently, several studies (Liu et al. 2024; Chen     for training, similar to the strategy described in (Yu et al.
+et al. 2024) have developed benchmarks to evaluate cooper-        2023b). This training requires no extra annotations.
+ative autonomous driving using closed-loop methodologies.            Note that there is data distribution shift between the gen-
+In this work, we focus solely on open-loop evaluation for         erated data from the clips selected from sequences in train-
+end-to-end autonomous driving. We plan to conduct closed-         ing stage and generated data from complete sequences in
+loop experiments to assess UniV2X in future work.                 inference stage, especially for the track queries involving
+complex sequential queries correlation and update in Track-       frequency. In our implementation, a transmission frequency
+Former. We found that if we train the agent fusion with the       of 2Hz is considered, and we exclude the transmission cost
+infrastructure agent queries generated from training clips,       of calibration files and timestamps. For each transmission,
+there will be unstable performance in inference stage. Thus       the average transmission cost, denoted as AB, is computed.
+we save the infrastructure agent queries of training part as      We detail the calculation of the transmission cost for each of
+the inference way, and train the agent fusion with the saved      the two transmission forms:
+infrastructure agent queries. We are also exploring more
+friendly way to train the agent fusion module.                     • Transmitting Queries: Each query is represented as
+                                                                     256-dimensional features in 32-bit float format. Con-
+              Evaluation Metric Details                              sequently, each query requires eight 256×32-bit floats,
+                                                                     equivalent to 1024 Bytes. If ten queries are transmit-
+ In this section, we detail the evaluation metrics used to as-       ted per transmission, the AB of the transmission cost is
+sess the agent perception, online mapping, occupancy pre-            1.0×103 Bytes. If the transmission frequency is 2Hz, the
+diction, planning, and transmission cost.                            BPS is 2.0 × 103 Bytes Per Second.
+Object Detection. We evaluate the detection performance            • Transmitting Features: Each feature is represented as a
+using the mean Average Precision (mAP) metric, which is              tensor. If the size of the feature is (24, 36, 36), and each
+commonly used in previous works such as (Yu et al. 2022;             element is encoded as a 32-bit float, the transmission cost
+Caesar et al. 2020). The AP is calculated based on the 11-           is 24 × 36 × 36 × 4 Bytes, amounting to 1.2 × 105 Bytes.
+points interpolated precision-recall curve and is defined as         If the transmission frequency is 2Hz, the BPS is 2.4×105
+follows:                                                             Bytes Per Second.
+          1    X                  1      X
+ AP =                     APr =                   Pinterp (r),
+         11 r∈0.0,...,1.0        11 r∈0.0,...,1.0                        Ablation Study for Fusion Modules
+                                                            (7)
+where Pinterp (r) = max p(r̃), and a prediction is consid-        In this part, we investigate the contributions of each fusion
+                       r̃≥r                                       module within UniV2X. In evaluating the trained UniV2X,
+ered positive if the Intersection over Union (IoU) is greater     we only fuse agent queries, lane queries, and occupancy
+than or equal to 0.5. We calculate the AP for each class and      probability maps, respectively. We assess each individual
+then average them to obtain the mAP. In this paper, we only       fusion module and present the results in Table 6, 7 and 8.
+calculate and report Car class.                                   These tables illustrate that agent fusion, lane fusion, and oc-
+Multi-object Tracking. AMOTA and AMOTP, 3D track-                 cupancy fusion each contribute uniquely to agent perception,
+ing evaluation metrics (Caesar et al. 2020), are used to mea-     online mapping, and occupancy prediction, respectively. Ad-
+sure the performance of multi-object tracking.                    ditionally, all fusion modules collectively enhance the over-
+                                                                  all planning performance.
+Online Mapping. We categorize the online mapping tasks
+into two classes: lanes and crosswalks. For each class, we
+compute the Intersection over Union (IoU) metric, mea-                   Ablation Study for Flow Prediction
+suring the overlap between the prediction outputs and the
+ground truths.                                                    In this section, we explore how our flow prediction can miti-
+                                                                  gate communication latency. Specifically, we employ Agent
+Occupancy Prediction. In line with UniAD (Hu et al.               Perception to demonstrate this effect.
+2023b), we assess the accuracy of predicted occupancy us-
+ing a methodology similar to that outlined in (Hu et al.          Experiment Settings. We evaluate UniV2X under two
+2021; Zhang et al. 2022). Specifically, the Intersection over     distinct latency conditions: 0ms and 500ms. Additionally,
+Union (IoU) metric quantifies categorical segmentations of        to examine the influence of latency on UniV2X’s perfor-
+the entire scene in an instance-agnostic manner. This met-        mance, we excluded the prediction module from UniV2X.
+ric is computed within Bird’s Eye View (BEV) ranges, with         This version is denoted as UniV2X (without prediction), ab-
+evaluations conducted for both near (30m×30m) and far             breviated as ”UniV2X-O”, and was evaluated under both 0
+(50m×50m) distances.                                              ms and 500 ms latency settings.
+Planning. We utilize the L2 error, collision rate and off-
+road rate metrics at different timestamps to assess the plan-     Experiment Results. As shown in Table 9, UniV2X-
+ning performance. Compared to existing open-loop evalu-           O has a notable decline in perception performance under
+ations, we have included the off-road rate as an additional       500ms latency (a decrease of 3.6% in mAP and 1.2% in
+metric. This metric is vital for evaluating planning perfor-      AMOTA compared to scenarios with no latency). However,
+mance, particularly in assessing how well the driving area is     with the inclusion of flow prediction, UniV2X demonstrates
+maintained and lane violations are minimized.                     minimal performance degradation under 500ms latency
+                                                                  (only a decrease of 1.2% in mAP and 0.4% in AMOTA).
+Transmission Cost. BPS: Byte Per Second (BPS) quanti-             These results demonstrate that latency can impact fusion
+fies the volume of data transmitted from the infrastructure to    performance and our feature prediction module can mitigate
+the ego vehicle per second, accounting for the transmission       this performance decline.
+                       Table 6: Evaluation Results of UniV2X with No Fusion and Agent Fusion-Only.
+
+                                         Agent Perception                      Planning
+                Method
+                                     mAP (%) ↑ AMOTA (%) ↑ Col. Rate (%, Avg.) ↓ Off-Road Rate (%, Avg.) ↓
+                No Fusion                16.5             16.3          0.89                    1.08
+                Agent Fusion-Only        29.5             23.9          0.59                    0.79
+
+                         Table 7: Evaluation Results of UniV2X with No Fusion and Lane Fusion-Only.
+
+                                         Online Mapping                               Planning
+           Method
+                               IoU-Lane (%) ↑ IoU-CrossWalk (%) ↑ Col. Rate (%, Avg.) ↓ Off-Road Rate (%, Avg.) ↓
+           No Fusion                  6.4                   2.7                0.89                    1.08
+           Lane Fusion-Only          17.8                  19.8                0.59                    0.89
+
+                          Table 8: Evaluation Results of UniV2X with No Fusion and Occ Fusion-Only.
+
+                                       Occupancy Prediction                      Planning
+                  Method
+                                     IoU-n (%) ↑ IoU-f (%) ↑ Col. Rate (%, Avg.) ↓ Off-Road Rate (%, Avg.) ↓
+                  No Fusion                 16.3          13.1        0.89                     1.08
+                  Occ. Fusion-Only          20.3          23.5        0.39                     0.98
+
+
+Table 9: Agent Perception Evaluation Results with Latency.                      Experiments on More Dataset
+                                                                   In this section, we apply UniV2X to the V2X-Sim
+      Method    Latency (ms) mAP (%) ↑ AMOTA (%) ↑                 dataset (Li et al. 2022a) to showcase its effectiveness in V2V
+    UniV2X-O         0            29.5             23.9            scenario. Due to the challenges in converting the dataset map
+                                                                   to our format, we have not implemented online mapping and
+    UniV2X-O        500           25.9             22.7
+                                                                   lane fusion in our analysis. Consequently, we are unable to
+     UniV2X          0            29.5             23.9
+                                                                   report results for the off-road rate metric.
+     UniV2X         500           28.5             23.5
+                                                                   V2X-Sim Dataset. The V2X-Sim dataset (Li et al. 2022a)
+                                                                   is a synthetic dataset for cooperative autonomous driving,
+                                                                   developed through the integration of Carla Simulator (Doso-
+       Ablation Study for Communication                            vitskiy et al. 2017) and SUMO (Lopez et al. 2018) co-
+                  Constraints                                      simulation. This dataset comprises 100 scenes, and each
+In this section, we investigate UniV2X’s adaptability to           scene contains synchronized image and point cloud se-
+varying communication bandwidths. Specifically, we im-             quences, at a key frame rate of 5Hz, from roadside sensors
+pose different bandwidth constraints on UniV2X transmis-           and sensors mounted on five autonomous driving vehicles.
+sion while maximizing the retention of queries and prob-           Experiment Settings and Results. We choose two au-
+ability maps based on data scores. We present UniV2X’s             tonomous vehicles from V2X-Sim and designate one as the
+performance across different communication bandwidths in           ego vehicle to establish V2V scenes. To maintain consis-
+Table 10. Across configurations ranging from 0 Mb/s to 1           tency with the implementation on DAIR-V2X (Yu et al.
+Mb/s, UniV2X consistently enhances autonomous driving              2022), we equip each autonomous vehicle solely with a front
+performance, including planning and intermediate outputs.          camera sensor. For this experiment, we utilize only one-fifth
+This highlights its ability to adapt to diverse communication      of the dataset to streamline the results. Considering the ab-
+bandwidth constraints.                                             sence of evaluation metrics reflecting online mapping’s im-
+                                                                   pact on planning, such as lane violation, we exclude the on-
+Table 10: Different Communication Bandwidth Configura-             line mapping task from this experiment. We proceed with
+tions.                                                             training and evaluation of UniV2X on V2X-Sim using set-
+                                                                   tings akin to those in DAIR-V2X (Yu et al. 2022). Experi-
+   Bandwidth (Mb/s)         0.0    0.3  0.5  0.7  1.0              mental results are detailed in Table 11, 12, and 13.
+   Perception: mAP (%)     16.5   21.0 23.6 26.3 29.5                 In comparison to No Fusion, our UniV2X exhibits perfor-
+   Mapping: Lane (%)        6.4   10.9 13.2 15.0 17.7              mance improvements across various aspects, encompassing
+   Occ: IoU-f. (%)         13.1   20.4 23.1 25.0 26.5
+                                                                   final planning (with a decrease from 2.0% to 1.75% in av-
+   Planning: Col. Rate (%) 1.48   1.04 1.04 0.74 0.74
+                                                                   erage Collision Rate) and all intermediate outputs, includ-
+ing agent perception (indicated by an increase from 7.0%
+to 7.6% in mAP) and occupancy prediction (with improve-
+ments from 18.9% to 19.7% in IoU-far). These experimental
+results underscore the effectiveness of our UniV2X across a
+broader spectrum of datasets and V2V scenes.
+
+Table 11: Planning Evaluation Results on V2X-Sim (Li et al.
+2022a).
+
+                 L2 Error (m)↓       Col. Rate (%)↓
+ Method
+             0.8s 1.4s 2.0s Avg. 0.8s 1.4s 2.0s Avg.
+ No Fusion 0.98 1.79 2.65 1.81 2.0 2.25 1.75 2.0
+ UniV2X    0.97 1.77 2.66 1.80 1.75 2.0 1.5 1.75
+
+
+
+Table 12: Agent Perception Evaluation Results on V2X-
+Sim (Li et al. 2022a).
+
+           method       mAP (%)↑ AMOTA (%)↑
+           No Fusion      7.0           0.6
+           UniV2X         7.6           1.7
+
+
+
+Table 13: Occupancy Evaluation Results on V2X-Sim (Li
+et al. 2022a).
+
+            method      IoU-n (%)↑ IoU-f (%)↑
+            No Fusion      15.9         18.9
+            UniV2X         16.1         19.7
+
+
+
+              Qualitative Visualization
+In this section, we present visualization examples to demon-
+strate the efficacy of UniV2X in final planning. The visu-
+alization results showcase UniV2X’s capability to address
+diverse driving scenarios, encompassing left turns, straight-
+ahead navigation, and right turns, as depicted in Figure 8.
+                                         Figure 5: Visualization Example: Turn Left.
+
+
+
+
+                                      Figure 6: Visualization Example: Keep Forward.
+
+
+
+
+                                        Figure 7: Visualization Example: Turn Right.
+
+Figure 8: Planning Visualization of UniV2X on DAIR-V2X (Yu et al. 2022). UniV2X consistently demonstrates the ability to
+generate high-quality planning outputs for diverse driving scenarios, including left turns, straight keeping, and right turns.
+
