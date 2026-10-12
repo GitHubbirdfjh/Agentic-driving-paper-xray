@@ -1,0 +1,1440 @@
+1
+Enhance Sample Efficiency and Robustness of
+End-to-end Urban Autonomous Driving via
+Semantic Masked World Model
+Zeyu Gao , Yao Mu , Chen Chen , Jingliang Duan , Ping Luo , Member, IEEE, Yanfeng
+Lu , Member, IEEE, and Shengbo Eben Li , Senior Member, IEEE
+Abstract—End-to-end autonomous driving provides a feasible
+way to automatically maximize overall driving system perfor-
+mance by directly mapping the raw pixels from a front-facing
+camera to control signals. Recent advanced methods construct
+a latent world model to map the high dimensional observations
+into compact latent space. However, the latent states embedded
+by the world model proposed in previous works may contain
+a large amount of task-irrelevant information, resulting in low
+sampling efficiency and poor robustness to input perturbations.
+Meanwhile, the training data distribution is usually unbalanced,
+and the learned policy is challenging to cope with the corner
+cases during the driving process. To solve the above challenges,
+we present a SEMantic Masked recurrent world model (SEM2),
+which introduces a semantic filter to extract key driving-relevant
+features and make decisions via the filtered features, and is
+trained with a multi-source data sampler, which aggregates
+common data and multiple corner case data in a single batch, to
+balance the data distribution. Extensive experiments on CARLA
+show our method outperforms the state-of-the-art approaches in
+terms of sample efficiency and robustness to input permutations.
+Index Terms—End-to-end autonomous driving, Deep reinforce-
+ment learning, World model
+I. INTRODUCTION
+E
+ND-TO-END autonomous driving learns to map the raw
+sensory data directly to driving commands via deep
+neural networks. Compared to the traditional modularized-
+learning framework, which decomposes the driving task into
+lane marking detection [1], [2], path planning [3], decision
+making [4] and control [5], [6], the end-to-end method aims
+to immediately maximize overall driving system performance.
+This work is supported by National Key Research and Development Plan
+of China under Grant 2020AAA0105900, Tsinghua University Initiative Sci-
+entific Research Program, NSF China under Grants U20A20334, 52072213,
+91948303, Beijing NSF under Grant L211023. (Zeyu Gao and Yao Mu are
+co-first authors.) (Corresponding author: Shengbo Eben Li and Yanfeng Lu.)
+Zeyu Gao and Yanfeng Lu are with the State Key Laboratory of Multimodal
+Artificial Intelligence Systems, Institute of Automation, Chinese Academy
+of Science, Beijing 100190, China, and also with the School of Artificial
+Intelligence, University of Chinese Academy of Sciences, Beijing 100049,
+China. (e-mail: gaozeyu2023@ia.ac.cn, yanfeng.lv@ia.ac.cn)
+Yao Mu and Ping Luo are with the Department of Computer Sci-
+ence, The University of Hong Kong, Hong Kong 999077, China. (e-mail:
+muyao@connect.hku.hk)
+Chen Chen and Shengbo Eben Li are with the State Key Laboratory of
+Automotive Safety and Energy, School of Vehicle and Mobility, Tsinghua
+University, Beijing 100084, China. (e-mail: lishbo@tsinghua.edu.cn)
+Jingliang Duan is with the School of Mechanical Engineering, Univer-
+sity of Science and Technology Beijing, Beijing 100083, China. (e-mail:
+duanjl@ustb.edu.cn)
+The advantages of end-to-end autonomous driving are two
+folds. Firstly, the internal components self-optimize to max-
+imize the use of sample information toward the best system
+performance instead of optimizing human-selected intermedi-
+ate criteria, e.g., lane detection. Additionally, smaller networks
+are possible since the system learns to solve the problem with
+a minimal number of processing components. There are two
+mainstreams of the end-to-end method, imitation learning [7]–
+[10] and reinforcement learning [11]–[14]. Imitation learning
+learns the driving policy from large amounts of human driving
+data, and the policy performances are upper limited by drivers’
+capacities and scenario diversity. Contrarily, the reinforcement
+learning method enables the agent to learn the optimal policy
+by fully interacting with the environments and hence reduces
+the need for expert data, and is increasingly applied to end-
+to-end autonomous driving with extraordinary performances.
+However, current end-to-end methods have been subject to
+criticism due to two primary issues: 1) Learning driving policy
+directly from high-dimensional sensor input is challenging, as
+known as dimensional disasters. 2) The majority of existing
+approaches concentrate on straightforward driving tasks, such
+as lane-keeping, but exhibit inadequate performance in com-
+plex urban scenarios. The variety of urban scenes and street
+landscapes greatly increases the complexity of the samples,
+making it challenging to learn an efficient and robust end-to-
+end driving policy. Recent advanced end-to-end autonomous
+driving methods build latent world models to abstract high-
+dimensional observations into compact latent states, enabling
+the self-driving vehicle to predict forward and learn from low-
+dimensional states. Chen. et al. introduce an end-to-end self-
+driving framework with a stochastic sequential latent world
+model to reduce the sample complexity of reinforcement
+learning [14]. LVM [15] further introduces Dreamer [16], [17],
+a novel recurrent world model with a deterministic path and
+a stochastic path concurrently, into the autonomous driving
+framework to improve prediction accuracy and the stability
+of the driving policy learning process. However, these world
+models still contain significant amounts of driving-irrelevant
+information, such as clouds, rain, and surrounding buildings,
+leading to low sampling efficiency and limiting robustness to
+input perturbations. Additionally, the data distribution for the
+training world model is usually unbalanced, i.e., straight-line
+driving data appears more while turning, and near-collision
+data is comparatively less, making the agent face difficulties in
+handling corner cases and may even cause modal collapse. Can
+arXiv:2210.04017v4  [cs.LG]  18 May 2024
+
+2
+we train a world model that extracts driving-relevant features
+from a balanced sample distribution, and construct an efficient
+and robust end-to-end autonomous driving framework, antic-
+ipating its outstanding performances in both common scenes
+and corner cases?
+To overcome the aforementioned challenges, this paper
+proposes a SEMantic Masked recurrent world model (SEM2)
+to enhance the sample efficiency and robustness of the au-
+tonomous driving framework. The SEM2 allows the agent
+to concentrate solely on task-related information via a latent
+feature filter learned by reconstructing the semantic mask. The
+semantic mask provides driving-relevant information consist-
+ing of the road map, the target path, and surrounding objects
+in a bird-view form, formulating a semantic masked world
+model to obtain the transition dynamics of the driving-relevant
+latent state. Then, the agent learns the optimal policy by taking
+the filtered features as input, and the learned optimal policy
+can generate highly driving-tasks-correlated actions, hence it
+would be more robust to input permutations compared with
+previous works. To tackle the uneven data distribution issue,
+we collect the common data and corner case data separately
+and construct a multi-source data sampler to aggregate differ-
+ent scenes in a mini-batch for the training of the semantic
+masked world model. Key contributions of our work are
+summarized as follows:
+• We propose a SEMantic Masked recurrent world model
+(SEM2) that learns the transition dynamics of driving-
+relevant states through a semantic filter to reduce the
+interference of irrelevant information in sensor inputs,
+thus improving sampling efficiency and robustness of
+learned driving policy.
+• A multi-source data sampler is proposed to balance
+data distribution and prevent modal collapse in corner
+cases, which contributes diverse scene data in training the
+semantic masked world model by using both common
+driving situations and multiple corner cases in urban
+scenes.
+• Extensive experiments conducted on the CARLA bench-
+mark show our method surpasses the previous works of
+end-to-end autonomous driving with deep reinforcement
+learning in terms of sample efficiency and robustness to
+input permutation.
+II. RELATED WORKS
+A. End-to-end Autonomous Driving
+Prior research on end-to-end autonomous driving can be
+categorized into two primary branches: imitation learning
+(IL) and reinforcement learning (RL). IL learns a driving
+policy by mimicking the behavior of expert drivers [7]–
+[10]. Agents can usually learn good driving strategies by
+imitating human driving behavior. However, this is similar
+to the modularized framework in essence and does not break
+through the limitations of human experience. RL collects data
+through the interaction between the agent and environment and
+learns from data. In recent years, RL has developed rapidly
+and gets a series of achievements [18]–[23]. In the previous
+work, the model-free method was used to complete the end-
+to-end autonomous driving task (e.g. DQN on Gazebo [24],
+DDPG on TORCS [11], SAC on CARLA [12], DQN on
+CARLA [25]). For the sake of sample efficiency, most re-
+cent studies use model-based methods (e.g. UA-MBRL [13],
+LVM [15], GCBF [26]). In addition, interpretability is also the
+focus of the work. Some researches are devoted to improving
+the interpretability of agents (e.g. visual explanations [27], se-
+mantic birdeye mask [14], interpretable learning system [28]).
+Despite previous efforts, there remains scope for improvement
+in terms of optimizing the utilization of high-dimensional
+semantic information and balancing data distribution.
+B. Latent World Model
+In dealing with high-dimensional inputs, the latent world
+model provides a flexible way to represent the key information
+of observations. The world model [29] is learned through two
+stages: representation learning and latent dynamics learning.
+Transforming the high-dimensional inputs into compact state
+representations, this model shows its superiority in doing
+numerous predictions in a single batch, without the need
+for image generation. PlaNet [30] coordinated the two stages
+and proposed recurrent stochastic state model (RSSM), which
+enables fast online planning in latent space with both deter-
+ministic and stochastic components. PlaNet-Bayes [31] repre-
+sented an advancement of the PlaNet model by incorporating
+Bayesian inference to account for the presence of two forms
+of uncertainty in the latent models and actions. Dreamer [16]
+can use the RSSM model to imagine the long-term future.
+DreamerV2’s [17] latent variable uses vectors of multiple
+classification variables and optimizes them using straight-
+through gradients. Stochastic latent SAC (SLAC) [32] offers
+a principled approach to merge stochastic sequential models
+and RL into a unified method. Bridging reality and dream
+(BIRD) [33] aims to improve policy generalization by maxi-
+mizing mutual information between real and imaginary trajec-
+tories. The advancement of the latent model presents novel
+opportunities for the realization of end-to-end autonomous
+driving systems.
+III. PRELIMINARY
+A. Reinforcement Learning for Autonomous Driving
+In the context of driving environments, a reinforcement
+learning agent strives to learn an optimal policy that maximizes
+cumulative rewards by exploring Markov decision processes
+(MDP). In general, the time step is denoted by t, and we
+introduce the state st ∈S, action at ∈A, reward function
+r(st, at), policy πθ(s), and transition probability p(st+1|st, at)
+to characterize the interaction process with the environment
+in reinforcement learning. The reward function is usually
+composed of driving efficiency, driving compliance, safety,
+and energy efficiency. The goal of the agent is to find policy
+parameters θ that maximize the long-horizon summed rewards
+represented by a value function vφ(st) .= E
+t+H
+P
+i=t
+γi−tri
+
+parameterized with φ. In advanced RL-based autonomous
+driving framework, the agent constructs a world model pϕ,
+
+3
+Fig. 1.
+Structure of the recurrent state space model (RSSM). The latent
+state si in RSSM is composed of a deterministic variable hi and a stochastic
+variable zi. The generative process is represented by solid lines, while the
+inference model is represented by dashed lines. The latent dynamic contains
+a deterministic path and a stochastic path, which learns historical information
+efficiently while accurately modeling the stochastic characteristic of the
+dynamics.
+with ϕ as its parameterization, to represent the environmental
+dynamics p and the reward function r, and then performs
+planning or policy optimization based on the imagination with
+the learned world model to achieve efficient and safe driving
+performance.
+B. World Model
+In this work, we consider sequences {ot, at, rt}T
+t=1 where
+t denotes the discrete time step, ot is the sensor observation,
+at is the continuous action vector, and rt is the scalar re-
+ward. A typical recurrent latent state-space model (RSSM)
+is shown in Fig. 1 and resembles the structure of a partially
+observable Markov decision process (POMDP). In RSSM, the
+latent state st is partitioned into a deterministic component
+ht and a stochastic component zt, and predicts the future
+states s = {ht, zt}T
+t=1 with both the deterministic path and
+stochastic path. The parameters of the RSSM are optimized by
+maximizing the variational bound using Jensen’s inequality:
+ln p (o1:T | a1:T ) = ln
+Z Y
+t
+p (st | st−1, at−1) p (ot | st) ds1:T
+≥
+T
+X
+t=1
+
+Eq(st|o≤t,a<t) ln p (ot | st) −
+E
+q(st−1|o≤t−1,a<t−1)
+
+KL [q (st | o≤t, a<t) ∥p (st | st−1, at−1)]
+
+.
+(1)
+Given the learned world model, the efficient utilization of
+neural network latent dynamics enables the acquisition of
+long-term behaviors in a compact latent space. To this end,
+multi-step returns gradients are propagated through the world
+model predictions of actions, states, rewards, and values using
+reparameterization. We use the notation i to represent the time
+index for imagined quantities. Imagined trajectories start at
+initial state st and follow predictions made by the world model
+si ∼p(si|si−1, ai−1), reward model ri ∼p(ri|si), and a
+policy ai ∼π(ai|si). The objective is to maximize expected
+imagined rewards Eπ
+ ∞
+P
+i=t
+γi−tri
+
+with respect to the policy.
+IV. SEMANTIC MASKED WORLD MODEL
+The world model condenses the agent’s experience into
+a predictive model, making it possible to predict multiple
+trajectories simultaneously over a long period without having
+to generate images. To enhance the sample efficiency and
+robustness, the world model learns the transition dynamics of
+the latent states that only pay attention to the driving-relevant
+features via semantic filter, thus reducing the interference of
+driving-irrelevant information of sensor inputs in urban scenes.
+A. Model Structure
+As shown in Fig. 2, SEM2 consists of i) a recurrent model to
+extract useful information from historical information, which
+is implanted as a typical recurrent neural network gate recur-
+rent unit (GRU) [34], ii) a representation model to encode
+the observation from sensor input into the latent space, iii) a
+transition predictor to predict the state transition, iv) a semantic
+filter to extract driving-relevant features, v) a mask predictor
+to reconstruct the semantic birdeye mask, vi) an observation
+predictor to reconstruct the observation and vii) a reward
+predictor to predict the reward given by the environment. The
+detailed structure of model components can be represented as:
+Recurrent model:
+ht = fϕ (ht−1, zt−1, at−1)
+Representation model:
+zt ∼qϕ (zt | ht, ot)
+Transition predictor:
+ˆzt ∼pϕ (ˆzt | ht)
+Semantic filter:
+sm
+t ∼Sϕ(sm
+t |ht, zt)
+Mask predictor:
+ˆmt ∼pϕ( ˆmt|sm
+t )
+Observation predictor:
+ˆot ∼pϕ (ˆot | ht, zt)
+Reward predictor:
+ˆrt ∼pϕ (ˆrt | sm
+t ) .
+(2)
+All components are implemented as neural networks, with
+ϕ denoting their amalgamated parameter vectors. The repre-
+sentation model is realized by convolutional neural networks
+(CNNs) [35] followed by a multi-layer perceptron (MLP) that
+takes the image embedding and deterministic recurrent state
+as input. The observation and mask predictor are transposed
+CNNs. The transition and reward predictor are MLPs. The
+transition predictor only predicts the next latent state based
+on the historical information, current state, and action, without
+using the next observation. In this way, we can predict future
+behavior without the need to observe or generate observations.
+B. Semantic Filter and Mask
+The autonomous driving system takes observations from
+the front camera and lidar as inputs and encodes the high-
+dimensional inputs into the latent space. Since there is often a
+large amount of driving irrelevant information in the camera
+images, such as weather, sky, and tall buildings, the raw
+feature encoding is susceptible to interference from irrelevant
+information, which reduces the robustness of the learned
+policy. For example, when the vehicle encounters rainstorm
+conditions, the raw feature encoding may change and directly
+impact the action of the agent.
+An effective strategy for solving the aforementioned prob-
+lem is to establish a strong correlation between decisions and
+high-dimensional semantic masks. However, merely recon-
+structing the high-dimensional semantic mask is not sufficient
+
+4
+Fig. 2.
+The overall structure of SEM2. SEM2 takes the observation ot from the camera and lidar as input and then encodes it into the latent state which
+contains deterministic variable ht and stochastic variable zt. The original features are used to reconstruct the observation. The latent semantic filter extracts
+the driving-relevant features from the original features and reconstructs the semantic mask ˆmt and predicts the reward ˆrt.
+to achieve this goal. It is necessary to include a component
+that separates the reconstruction process of observation and
+semantic mask. This separation enables the efficient use of
+the semantic mask and extracts task-relevant features, thereby
+improving the robustness and performance.
+Fig. 3.
+Working process of semantic mask filter.
+As shown in the upper right of Fig. 2, we introduce semantic
+filter Sϕ(·|·) which is the key component to extract the driving-
+relevant features. The semantic filter, which is implanted as
+an MLP structure, takes the latent features inferred by the
+recurrent neural network as input and extracts the driving-
+relevant features as output to generate the semantic mask and
+all driving-relevant variables, such as reward and action. To
+ensure that the driving-relevant features are consistent with the
+original feature form, we use the fully connected (FC) head
+and the categorical head to separately output deterministic and
+stochastic states. The working process of the semantic mask
+filter is shown in Fig 3. The semantic mask, as shown in the
+lower right of Fig. 2, contains comprehensive driving-relevant
+information in a bird-view that can be understood by humans,
+which includes the maps that represent road features, routing
+that represents the road a vehicle aims for, state of surrounding
+vehicles, and the ego state that represents the state of the ego
+vehicle.
+C. Loss Function
+The constituent elements of SEM2 are optimized jointly
+to maximize the variational lower bound, as suggested in the
+work of Hafner et al. [17]. The optimization aims to train the
+distributions generated by the transition predictor, the observa-
+tion predictor, the mask predictor, and the reward predictor by
+maximizing the log-likelihood of their corresponding targets.
+The mask predictor reconstructed the semantic bird-view mask
+via the filtered features sm
+t . Thus the semantic filter S is
+optimized with the part of mask log loss to minimize the error
+between the reconstructed mask and ground truth obtained
+directly from the simulator. The loss function of the SEM2
+can be derived as:
+ln p (o1:T , m1:T , r1:T ) ≥L(o1:T , m1:T , r1:T ; ϕ) .=
+E
+h1:T , z1:T ∼qϕ(h1:T , z1:T |a1:T , o1:T )
+sm
+1:T ∼Sϕ(sm
+1:T |h1:T , z1:T )
+
+
+T
+X
+t=1
+−ln pϕ (ot|ht, zt)
+|
+{z
+}
+observation loss
+−ln pϕ (mt|sm
+t )
+|
+{z
+}
+mask loss
+−ln pϕ (rt|sm
+t )
+|
+{z
+}
+reward loss
++KL
+
+qϕ (zt|ht, ot)
+pϕ (zt|ht)
+
+|
+{z
+}
+KL loss
+
+
+(3)
+
+5
+The architecture of SEM2 can be interpreted as a sequential
+variational autoencoder (VAE), where the representation model
+acts as an approximate posterior and the transition predictor
+acts as the temporal prior. The Kullback-Leibler (KL) loss
+[36] serves a dual purpose: it guides the prior towards the
+representations, and it regulates the representations towards the
+prior. The driving-relevant features sm
+t = {hm
+t , zm
+t } extracted
+by latent semantic filters are used as the final representation,
+which aggregates historical information and current observa-
+tions while serving as inputs to the policy network and value
+network.
+D. Multi-source Sampler
+During the data collection phase, self-driving vehicles pri-
+marily accumulate data while navigating straight roads with
+low traffic density. However, data collected in scenarios involv-
+ing curves and densely populated traffic environments is lim-
+ited. This leads to suboptimal performance in reconstructing
+the mask by the world model and the policy tends to perform
+poorly in these corner cases.
+To address this gap, we propose a multi-source training
+method. This method utilizes a multi-source sampler which is
+illustrated in Fig. 4 to mix batches. The multi-source sampler
+separately collects the abnormal ending episodes in the process
+of interaction with the environment as the boundary condition
+data set. We divide the replay buffer into three categories:
+common replay buffer, outlane replay buffer, and collision
+replay buffer. Each time the system is trained, the corner
+case data set is used by the multi-source sampler to train the
+world model. The agent with multi-source training can better
+cope with the corner case, obtain higher average returns and
+improve driving performance.
+An additional challenge focuses on how to balance the
+distribution of both common cases and corner cases. To
+address this challenge, we introduce an adaptive method to
+adjust the data distribution. We record checkpoints at every
+evaluation step (20,000) of the agent interacting with the
+environment to evaluate the current driving performance of
+the agent with episodes (30) and record the success rate,
+collision rate and outlane rate. In the initial stages of training,
+the agent necessitates a higher proportion of common data to
+learn the model and policy. As the training regimen progresses,
+the agent’s success rate incrementally ascends, demanding an
+augmented allocation of corner data to effectively learn to
+address these corner scenarios. The ratio of collision data to
+outlane data within the corner data corresponds equivalently
+to the ratio of collision rate to outlane rate. The proportion of
+corner data should not be too large to prevent overfitting and an
+overly conservative policy. We limit the proportion of corner
+data by a hyperparameter called max corner data probability
+Pmaxcor. Alg. 1 describes in detail the process of adaptive
+adjustment of data distribution. By doing so, the distribution
+of training data is balanced, which enhances the adaptability
+of the world model and the policy in handling corner cases.
+In the training process of SEM2, the batches of B = 16
+sequences are sampled from the adaptive data distribution,
+each having a fixed length of L = 16.
+Fig. 4. The structure of the multi-source sampler for the training of SEM2. In
+addition to the common replay buffer, there are two corner case replay buffers
+that save the data in outlane cases and collision cases independently. In every
+iteration of the training process, we sample mini-batch from the three replay
+buffers, in turn, to contribute diverse data to support the SEM2 updating. The
+data distribution will be adjust after the evaluation of SEM2.
+Algorithm 1 Adaptive adjustment of data distribution
+1: Initialize common data sampling probability Pcom = 1,
+collision data sampling probability Pcol = 0, outlane data
+sampling probability Pout = 0, and max corner data
+probability Pcormax.
+2: while not converged do
+3:
+use the multi-source data sampler to train SEM2 and
+collect multi-source data.
+4:
+if time step t is divisible by evaluation step teval then
+5:
+run 30 episodes and record success rate rsuc, colli-
+sion rate rcol, outlane rate rout.
+6:
+update
+multi-source
+data
+sampler’s
+parameters
+Pcor = rsuc × Pcormax, Pcom = 1 −Pcor, Pcol =
+rcol
+rcol+rout Pcor, Pout =
+rout
+rcol+rout Pcor.
+7:
+end if
+8: end while
+V. BEHAVIOR LEARNING
+A. Latent imagination
+We aim to learn smooth and safe driving policy through
+long-term imaginary trajectories unrolled by the learned world
+model SEM2 with high sample efficiency. For this, multi-
+step returns gradients are propagated through the world model
+predictions of actions, states, rewards, and values using repa-
+rameterization with the help of SEM2. As shown in Fig.
+5, we learn long-term behavior with SEM2 by the imagery
+process, which predicts the latent states of the next I steps
+from an initial state. The initial state of the process is obtained
+from the input images, and the subsequent hidden variables
+ˆh, ˆz, driving-relevant features ˆsm, actions ˆa and rewards ˆr are
+obtained from the world model predictions.
+B. Actor-Critic framework
+The optimal policy is learned within the context of an actor-
+critic framework utilizing the SEM2 model, which is com-
+prised of two components: an actor responsible for selecting
+
+6
+Fig. 5.
+The semantic masked world model is utilized to acquire knowledge
+of the policy from sequences imagined in the condensed latent space.
+These sequences commence from posterior states computed during the model
+training and advance by generating actions sampled from the actor that
+possesses filtered driving-relevant features. The critic network estimates the
+expected rewards for each state by applying temporal difference learning to
+the imagined rewards. The actor is trained to maximize the expected rewards
+via the straight-through gradients of the learned world model.
+actions that maximize the anticipated planning reward, and a
+critic that predicts future rewards.
+We use a stochastic actor that selects actions and a deter-
+ministic critic to learn long-term behaviors in the imagination
+process. The actor learns to generate actions according to the
+filtered latent state sm to maximize the state value predicted
+by the critic, which learns to estimate the actor’s cumulative
+rewards. The actor πθ and critic vφ are represented respec-
+tively as:
+Actor:
+ˆat ∼πθ(ˆat|sm
+t ),
+Critic:
+vφ(ˆsm
+t )
+.=E(
+t+I
+X
+i=t
+γi−tˆri).
+(4)
+Since the features fed directly to the actor will directly
+determine the quality of the generated action, in SEM2 we
+utilize the driving-relevant feature sm
+t = {hm
+t , zm
+t } generated
+by the latent semantic filter as the input of the actor, which
+is highly correlated with the semantic mask and greatly
+reduces the interference of irrelevant information. Through this
+sequential process, the agent learns to update the parameters
+of actor and critic networks by the gradient descent method
+without changing the parameter of the SEM2 model. As
+the world model is held constant during behavior learning,
+gradients concerning the actor and critic do not influence its
+representations, allowing us to simulate a large number of
+latent trajectories efficiently on a single GPU.
+The objective of the critic is to estimate the state value
+function, which is defined as the expected discounted sum of
+future rewards that the agent will receive. To this end, we use
+the TD-learning method, where the critic is trained to predict
+a value target, which consists of the intermediate rewards and
+the output of the critic in the later latent states. To take full
+advantage of the world model’s ability to make multi-step
+predictions and to regularize the variance of the estimates,
+we use the TD-λ [37] objective to learn the value function,
+which is recursively defined as follows:
+L(φ) .= Epϕ,πθ
+"I−1
+X
+t=1
+1
+2
+ vφ (ˆsm
+t ) −
+ V λ
+t
+2
+#
+,
+V λ
+t
+.= ˆrt + ˆγt
+(
+(1 −λ)vφ
+ ˆsm
+t+1
+
++ λV λ
+t+1
+if t < I,
+vφ (ˆsm
+I )
+if t = I.
+(5)
+The TD-λ target is computed as a weighted average of n-
+step returns for different horizons. In practice, we set λ =
+0.95. Notably, the gradient of the value target V λ
+t
+is stopped
+to restrict the critic loss L(φ) only updates the critic.
+The actor aims to maximize the TD-λ return predicted
+by the critic while regularizing the entropy of the actor to
+encourage exploration:
+L(θ) .= Epϕ,πθ
+
+
+I−1
+X
+t=1
+( V λ
+t
+|{z}
+dynamics
+−ηH [at | ˆsm
+t ]
+|
+{z
+}
+entropy regularizer
+)
+
+.
+(6)
+The actor and critic are implemented as MLPs with
+ELU [38]. They are trained using the same imagined trajecto-
+ries but optimize separate loss functions.
+With this, the exposition of the model learning and behavior
+learning processes concludes. We briefly introduce the SEM2
+algorithm in Alg. 2.
+VI. EXPERIMENTS
+A. Simulation Environment Setup and Details
+To further validate our method’s outperformance, we use
+CARLA [39], a simulator of autonomous driving research,
+to conduct extensive experiments. CARLA has rich weather
+conditions and maps that can support us in testing our agents
+in different weather to verify environmental adaptability. All
+experiments were conducted on the NVIDIA RTX4090 and
+Intel i7-13700KF.
+The map we use is town 3 which is a complex urban
+environment shown in Fig. 6. The map is very close to the
+real city road environment, with a variety of scenarios such as
+tunnels, intersections, roundabouts, curves, turnaround bends,
+etc. The task is to drive along the complex urban environment
+to get rewards as high as possible in 1000 time steps without
+going out of bounds and colliding with 100 surroundings. The
+CARLA operates synchronously at 10Hz meaning a time step
+of 0.1s. The action is composed of throttle and steering.
+In terms of sensors, we use lidar and front view camera
+to obtain point clouds and camera images as inputs. Lidar is
+64 lines with a scanning range of 50m and is positioned at
+a height of 1.8m. The camera has 110° field of view (FOV)
+and is positioned at a height of 1.7m. The size of the camera,
+lidar, and mask is set to ot, mt ∈[0, 255]128×128×3.
+We train the world model with batch size B = 16 and
+batch length L = 16. For training the policy network, the
+imagined horizon I is set to 8. Stochastic state zt ∈R32×32
+and deterministic state ht ∈R2048. Model learning rate is set
+
+7
+Algorithm 2 SEM2
+1: Initialize multi-source dataset {Dcom, Dcol, Dout} by ran-
+dom policy.
+2: Initialize networks parameters ϕ, φ, θ.
+3: while not converged do
+4:
+for update step u = 1 to U do
+// Learning the semantic masked world model
+5:
+Sample B data sequences by multi-source data sam-
+pler {(at−1, ot, mt, rt)}k+I
+t=k ∼{Dcom, Dcol, Dout}.
+6:
+Compute states ht = fϕ (ht−1, zt−1, at−1) and zt ∼
+pϕ (ˆzt | ht).
+7:
+Reconstruct observations ˆot ∼pϕ (ˆot | ht, zt).
+8:
+Compute driving-relevant features by semantic filter
+sm
+t ∼Sϕ(sm
+t |ht, zt).
+9:
+Reconstruct semantic mask ˆmt ∼pϕ( ˆmt|sm
+t ), ego
+vehicle state vector ˆet ∼pϕ (ˆet | sm
+t ) and reward
+ˆrt ∼pϕ (ˆrt | sm
+t ) to train semantic filter.
+// Behavior learning
+10:
+Imagine {ˆsi = {ht, zt}}t+I
+i=t from each state st,
+extract {ˆsm
+i
+∼
+Sϕ(sm
+i |si)}t+I
+i=t , and predict tra-
+jectories of action {ˆai ∼πθ(ˆai|sm
+i )}t+I
+i=t ,
+value
+{vφ(ˆsm
+i )}t+I
+i=t , reward {ˆri ∼pϕ (ˆri | sm
+i )}t+I
+i=t .
+11:
+Update world model parameters ϕ via Eq. 3. Update
+critic parameters φ via Eq. 5 and actor parameters θ
+via Eq. 6.
+12:
+end for
+// Multi-source data collection
+13:
+for time step t = 1 to T do
+14:
+Compute state st.
+15:
+Extract sm
+t
+from st.
+16:
+Take action at ∼πθ(ˆat|sm
+t ).
+17:
+Collect rt, ot+1, mt+1 from the environment.
+18:
+end for
+19:
+if Collision then
+20:
+Add transition to collision dataset
+Dcol ←Dcol ∪{(ot, mt, at, rt)}T
+t=T −4L.
+21:
+else if Outlane then
+22:
+Add transition to outlane dataset
+Dout ←Dout ∪{(ot, mt, at, rt)}T
+t=T −4L.
+23:
+end if
+24:
+Add transition to common dataset
+Dcom ←Dcom ∪{(ot, mt, at, rt)}T
+t=1.
+25: end while
+to 3 × 10−5 and actor-critic learning rate is set to 1 × 10−5.
+The optimizer we use is AdamW [40]. The discount factor γ
+is 0.99. The TD-λ factor λ is 0.95. The entropy factor η is
+1 × 10−4. SEM2 and baseline DreamerV2 use the exact same
+parameters to ensure fairness.
+B. Reward Function
+Our reward function is similar to Chen et al. [14], which
+can be represented as:
+r = 200 rcol + vlon + 10 rfast + rout
+−5α2 + 0.2 rlat + rcte + 10 rsafe −0.1.
+(7)
+Fig. 6.
+Bird-view of town 3 in CARLA.
+The term rcol is set to -1 if a collision occurs. Collision, as
+the most avoidable condition of automatic driving, is assigned
+a great penalty. Ego vehicles can even take outlane behaviors
+to avoid collisions when necessary. The term vlon is the
+longitudinal speed ego vehicle. The term rfast is set to -
+1 when the speed of the ego vehicle exceeds desired speed
+(8m/s). The term rout is set to -1 when the cross-track error
+(CTE) exceeds the threshold (2m). The punishment should
+not be excessive, or else the ego vehicle tends to fall into
+the local optimal solution waiting for the exhaustion of the
+episode. The α is the steering angle in rad. The term rlat is
+related to lateral acceleration computed as −|α|v2
+lon. The term
+rcte is minus CTE to keep the ego vehicle in the center of the
+lane. The term rsafe is set to -1 when the distance between
+the ego vehicle center and front vehicle center is less than the
+threshold (8m) and the brake of ego vehicle is less than 0.7.
+In the last term, we introduce a constant punishment to make
+the vehicle stay in motion.
+C. Network Architecture
+The parametrized networks in SEM2 include the RSSM,
+the semantic filter S(sm
+t |ht, zt), the mask predictor p( ˆmt|sm
+t ),
+the observation predictor p (ˆot | ht, zt), the reward predictor
+p (ˆrt | sm
+t ), the value network v(sm
+t ), and the policy network
+π(ˆat|sm
+t ).
+The encoder in RSSM consists of 5 convolutional layers
+((32, 4, 2), (64, 4, 2), (128, 4, 2), (256, 4, 2), (256, 4, 2)) each
+characterized by a tuple means (filters, kernel size, strides).
+The RSSM uses a GRU with 200 units as a deterministic
+path and all other functions are implemented as a two-layer
+MLP of size 1000 with ELU activations. The semantic filter
+consists of a two-layer MLP of size 1024 with ELU activations
+and a decoupling header containing an FC head which is
+implemented as an FC layer and a categorical head which
+is implemented as an FC layer and a one-hot categorical
+distribution. The mask and observation predictor consists of
+an FC and 5 transposed convolutional layers ((1024, 5, 2),
+(512, 5, 2), (128, 5, 2), (64, 6, 2), (32, 6, 2)). The reward
+predictor, value network, and policy network all consist of a
+five-layer MLP of size 400 with ELU activations.
+
+8
+Fig. 7.
+Multi-source data collection. The data from abnormal end episodes
+can be categorized into common data and corner cases. The corner cases
+can be further divided into collision data and outlane data, which are highly
+relevant to collision and outlane scenarios. The multi-source data sampler
+divides the data into different replay buffers based on their types.
+D. Multi-source Data Collection
+The corner case is defined as an abnormal end case during
+the data collection process. When an abnormal end occurs,
+the CTE of the ego vehicle is greater than 2m and thus out
+of bounds or there is a collision with a surrounding object.
+These two cases shown in Fig. 7 correspond to outlane and
+collision. When an abnormal end occurs, the multi-source data
+sampler puts the last 4×L steps of the episode into the replay
+buffer according to the type of end. We evaluate the agent
+every 20,000 steps to adaptively adjust the data distribution.
+The max corner data probability Pmaxcor is set to 0.5.
+VII. EXPERIMENTAL RESULTS
+To properly evaluate SEM2 as a reinforcement learning
+algorithm and an end-to-end autonomous driving system, we
+considered multiple factors. From a reinforcement learning
+perspective, we looked at the average return as well as
+the evaluating curves to assess the sample efficiency of the
+algorithm. From the perspective of autonomous driving, we
+tested the driving performance including success rate, collision
+rate, outlane rate, incomplete rate and average driving distance
+of each algorithm in both random and selected road sections.
+In addition, we tested the robustness of the algorithm in
+different weather with salt-pepper noise to assess the effec-
+tiveness of the semantic filter. We also made an ablation
+study to demonstrate the significance of the semantic filter in
+performance improvement. And then an ablation experiment
+is conducted to validate the effectiveness of adaptive multi-
+source data distribution. Finally, we provide an overview of
+the various driving scenarios encountered by the autonomous
+driving system and describe the behavior of the system.
+A. Baseline Algorithms and Variants of Proposed Method
+We compare the RL algorithms baselines and variants of
+our proposed method:
+1) SAC [22]: SAC, a model-free maximum entropy deep
+RL algorithm that learns a stochastic policy and has
+achieved leading results in many benchmarks. We
+choose SAC as the model-free baseline to highlight the
+sample efficiency of the model-based algorithm.
+Fig. 8.
+Evaluating curves. The evaluating curves record the average returns
+for taking 30 episodes at checkpoints which are recorded every 20,000 steps.
+In the evaluation, In each new episode, vehicles are randomly placed on the
+map. All these average returns are calculated with 3 trials. The shaded area
+indicates standard deviation.
+2) DreamerV2 [17]: DreamerV2 is a model-based RL algo-
+rithm that acquires behaviors through imagined trajecto-
+ries in the efficient latent space of an advanced RSSM.
+DreamerV2 as a model-based baseline demonstrates the
+high performance of SEM2. To ensure fairness, the
+DreamerV2 in our setting also has a mask predictor
+which facilitates the mask.
+3) SEM2 without multi-source: To verify the effectiveness
+of the multi-source data sampler, we set up a variant of
+SEM2, which is without multi-source data training. This
+is an ablation version of SEM2.
+4) SEM2 (Proposed): SEMantic Masked recurrent world
+model which we proposed, the full version which uses
+multi-source data training.
+B. Evaluating Curves
+All experiments’ returns are average of 3 trials. Each trial is
+executed for 300,000 environmental steps. Evaluating curves
+in Fig. 8 show the performances of SAC, DreamerV2, SEM2
+without multi-source training, and SEM2 training in town 3
+and clear noon. Our results show that SEM2 has higher sample
+efficiency and achieves a higher average return than baselines.
+The curves also clearly demonstrate that multi-source training
+is beneficial in improving the average return.
+C. Driving performance
+SEM2 is an end-to-end autonomous driving system. In
+addition to the average return, which serves as an evaluation
+metric, success rate, collision rate, outlane rate, incomplete
+rate and average driving distance that effectively reflect driving
+performance are also employed as evaluation criteria for the
+algorithms. Consequently, we conducted two sets of tests. In
+these tests, we used the checkpoints with the highest average
+returns and tested 100 episodes to record metrics.
+1) Random road sections: Following a setting similar to
+the training phase, the ego vehicle is initiated at random
+
+9
+TABLE I
+DRIVING PERFORMANCE IN RANDOM ROAD SECTIONS
+Algorithm
+Success rate
+Collision rate
+Outlane rate
+Incomplete rate
+Average driving distance
+SAC
+18.0 ± 1.0%
+8.0 ± 1.0%
+33.0 ± 3.0%
+41.0 ± 3.0%
+55.5 ± 4.2m
+DreamerV2
+51.0 ± 2.9%
+29.0 ± 5.9%
+19.3 ± 3.9%
+0.7 ± 0.5%
+209.1 ± 10.5m
+SEM2 w/o multi-source
+64.7 ± 2.9%
+26.3 ± 1.3%
+8.0 ± 2.9%
+1.0 ± 1.0%
+234.4 ± 19.0m
+SEM2
+79.7 ± 2.6%
+14.3 ± 3.3%
+5.3 ± 0.5%
+0.3 ± 0.5%
+243.5 ± 3.2m
+TABLE II
+DRIVING PERFORMANCE IN THE SELECTED INTERSECTION
+Algorithm
+Success rate
+Collision rate
+Outlane rate
+Incomplete rate
+Average driving distance
+DreamerV2
+71.0 ± 5.7%
+29.0 ± 5.7%
+0.0 ± 0.0%
+0.0 ± 0.0%
+55.5 ± 2.7m
+SEM2 w/o multi-source
+90.3 ± 4.1%
+9.7 ± 4.1%
+0.0 ± 0.0%
+0.0 ± 0.0%
+67.8 ± 1.6m
+SEM2
+96.7 ± 1.7%
+3.3 ± 1.7%
+0.0 ± 0.0%
+0.0 ± 0.0%
+70.8 ± 0.3m
+positions within town 3 and travels along random roads
+for 500 time steps. If the vehicle gets a return greater
+than 300 at the end of 500 steps it is recorded as
+successful, otherwise it is recorded as incomplete.
+2) Selected road sections: In this setting, the ego vehicle is
+initiated at selected positions and travels along selected
+roads to reach the destination. The SAC is not tested in
+this setting due to its poor performance only being able
+to travel along a straight line. We tested the performance
+of the agents to pass through the selected intersection
+which is shown in Fig. 9.
+Fig. 9.
+Bird-view of the selected intersection.
+Both sets of tests confirmed the outstanding driving per-
+formance of SEM2 and demonstrated the contributions of the
+semantic mask filter and the multi-source data sampler.
+D. Effect of Semantic Filter
+Irrelevant information in the image input can impact au-
+tonomous driving performance. The semantic filter in SEM2
+extracts driving-relevant features that contain less irrelevant in-
+formation, allowing SEM2 to perform well in various weather
+conditions and improving its robustness of input perturbations.
+To verify this, we evaluated our agents in two new weather
+conditions they had not encountered before: wet sunset and
+hard rain noon. Moreover, as the impact of weather is relatively
+less challenging for an algorithm that exhibits robustness, we
+incorporated salt-pepper noise into the camera input (shown
+in Fig. 10). This noise is designed to make the camera input
+resemble images captured under extreme rainstorm conditions.
+The probability of salt-pepper noise is 0.1. Tab. III shows
+that SEM2 outperforms the baselines in all these new weather
+conditions with the salt-pepper noise. The numbers in paren-
+theses in table indicate the change percentage of the average
+returns in the robustness test compared to the training set. The
+results of SEM2 and SEM2 without multi-source training also
+indicate that the improvement in robustness is mainly due to
+the use of the semantic mask, while the multi-source training
+method has negligible influence on robustness.
+Fig. 10 also presents states’ heatmaps illustrating the ab-
+solute difference between noon and bad weather. The red
+heatmap represents states under noon conditions. The blue
+heatmap represents the absolute difference between states
+under varying weather conditions and noon. It is evident
+that SEM2’s driving-relevant states are less affected by input
+perturbations, whereas DreamerV2’s states undergo significant
+changes, indicating the presence of a considerable amount of
+irrelevant information associated with visual inputs.
+To confirm that using driving-relevant features which not
+contain the weather information still enables the agent to
+drive robustly when the environment changes impact driv-
+ing, we conducted an additional experiment. We evaluated
+various algorithms under hard rain conditions with degraded
+braking efficiency. Tab. IV revealed that both SEM2 and
+DreamerV2 demonstrate robustness against the reduction in
+brake efficiency during rainy conditions. However, in the case
+of excessive attenuation of brake efficiency, the ego vehicle
+cannot stop in time when the vehicle in front brakes suddenly,
+resulting in performance degradation. SEM2 without the multi-
+source algorithm exhibits a greater performance decline due to
+poorer control of following distance when braking efficiency
+decreases, but it still outperforms DreamerV2. The superior
+performance of SEM2 w/o multi-source over DreamerV2 can
+
+10
+(a) Clear noon
+(b) Hard rain noon
+(c) Wet sunset
+Fig. 10.
+We conducted a series of tests under varying weather conditions, incorporating salt-pepper noise as input permutation. The first column is screenshots
+of the CARLA simulation, while the second column displays the camera input. The third and fourth columns in first raw depict heatmaps of the state {ht, zt}
+within the features of DreamerV2 and the state {hm
+t , zm
+t } within the driving-relevant features of SEM2 in clear noon, respectively. The absolute difference
+between the heatmaps under the conditions of hard rain noon and wet sunset with salt-pepper noise condition, as well as the heatmap under clear noon,
+is illustrated in the third and fourth columns of the second and third rows. The deterministic state is a one-dimensional vector of size 2048, for ease of
+visualization, we have normalized it to [0,1] and represented it as a 64×32 heatmap. The probability of stochastic state is represented as a 32×32 heatmap.
+TABLE III
+THE AVERAGE RETURNS UNDER DIFFERENT WEATHER CONDITIONS WITH SALT-PEPPER NOISE
+(CLEAR NOON IS THE TRAINING ENVIRONMENT WITHOUT SALT-PEPPER NOISE)
+Algorithm
+Clear Noon
+Hard Rain Noon
+Wet Sunset
+SAC
+534.9 ± 122.3
+436.8 ± 95.1(−18.3%)
+461.1 ± 105.5(−13.8%)
+DreamerV2
+1655.9 ± 314.8
+1435.1 ± 255.0(−13.3%)
+1390.4 ± 338.6(−16.0%)
+SEM2 w/o multi-source
+2017.1 ± 127.1
+2081.1 ± 176.4(+3.9%)
+2098.2 ± 163.5(+4.9%)
+SEM2
+2719.1 ± 158.4
+2757.6 ± 156.0(+1.4%)
+2775.9 ± 120.2(+2.1%)
+be attributed to its higher average return in the standard
+setup. So semantic filter does not inherently enhance the
+agent’s robustness to changes in environmental dynamics. The
+results of SEM2 demonstrate training with multi-source data
+allows the agent to handle corner cases better and maintain an
+effective safety distance, even as brake efficiency decreases.
+To demonstrate the significance of the semantic filter in
+performance improvement, an additional ablation study is con-
+ducted to isolate the effect of the semantic filter and the mask
+predictor. Fig.
+11 presents the results of the ablation study.
+It is observed that the presence of the mask predictor does
+not have a significant impact on the performance improve-
+ment, as evidenced by the evaluation curves of DreamerV2
+with mask predictor and DreamerV2 without mask predictor.
+This suggests that the mask predictor primarily contributes
+to interpretability, rather than performance enhancement. In
+contrast, the results of the SEM2 model without multi-source
+training revealed the critical role played by the semantic filter
+in leveraging high-dimensional semantic information.
+We also conducted experiments on the representation forms
+of stochastic states. In the labels of Fig. 11, Gaussian de-
+notes continuous representations generated by 32 Gaussian
+distributions, while One-hot refers to discrete representations
+generated by 32 one-hot categorical distributions. The results
+demonstrate that employing one-hot representation facilitates
+optimization, contributing to improved sample efficiency.
+E. Distribution of Multi-source Data
+To validate the effectiveness of adaptive multi-source data
+distribution, we conducted an ablation experiment. This ex-
+periment compares the average returns of the adaptive multi-
+source data distribution, the fixed corner data distribution
+(25%,50%,75%) and without the multi-source data training
+(0%). The results of the experiment are shown in Fig. 12.
+The findings from this ablation study reveal a positive
+influence on performance enhancement across all adaptive
+data distribution, 25% and 50% fixed corner data distribution.
+Notably, employing 75% corner data engenders an imbalance
+of data by an insufficient of normal data, thereby precipitating
+a decrement in the average return.
+
+11
+TABLE IV
+THE AVERAGE RETURNS UNDER HARD RAIN NOON WITH SALT-PEPPER NOISE AND DIFFERENT BRAKING EFFICIENCY
+Algorithm
+100%
+90%
+80%
+70%
+SAC
+436.5 ± 95.1
+473.6 ± 96.3(+8.0%)
+482.2 ± 90.7(+9.9%)
+501.1 ± 91.9(+14.0%)
+DreamerV2
+1435.1 ± 255.0
+1444.9 ± 299.9(+0.1%)
+1386.5 ± 256.0(−3.3%)
+1384.5 ± 264.1(−3.6%)
+SEM2 w/o multi-source
+2081.1 ± 176.4
+2046.4 ± 221.6(−1.6%)
+1858.2 ± 233.9(−10.7%)
+1790.5 ± 139.3(−14.0%)
+SEM2
+2757.6 ± 156.0
+2729.8 ± 179.1(−1.0%)
+2681.4 ± 118.9(−2.7%)
+2700.9 ± 171.7(−2.1%)
+Fig. 11.
+Evaluating curves of the effect of semantic filter and representation
+form ablation study. The curves record the average returns for taking 30
+episodes. The vehicles are randomly relocated on the map and the results
+are averaged over 3 trials. The shaded area indicates standard deviation.
+Fig. 12.
+Evaluating curves of different multi-source data distributions. The
+curves record the average returns for taking 30 episodes. The vehicles are
+randomly relocated on the map and the results are averaged over 3 trials. The
+shaded area indicates standard deviation.
+(a) Straight
+(b) Curve
+(c) Vehicle following
+(d) Intersection
+Fig. 13.
+Cases in complex town environments. The figure presented the processing of SEM2 across four distinct road scenarios. Each image, from left to
+right, displays the lidar input, camera input, and semantic mask. The top row shows the ground truth, while the bottom row shows the reconstructed image.
+
+12
+F. Cases Interpretation
+Once trained, SEM2 is well equipped to handle many cases
+in town environments shown in Fig. 13. We analyzed the
+agent’s behavior in these cases to understand its capabilities.
+1) Straight: The most common driving situation is traveling
+straight, and the agent can handle it effectively even in
+the early stages of training. In this case, the autonomous
+system simply maintains a high-speed cruise and stays
+within its lane.
+2) Curve: In town roads, there are various types of curves.
+To ensure that the vehicle stays on the centerline of
+the curve, the agent adjusts the speed and steering
+appropriately when entering the curve.
+3) Vehicle following: The urban environment has a dense
+traffic flow, and following the vehicle is a common work-
+ing condition. When there is a vehicle in front of the ego
+vehicle, the agent will automatically follow the vehicle
+in front and perform acceleration and deceleration to
+avoid collision with the front vehicle.
+4) Intersection: There are a large number of intersections in
+the urban environment, and when at a red light, vehicles
+are waiting in place. The ego vehicle should also slow
+down and wait in place until other vehicles have passed.
+VIII. CONCLUSION
+This paper enhances the sample efficiency and robustness
+of urban end-to-end autonomous driving by proposing a
+SEMantic Masked recurrent world model (SEM2), which
+learns the transition dynamics of driving-relevant states with
+a semantic filter. The driving policy is learned by propa-
+gating analytical gradients of imagination through the latent
+dynamics using SEM2 in the condensed latent space. To
+contribute diverse scene data and prevent modal collapse in
+corner cases, we propose a multi-source sampler to balance
+the data distribution that aggregates both common driving
+situations and multiple corner cases in urban scenes. We
+trained our framework in the CARLA simulator and compared
+its performance with state-of-the-art comparison baselines.
+Experimental results demonstrate that our framework exceeds
+previous works in terms of sample efficiency and robustness
+to input permutation.
+REFERENCES
+[1] D. Neven, B. De Brabandere, S. Georgoulis, M. Proesmans, and
+L. Van Gool, “Towards end-to-end lane detection: an instance segmen-
+tation approach,” in 2018 IEEE intelligent vehicles symposium (IV).
+IEEE, 2018, pp. 286–291.
+[2] Y. Hou, Z. Ma, C. Liu, and C. C. Loy, “Learning lightweight lane
+detection cnns by self attention distillation,” in Proceedings of the
+IEEE/CVF international conference on computer vision, 2019, pp. 1013–
+1021.
+[3] K. Okamoto and P. Tsiotras, “Optimal stochastic vehicle path planning
+using covariance steering,” IEEE Robotics and Automation Letters,
+vol. 4, no. 3, pp. 2276–2281, 2019.
+[4] C. Hubmann, M. Becker, D. Althoff, D. Lenz, and C. Stiller, “Decision
+making for autonomous driving considering interaction and uncertain
+prediction of surrounding vehicles,” in 2017 IEEE Intelligent Vehicles
+Symposium (IV).
+IEEE, 2017, pp. 1671–1678.
+[5] J. Chen, W. Zhan, and M. Tomizuka, “Autonomous driving motion
+planning with constrained iterative lqr,” IEEE Transactions on Intelligent
+Vehicles, vol. 4, no. 2, pp. 244–254, 2019.
+[6] J. Duan, J. Li, Q. Ge, S. E. Li, M. Bujarbaruah, F. Ma, and D. Zhang,
+“Relaxed actor-critic with convergence guarantees for continuous-time
+optimal control of nonlinear systems,” IEEE Transactions on Intelligent
+Vehicles, 2023.
+[7] M. Bojarski, D. Del Testa, D. Dworakowski, B. Firner, B. Flepp,
+P. Goyal, L. D. Jackel, M. Monfort, U. Muller, J. Zhang et al., “End
+to end learning for self-driving cars,” arXiv preprint arXiv:1604.07316,
+2016.
+[8] Y. Pan, C.-A. Cheng, K. Saigol, K. Lee, X. Yan, E. Theodorou, and
+B. Boots, “Agile autonomous driving using end-to-end deep imitation
+learning,” arXiv preprint arXiv:1709.07174, 2017.
+[9] F. Codevilla, M. Müller, A. López, V. Koltun, and A. Dosovitskiy,
+“End-to-end driving via conditional imitation learning,” in 2018 IEEE
+international conference on robotics and automation (ICRA).
+IEEE,
+2018, pp. 4693–4700.
+[10] Y. Xiao, F. Codevilla, A. Gurram, O. Urfalioglu, and A. M. López,
+“Multimodal end-to-end autonomous driving,” IEEE Transactions on
+Intelligent Transportation Systems, vol. 23, no. 1, pp. 537–547, 2020.
+[11] S. Wang, D. Jia, and X. Weng, “Deep reinforcement learning for
+autonomous driving,” arXiv preprint arXiv:1811.11329, 2018.
+[12] J. Chen, B. Yuan, and M. Tomizuka, “Model-free deep reinforcement
+learning for urban autonomous driving,” in 2019 IEEE intelligent
+transportation systems conference (ITSC). IEEE, 2019, pp. 2765–2771.
+[13] J. Wu, Z. Huang, and C. Lv, “Uncertainty-aware model-based reinforce-
+ment learning: Methodology and application in autonomous driving,”
+IEEE Transactions on Intelligent Vehicles, vol. 8, no. 1, pp. 194–203,
+2023.
+[14] J. Chen, S. E. Li, and M. Tomizuka, “Interpretable end-to-end urban
+autonomous driving with latent deep reinforcement learning,” IEEE
+Transactions on Intelligent Transportation Systems, vol. 23, no. 6, pp.
+5068–5078, 2022.
+[15] Y. Zhang, Y. Mu, Y. Yang, Y. Guan, S. E. Li, Q. Sun, and
+J. Chen, “Steadily learn to drive with virtual memory,” arXiv preprint
+arXiv:2102.08072, 2021.
+[16] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to control:
+Learning behaviors by latent imagination,” in International Conference
+on Learning Representations, 2020.
+[17] D. Hafner, T. P. Lillicrap, M. Norouzi, and J. Ba, “Mastering atari
+with discrete world models,” in International Conference on Learning
+Representations, 2021.
+[18] V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G.
+Bellemare, A. Graves, M. Riedmiller, A. K. Fidjeland, G. Ostrovski
+et al., “Human-level control through deep reinforcement learning,”
+nature, vol. 518, no. 7540, pp. 529–533, 2015.
+[19] S. Levine, C. Finn, T. Darrell, and P. Abbeel, “End-to-end training of
+deep visuomotor policies,” The Journal of Machine Learning Research,
+vol. 17, no. 1, pp. 1334–1373, 2016.
+[20] D. Silver, A. Huang, C. J. Maddison, A. Guez, L. Sifre, G. Van
+Den Driessche, J. Schrittwieser, I. Antonoglou, V. Panneershelvam,
+M. Lanctot et al., “Mastering the game of go with deep neural networks
+and tree search,” nature, vol. 529, no. 7587, pp. 484–489, 2016.
+[21] D. Silver, J. Schrittwieser, K. Simonyan, I. Antonoglou, A. Huang,
+A. Guez, T. Hubert, L. Baker, M. Lai, A. Bolton et al., “Mastering
+the game of go without human knowledge,” nature, vol. 550, no. 7676,
+pp. 354–359, 2017.
+[22] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-
+policy maximum entropy deep reinforcement learning with a stochastic
+actor,” in International conference on machine learning.
+PMLR, 2018,
+pp. 1861–1870.
+[23] J. Duan, Y. Guan, S. E. Li, Y. Ren, Q. Sun, and B. Cheng, “Distributional
+soft actor-critic: Off-policy reinforcement learning for addressing value
+estimation errors,” IEEE transactions on neural networks and learning
+systems, vol. 33, no. 11, pp. 6584–6598, 2021.
+[24] P. Wolf, C. Hubschneider, M. Weber, A. Bauer, J. Härtl, F. Dürr, and
+J. M. Zöllner, “Learning how to drive in a real world simulation with
+deep q-networks,” in 2017 IEEE Intelligent Vehicles Symposium (IV).
+IEEE, 2017, pp. 244–250.
+[25] E. Yurtsever, L. Capito, K. Redmill, and U. Ozgune, “Integrating deep
+reinforcement learning with model-based path planners for automated
+driving,” in 2020 IEEE Intelligent Vehicles Symposium (IV).
+IEEE,
+2020, pp. 1311–1316.
+[26] H. Ma, J. Chen, S. Eben, Z. Lin, Y. Guan, Y. Ren, and S. Zheng, “Model-
+based constrained reinforcement learning using generalized control bar-
+rier function,” in 2021 IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS).
+IEEE, 2021, pp. 4552–4559.
+
+13
+[27] J. Kim and J. Canny, “Interpretable learning for self-driving cars by
+visualizing causal attention,” in Proceedings of the IEEE international
+conference on computer vision, 2017, pp. 2942–2950.
+[28] Y. Guan, Y. Ren, Q. Sun, S. E. Li, H. Ma, J. Duan, Y. Dai, and
+B. Cheng, “Integrated decision and control: toward interpretable and
+computationally efficient driving intelligence,” IEEE transactions on
+cybernetics, vol. 53, no. 2, pp. 859–873, 2022.
+[29] D. Ha and J. Schmidhuber, “Recurrent world models facilitate policy
+evolution,” Advances in neural information processing systems, vol. 31,
+2018.
+[30] D. Hafner, T. Lillicrap, I. Fischer, R. Villegas, D. Ha, H. Lee, and
+J. Davidson, “Learning latent dynamics for planning from pixels,” in
+International conference on machine learning. PMLR, 2019, pp. 2555–
+2565.
+[31] M. Okada, N. Kosaka, and T. Taniguchi, “Planet of the bayesians:
+Reconsidering and improving deep planning network by incorporating
+bayesian inference,” in 2020 IEEE/RSJ International Conference on
+Intelligent Robots and Systems (IROS).
+IEEE, 2020, pp. 5611–5618.
+[32] A. X. Lee, A. Nagabandi, P. Abbeel, and S. Levine, “Stochastic latent
+actor-critic: Deep reinforcement learning with a latent variable model,”
+Advances in Neural Information Processing Systems, vol. 33, pp. 741–
+752, 2020.
+[33] G. Zhu, M. Zhang, H. Lee, and C. Zhang, “Bridging imagination
+and reality for model-based deep reinforcement learning,” Advances in
+Neural Information Processing Systems, vol. 33, pp. 8993–9006, 2020.
+[34] K. Cho, B. Van Merriënboer, C. Gulcehre, D. Bahdanau, F. Bougares,
+H. Schwenk, and Y. Bengio, “Learning phrase representations using
+rnn encoder-decoder for statistical machine translation,” arXiv preprint
+arXiv:1406.1078, 2014.
+[35] Y. LeCun, B. Boser, J. S. Denker, D. Henderson, R. E. Howard,
+W. Hubbard, and L. D. Jackel, “Backpropagation applied to handwritten
+zip code recognition,” Neural computation, vol. 1, no. 4, pp. 541–551,
+1989.
+[36] J. M. Joyce, “Kullback-leibler divergence,” in International encyclopedia
+of statistical science.
+Springer, 2011, pp. 720–722.
+[37] J. Schulman, P. Moritz, S. Levine, M. Jordan, and P. Abbeel, “High-
+dimensional continuous control using generalized advantage estimation,”
+arXiv preprint arXiv:1506.02438, 2015.
+[38] D.-A. Clevert, T. Unterthiner, and S. Hochreiter, “Fast and accurate deep
+network learning by exponential linear units (elus),” in International
+Conference on Learning Representations, 2016.
+[39] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun, “Carla:
+An open urban driving simulator,” in Conference on robot learning.
+PMLR, 2017, pp. 1–16.
+[40] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,”
+in International Conference on Learning Representations, 2019.
+Zeyu Gao received the B.S. degree in Intelligent
+Vehicle Engineering with School of Automotive
+Engineering, Harbin Institute of Technology, China
+in 2023. He is currently working toward the M.S.
+degree in pattern recognition and intelligent system
+at Institute of Automation, Chinese Academy of
+Science, China. His research interests include au-
+tonomous driving, reinforcement learning, and brain-
+inspired intelligence.
+Yao Mu obtained the M.Phil Degree from the
+School of Vehicle and Mobility, Tsinghua Univer-
+sity, Beijing. He is pursuing the Ph.D. degree with
+the department of Computer Science, the University
+of Hong Kong, Hong Kong. He studied as a visiting
+student researcher in of Information Technology
+and Electrical Engineering, ETH Zürich, Zürich,
+Switzerland, in 2023. His research interests include
+embodied AI, reinforcement learning, robotic con-
+trol, autonomous driving, and computer vision.
+Chen Chen received the B.S., M.S., and Ph.D de-
+gree in Transportation Engineering in Transportation
+Engineering from College of Metropolitan Trans-
+portation, Beijing University of Technology, Beijing,
+China, in 2013, 2016 and 2019, respectively. He is
+currently working as a Post-Doc in the School of
+Vehicle and Mobility, Tsinghua University, Beijing,
+China. His research interests include driver behavior
+analysis, driving safety evaluation, trajectory predic-
+tion.
+Jingliang Duan received the B.S. degree from the
+College of Automotive Engineering, Jilin University,
+Changchun, China, in 2015. He studied as a visiting
+student researcher in Department of Mechanical En-
+gineering, University of California, Berkeley, USA,
+in 2019. He received his Ph.D. degree in the School
+of Vehicle and Mobility, Tsinghua University, Bei-
+jing, China, in 2021. He is currently an Associate
+Professor at the School of Mechanical Engineering,
+University of Science and Technology Beijing. His
+research interests include decision and control of au-
+tonomous vehicle, reinforcement learning and adaptive dynamic programming,
+and driver behavior analysis.
+Ping Luo (Member, IEEE) received the Ph.D. de-
+gree in information engineering from The Chinese
+University of Hong Kong. He was a Postdoctoral
+Fellow at CUHK from 2014 to 2016. He joined
+SenseTime Research as a Principal Research Scien-
+tist from 2017 to 2018. He is currently an Assistant
+Professor with the Department of Computer Science,
+The University of Hong Kong. He has published
+more than 100 peer-reviewed papers in top-tier con-
+ferences and journals. His research interests include
+machine learning and computer vision.
+Yanfeng Lu (Member, IEEE) received his B.S.
+degree in Automation from the Harbin Institute of
+Technology, China in 2010, and his Ph.D. degree
+from Korea University, Republic of Korea in 2015.
+He is currently an Associate Professor with the State
+Key Laboratory of Multimodal Artificial Intelligence
+Systems, Institute of Automation, Chinese Academy
+of Sciences, China. His research interests include
+computer vision, robot perception, and machine
+learning.
+Shengbo Eben Li (Senior Member, IEEE) received
+the M.S. and Ph.D. degrees from Tsinghua Uni-
+versity in 2006 and 2009. He worked at Stanford
+University, University of Michigan, and University
+of California, Berkeley. He is currently a tenured
+professor at Tsinghua University. His research in-
+terests include intelligent vehicles, driver assistance,
+reinforcement learning and optimal control, etc. He
+is the author of over 100 journal/conference papers,
+and the co-inventor of over 20 Chinese patents.
+He is now the IEEE senior member and serves as
+associated editor of IEEE ITSM and IEEE Trans. ITS, etc.

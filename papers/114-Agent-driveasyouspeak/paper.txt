@@ -1,0 +1,405 @@
+                   This WACV workshop paper is the Open Access version, provided by the Computer Vision Foundation.
+                                    Except for this watermark, it is identical to the accepted version;
+                              the final published version of the proceedings is available on IEEE Xplore.
+
+
+
+
+  Drive as You Speak: Enabling Human-Like Interaction with Large Language
+                       Models in Autonomous Vehicles
+
+                      Can Cui1,∗ , Yunsheng Ma1 , Xu Cao2 , Wenqian Ye2,3 , Ziran Wang1
+                           1 Purdue University, West Lafayette, IN, USA, 47907
+                               2 PediaMed.AI Lab, Shenzhen, China, 518048
+                         3 University of Virginia, Charlottesville, VA, USA, 22903
+                                         {cancui}@purdue.edu
+
+
+                        Abstract                                  vehicle. All you have to do is utter the command: “Over-
+                                                                  take the vehicle in front of me.” At that point, the LLMs
+    The future of autonomous vehicles lies in the conver-         would swiftly assess the existing conditions and safety lis-
+gence of human-centric design and advanced AI capabili-           ten, and ask questions before reasoning, providing you with
+ties. Autonomous vehicles of the future will not only trans-      informed guidance on the feasibility and recommended ac-
+port passengers but also interact and adapt to their desires,     tions for executing the maneuver. Furthermore, in the con-
+making the journey comfortable, efficient, and pleasant. In       text of fully autonomous vehicles, the LLMs’ capabilities
+this paper, we present a novel framework that leverages           could even extend to taking charge of the vehicle and exe-
+Large Language Models (LLMs) to enhance autonomous                cuting the instructed commands.
+vehicles’ decision-making processes. By integrating LLMs’            While LLMs have the potential to greatly enhance con-
+natural language capabilities and contextual understand-          venience and improve the driving experience for drivers, a
+ing, specialized tools usage, synergizing reasoning, and          significant challenge arises: LLMs lack understanding of
+acting with various modules on autonomous vehicles, this          information about the driving environment. Unlike humans,
+framework aims to seamlessly integrate the advanced lan-          LLMs lack the inherent ability to perceive the physical en-
+guage and reasoning capabilities of LLMs into autonomous          vironment. In other words, these models do not possess the
+vehicles. The proposed framework holds the potential to           capability to visually perceive and interact with the world
+revolutionize the way autonomous vehicles operate, offering       around them [2]. It renders LLMs challenged in making
+personalized assistance, continuous learning, and transpar-       sound decisions for the current situation, potentially leading
+ent decision-making, ultimately contributing to safer and         to suboptimal outcomes or even hazardous consequences.
+more efficient autonomous driving technologies.
+                                                                     To address the challenge above, we present a perspec-
+                                                                  tive where LLMs can serve as the decision-making “brain”
+                                                                  within autonomous vehicles. Complementing this, various
+1. Introduction                                                   tools within the autonomous vehicle ecosystem, including
+    Recently, Large Language Models (LLMs) have at-               the perception module, localization module, and in-cabin
+tracted significant attention. The key to their success lies      monitor, function as the vehicle’s sensory “eyes.” This con-
+in their remarkable ability to process a wide range of word-      figuration enables LLMs to overcome the inherent limita-
+based inputs, including prompts, questions, dialogues, and        tion of not directly accessing real-time environmental infor-
+vocabulary spanning diverse domains, resulting in signifi-        mation. By receiving processed data from the perception
+cant and coherent textual outputs. LLMs serve as vast store-      module, LLMs can facilitate informed decision-making, re-
+houses of abundant information and knowledge acquired             sulting in significant enhancements to the performance of
+from numerous texts, much like the human brain. Consider-         the autonomous vehicle. Additionally, the vehicle’s actions
+ing the LLM’s ability to emulate the human brain functions,       and controller function as its “hands,” executing instructions
+it prompts us to ask: could we leverage the impressive capa-      derived from the LLM’s decision-making process.
+bilities of LLMs to revolutionize the future of autonomous           When comparing autonomous vehicles with and without
+driving?                                                          integrated LLMs, it becomes evident that the latter offers a
+    Imagine a situation where you’re sitting in an au-            diverse array of compelling advantages. These advantages
+tonomous vehicle and you desire to safely overtake another        extend across various aspects of functionality and perfor-
+
+
+
+                                                                902
+mance:                                                            details such as the distance and speed of the target vehicle,
+                                                                  the velocity of the ego vehicle, road conditions of potential
+  • Language Interaction: LLMs enable intuitive com-              lanes, the presence of other vehicles and their distances on
+    munication between drivers and vehicles, transforming         those lanes, and other useful navigation information from
+    interactions from rigid commands to natural conversa-         the map system. Through an analysis of the provided data
+    tions.                                                        and the given command, the LLMs make a decision regard-
+  • Contextual Understanding and Reasoning: LLMs                  ing whether to execute the driver’s request. If the decision is
+    in vehicles offer enhanced contextual understanding           affirmative, the LLMs subsequently communicate instruc-
+    from diverse sources like traffic laws and accident re-       tions to the controller, guiding the next course of action.
+    ports, ensuring decisions prioritize safety and regula-           Having explored this intricate interaction between LLMs
+    tion adherence.                                               and the autonomous vehicle’s decision-making process, we
+                                                                  shift our focus to a broader context and propose the con-
+  • Zero-Shot Planning: LLMs in vehicles can under-               cept of a human-centric LLMs integrated framework for au-
+    stand and reason about unfamiliar situations with-            tonomous vehicles based on our prior work of the mobility
+    out prior exposure, allowing vehicles to navigate un-         digital twin [30]. As shown in Fig. 1, the physical world
+    charted scenarios confidently.                                comprises human drivers, vehicles, and traffic objects. In
+                                                                  the physical world, human drivers are the central agents in
+  • Continuous Learning and Personalization: LLMs                 the physical world, sending commands and instructions to
+    learn and adapt continuously, tailoring their assistance      LLMs as they navigate roadways. The traffic environment
+    to individual driver preferences and improving the            contains various elements including vehicles, pedestrians,
+    driving experience over time.                                 traffic lights, road conditions, and traffic cones, all of which
+  • Transparency and Trust: LLMs can articulate their             contribute to the complexity of movement and interactions
+    decisions in simple language, fostering a crucial bond        on the road. The vehicle, directed by the LLMs, operates
+    of trust and understanding between the technology and         within this ecosystem, executing the commands it receives
+    its users.                                                    from either drivers or LLMs through controllers and actua-
+                                                                  tors.
+                                                                      The virtual world includes LLMs, memory, and essen-
+2. Perspective: the Role of LLMs in Advancing                     tial tools which include the perception module, localization
+    Autonomous Vehicles                                           module, and in-cabin monitor. The perception module ac-
+                                                                  quires raw input from sensors, including external cameras,
+   As previously established in the earlier section, we’ve        LIDARs, and radars [8, 9], and processes this data into a
+established that the LLMs serve as the “brain” in the au-         format suitable for the LLMs. The localization module em-
+tonomous driving system, facilitating driver interaction and      ploys GNSS data to determine the vehicle’s precise loca-
+decision-making, while the useful sensory tools and actu-         tion. Within the vehicle, the in-cabin monitor employs inter-
+ation function as the vehicle’s “eyes” and “hands” respec-        nal cameras, thermometers, and other sensors to vigilantly
+tively. To be more specific, When a driver requests a par-        observe the in-cabin environment, preempting distractions,
+ticular operation, the LLM prompts the related modules to         extreme temperatures, or uncomfortable conditions. At the
+provide data that has been processed to extract relevant in-      core of the entire framework lies the LLMs, serving as its
+formation from the environment. By integrating the lin-           central intelligence. They receive commands from drivers,
+guistic analysis of LLMs with the processed sensory in-           subsequently initiating queries to pertinent modules for re-
+puts from the selected modules, the LLM can then make             lated information. Furthermore, the memory section acts as
+well-informed decisions. If the command is deemed both            a repository, storing historical operations and drivers’ pref-
+feasible and safe based on the prior analysis, the LLMs           erences, enabling continuous learning and enhancement for
+will transmit the corresponding instructions to the vehicle’s     the LLMs. This repository of experiences equips the LLMs
+controller. This includes components such as the steering         to make analogous decisions when confronted with similar
+wheel, throttle pedal, braking, and other control elements,       situations, bolstering the system’s adaptability and perfor-
+enabling them to execute the necessary operations. Alterna-       mance over time. the memory also houses maps and local
+tively, if the operation is deemed inappropriate, the LLMs        law information, empowering the LLMs to make even wiser
+will provide drivers with a detailed explanation as to why        decisions adaptable to a variety of scenarios.
+the requested action is not suitable for execution.
+   Revisiting the example at the beginning of this paper,         3. Review: Can LLMs Really Do This?
+when drivers issue the command to overtake the vehicle
+ahead, the LLMs come into play by querying the perception            Through a comprehensive review of both theoretical un-
+module for pertinent processed information. This includes         derpinnings and real-world implementations, we seek to
+
+
+
+                                                                903
+                         Figure 1. The human-centric LLM-integrated framework for autonomous vehicles.
+
+
+address the fundamental question: Can LLMs really con-            AI assistant without human labels, providing better con-
+tribute to the improvement of autonomous driving by ac-           trol over AI behavior with minimal human input. These
+tively participating in the decision-making framework? By         approaches hold significant promise for developing LLMs
+examining the current state of research and analyzing use         for autonomous driving applications, as they can contribute
+cases, this section aims to provide a thorough assessment         in two dimensions. Firstly, they can ensure that LLMs
+of the extent to which LLMs can bring to the landscape of         avoid making decisions that may be illegal or unethical.
+human-centric autonomous driving.                                 Secondly, these methodologies enable LLMs to continu-
+                                                                  ally adapt and align their decision-making processes with
+3.1. Adaptive Techniques and Human-Centric Re-                    user preferences, enhancing personalization and trust in au-
+      finements for LLMs                                          tonomous vehicles.
+    Parameter-efficient fine tuning (PEFT) is a crucial tech-
+nique used to adapt pre-trained language models (LLMs) to            LLM-based autonomous driving applications can also
+specialized downstream applications [6, 10, 12, 14, 18]. Hu       benefit from advanced prompting techniques [3, 16, 29, 31,
+et al. [14] proposed utilizing low-rank decomposition ma-         32]. Chain-of-thought prompting [31] improves LLMs’
+trices to reduce the number of trainable parameters needed        ability to perform complex reasoning. Gao et al. [13] pro-
+for fine-tuning language models. Lester et al. [18] explore       pose an approach that uses LLMs to read natural language
+prompt tuning, a method for conditioning language models          problems and generate programs as intermediate reasoning
+with learned soft prompts, which achieves competitive per-        steps. Yao et al. [32] present a new prompting technique
+formance compared to full fine-tuning and enables model           that allows LLMs to make decisions about how to interact
+reuse for many tasks. These PEFT techniques offer valu-           with external APIs. These methods provide a solid foun-
+able tools for adapting LLMs to autonomous driving tasks.         dation for the development of LLMs for autonomous driv-
+    Reinforcement Learning from Human Feedback (RLHF)             ing applications with two significant benefits. Firstly, they
+[1, 21, 23, 24, 26] has emerged as a key strategy for fine-       greatly enhance LLMs’ reasoning capabilities, particularly
+tuning LLM systems to align more closely with human pref-         in complex, multi-step scenarios. Secondly, these tech-
+erences. Ouyang et al. [21] introduce a human-in-the-loop         niques improve the adaptability and versatility of LLMs,
+process to create a model that better follows instructions.       key attributes for autonomous driving systems interfacing
+Bai et al. [1] propose a method for training a harmless           with various tools and data sources.
+
+
+
+                                                                904
+3.2. Advancements in LLMs: Implications for Au-
+      tonomous Driving Decision-Making
+    Recent Research has shown that LLMs can perform well
+in most commonsense tasks [4], which means it has the po-
+tential to make wise and feasible decisions in autonomous
+driving scenarios. The utilization of LLMs in the context of
+autonomous driving presents a captivating and potentially
+transformative direction for research. Recent investigations
+have brought light on the diverse ways in which LLMs can
+profoundly impact the landscape of autonomous vehicles.
+For instance, the study conducted by [19] highlights the
+promise of AI-infused with legal knowledge, offering the
+potential to avert legal transgressions in autonomous driv-
+ing scenarios, thereby contributing to the establishment of
+a safer AI-driven environment. Additionally, [33] demon-
+strates that LLMs possess the capability to learn from lo-
+cal laws and accident reports, and effectively contribute to
+reducing accident rates, thus enhancing the safety of au-
+tonomous driving.
+    The application of LLMs to decision-making in au-                Figure 2. General Q&A with ChatGPT-4 regarding autonomous
+tonomous driving is notably explored by [5]. Their research          vehicles.
+introduces the PaLM model, demonstrating that LLMs ex-
+hibit a capacity to effectively tackle intricate reasoning tasks
+and, intriguingly, surpass the performance of an average hu-         guage. This development lays the foundation for potential
+man. Such a finding carries significant implications, hinting        advancements in autonomous vehicles, where LLMs could
+at LLMs’ remarkable ability to navigate complex scenarios,           process sensory inputs, comprehend their surroundings, and
+make astute judgments, and potentially lay the groundwork            consequently make more informed decisions. Building on
+for optimal decision-making in autonomous vehicles.                  these insights, additional studies [4], [35], [32], [25], and
+    The work highlighted in [22] demonstrates the utilization        [15] have further enriched our understanding of LLMs’ ca-
+of large language models to effectively store experiences            pabilities, underscoring their potential in decision-making,
+in natural language, forming a foundational approach for             reasoning, and synergizing reasoning and acting.
+integrating historical data into our architecture.
+    The adaptive capabilities of LLMs are showcased in var-          4. Experiment: Decision-Making and Motion
+ious ways. [17] underscores LLMs’ proficiency in zero-shot               Planning with ChatGPT-4
+reasoning, enabling them to deal with novel and unfamiliar
+situations, a vital feature for autonomous vehicles operating            To gain a deeper understanding of the practical capabili-
+in dynamic environments. The study by [6] exemplifies that           ties of LLMs in the context of autonomous driving tasks, we
+LLMs can be fine-tuned to exhibit enhanced performance,              embark on an insightful exploration involving real-world
+particularly in tasks with limited training data.                    decision-making scenarios. This comprehensive case study
+    Additionally, LLMs have shown great potential in both            serves as a compelling demonstration of how LLMs can ef-
+transportation and robotics areas, as highlighted by [7, 34],        fectively enhance autonomous vehicles by harnessing the
+and [27] respectively. They reveal LLMs’ prowess in tasks            potential of ChatGPT-4 [20] to replicate decision-making
+such as zero-shot planning and interactive conversations,            processes. Our investigation is structured in two distinct
+even facilitating interaction with perception-action-based           phases. Initially, we pose autonomous dirving concept-
+API libraries, an attribute that aligns with the demands of          related queries to GPT-4, which unveils its grasp of how lan-
+autonomous vehicles.                                                 guage models can be seamlessly integrated into autonomous
+    Furthermore, the work [28] demonstrates LLMs’ poten-             driving. Subsequently, we design and present genuine real-
+tial for continuous learning, which is of paramount impor-           world situations to assess the decision-making proficiency
+tance for adapting to evolving road conditions and enhanc-           of LLMs. This section covers an in-depth understanding of
+ing performance over time.                                           this case study, including a detailed conversation with GPT-
+    The investigation from [11] introduces embodied lan-             4 that highlights our findings. This analysis serves to un-
+guage models capable of assimilating real-world sensor               derscore the practical implications of leveraging LLMs for
+data, thus bridging the gap between perception and lan-              enhanced autonomous driving.
+
+
+
+                                                                   905
+Figure 3. Experiment illustrating LLM-assisted decision-making and motion planning in a complex driving scenario. The Ego vehicle and
+its trajectory are marked orange; The vehicle ahead in the current lane and its trajectory are blue; The vehicles in adjacent lanes and their
+trajectories are green.
+
+
+   In our exploration with ChatGPT, we first asked some                  tonomous vehicles and aimed to find the true potential of
+general conceptional questions regarding the LLMs in au-                 LLMs in advancing the future of autonomous driving in
+
+
+
+                                                                      906
+Figure 2. The responses indicated a profound ability of the          safety but also instilled greater confidence in the vehicle’s
+LLMs to bridge the interaction between the vehicle and its           autonomous capabilities.
+passengers. From the responses, it’s evident that LLMs can               LLMs also can access previous data and user preferences
+explain complex driving scenarios, decisions made by the             from the memory module, which allows for a more person-
+vehicle, and even the technical of various autonomous mod-           alized driving experience. In the context of the experiment,
+ules. An especially significant observation was the LLMs’            for instance, the system could recall the driver’s typical
+strength in processing vast volumes of data, and then con-           comfort levels with overtaking speeds, following distances,
+verting these into real-time, understandable feedback. Such          and lane preferences. This information could then influence
+feedback isn’t just about driving status but relates to the core     how the LLMs interpret and execute a command like “over-
+autonomous functionalities, including the perception mod-            take the front vehicle,” ensuring that the action aligns with
+ule’s utilization and the motion planning’s choices. Fur-            the driver’s past behavior and comfort zones. As a result,
+thermore, the model demonstrated an enhanced capacity                the LLMs’ capacity for memory-driven personalization not
+for vehicle-to-vehicle communications and, critically, trou-         only improves user satisfaction but also can contribute to
+bleshooting. This capability not only fosters trust but can          safer, more predictable autonomous driving scenarios.
+also develop the user experience by explaining the complex               Another crucial advantage is enhanced transparency and
+decisions of autonomous operations.                                  trust. When the vehicle makes a complex decision, such as
+    As we can see in Figure 3, we simulated a real-world             overtaking another vehicle on a high-speed, two-lane high-
+driving scenario where the autonomous vehicle is equipped            way, passengers and drivers might naturally have questions
+with Large Language Models (LLMs) to assist in decision-             or concerns. In these instances, the LLMs don’t just execute
+making and motion planning. The vehicle was on a two-                the task but also articulate the reasoning behind each step of
+lane Indiana highway, traveling east to west at 96 km/h. It          the decision-making process. By providing real-time, de-
+was behind another vehicle moving at the same speed but              tailed explanations in understandable language, the LLMs
+only 8 meters away, a distance less than optimal for safety.         demystify the vehicle’s actions and underlying logic. This
+On the adjacent left lane, two other vehicles were noted:            not only satisfies the innate human curiosity about how au-
+one 30 meters ahead moving at 112 km/h, and another 40               tonomous systems work but also builds a higher level of
+meters behind at 104 km/h. The driver was highly attentive,          trust between the vehicle and its occupants.
+and one passenger was wearing a seatbelt.                                Moreover, the advantage of “zero-shotting” was par-
+    The LLMs were tasked with processing this multilayered           ticularly evident during the complex overtaking maneu-
+data sourced from the perception module (vehicle speeds              ver on a high-speed Indiana highway. Despite the LLMs
+and distances), the localization module (road and envi-              not having encountered this specific set of circumstances
+ronmental conditions), and the in-cabin monitoring sys-              before—varying speeds, distances, and even driver alert-
+tem (driver’s attention level and safety measures like seat-         ness—it was able to use its generalized training to safely
+belts). The LLMs formulated a comprehensive 9-step mo-               and efficiently generate a trajectory for the overtaking ac-
+tion plan that prioritized safety while efficiently executing        tion. This ensures that even in dynamic or rare scenarios,
+the driver’s command to overtake the front vehicle.                  the system can make sound judgments while keeping users
+                                                                     informed, hence building trust in autonomous technology.
+    In the experimental scenario, the Large Language Mod-
+els (LLMs) showcased their advanced reasoning ability by
+not just collecting and analyzing data but also applying lay-
+                                                                     5. Conclusion
+ers of context-sensitive reasoning. The LLMs evaluated the              In conclusion, our paper has provided a comprehensive
+speeds and distances of surrounding vehicles, the driver’s           framework for integrating Large Language Models (LLMs)
+state of attention, and even the traffic conditions to deter-        into the ecosystem of autonomous vehicles. We highlighted
+mine the safest and most efficient trajectory for overtaking.        how LLMs offer advanced reasoning capabilities that can
+This capability to reason in real-time, considering multiple         make autonomous systems more flexible and responsive to
+factors dynamically, significantly contributes to road safety        complex, real-world scenarios. Additionally, by leveraging
+and operational efficacy. The LLMs didn’t merely follow              the capabilities of LLMs, we can enrich the human-vehicle
+pre-defined rules but adapted their decision-making to the           interaction, providing a more reliable, intuitive, and re-
+unique circumstances, highlighting their potential for en-           sponsive interface. Unlike traditional autonomous systems,
+hancing the future of autonomous driving.                            which lack the capacity for language understanding, LLMs
+    Additionally, the language interaction capabilities of the       can handle complex requests, offer real-time feedback and
+LLMs proved crucial for trust-building. When the driver              comprehensive explanations, and assist in decision-making
+commanded to “overtake the vehicle in front,” the LLMs               during complex or rare driving scenarios. This suggests
+assessed various factors and communicated their reasoning            a future where LLMs can significantly enhance efficiency,
+to the driver. This transparent interaction not only enhanced        safety, and user-centric design in autonomous vehicles.
+
+
+
+                                                                   907
+References                                                              Chen, Aakanksha Chowdhery, Alex Castro-Ros, Marie Pel-
+                                                                        lat, Kevin Robinson, Dasha Valter, Sharan Narang, Gaurav
+[1] Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda                 Mishra, Adams Yu, Vincent Zhao, Yanping Huang, Andrew
+    Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna                Dai, Hongkun Yu, Slav Petrov, Ed H. Chi, Jeff Dean, Jacob
+    Goldie, Azalia Mirhoseini, Cameron McKinnon, Carol                  Devlin, Adam Roberts, Denny Zhou, Quoc V. Le, and Jason
+    Chen, Catherine Olsson, Christopher Olah, Danny Her-                Wei. Scaling Instruction-Finetuned Language Models, Dec.
+    nandez, Dawn Drain, Deep Ganguli, Dustin Li, Eli Tran-              2022. arXiv:2210.11416 [cs].
+    Johnson, Ethan Perez, Jamie Kerr, Jared Mueller, Jeffrey        [7] Can Cui, Yunsheng Ma, Xu Cao, Wenqian Ye, and Zi-
+    Ladish, Joshua Landau, Kamal Ndousse, Kamile Lukosuite,             ran Wang. Receive, reason, and react: Drive as you say
+    Liane Lovitt, Michael Sellitto, Nelson Elhage, Nicholas             with large language models in autonomous vehicles. arXiv
+    Schiefer, Noemi Mercado, Nova DasSarma, Robert Lasenby,             preprint arXiv:2310.08034, 2023.
+    Robin Larson, Sam Ringer, Scott Johnston, Shauna Kravec,        [8] Can Cui, Yunsheng Ma, Juanwu Lu, and Ziran Wang. Radar
+    Sheer El Showk, Stanislav Fort, Tamera Lanham, Timo-                Enlighten the Dark: Enhancing Low-Visibility Perception
+    thy Telleen-Lawton, Tom Conerly, Tom Henighan, Tristan              for Automated Vehicles with Camera-Radar Fusion. IEEE
+    Hume, Samuel R. Bowman, Zac Hatfield-Dodds, Ben Mann,               International Conference on Intelligent Transportation Sys-
+    Dario Amodei, Nicholas Joseph, Sam McCandlish, Tom                  tems (ITSC), 2023.
+    Brown, and Jared Kaplan. Constitutional AI: Harmlessness        [9] Can Cui, Yunsheng Ma, Juanwu Lu, and Ziran Wang. Red-
+    from AI Feedback, Dec. 2022. arXiv:2212.08073 [cs].                 former: Radar enlightens the darkness of camera perception
+[2] Emily M. Bender and Alexander Koller. Climbing towards              with transformers. IEEE Transactions on Intelligent Vehi-
+    NLU: On Meaning, Form, and Understanding in the Age of              cles, pages 1–11, 2023.
+    Data. In Proceedings of the 58th Annual Meeting of the As-     [10] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke
+    sociation for Computational Linguistics, pages 5185–5198,           Zettlemoyer. QLoRA: Efficient Finetuning of Quantized
+    Online, 2020. Association for Computational Linguistics.            LLMs, May 2023. arXiv:2305.14314 [cs].
+[3] Maciej Besta, Nils Blach, Ales Kubicek, Robert Gersten-        [11] Danny Driess, Fei Xia, Mehdi S. M. Sajjadi, Corey
+    berger, Lukas Gianinazzi, Joanna Gajda, Tomasz Lehmann,             Lynch, Aakanksha Chowdhery, Brian Ichter, Ayzaan Wahid,
+    Michal Podstawski, Hubert Niewiadomski, Piotr Nyczyk,               Jonathan Tompson, Quan Vuong, Tianhe Yu, Wenlong
+    and Torsten Hoefler. Graph of Thoughts: Solving Elab-               Huang, Yevgen Chebotar, Pierre Sermanet, Daniel Duck-
+    orate Problems with Large Language Models, Aug. 2023.               worth, Sergey Levine, Vincent Vanhoucke, Karol Hausman,
+    arXiv:2308.09687 [cs].                                              Marc Toussaint, Klaus Greff, Andy Zeng, Igor Mordatch,
+[4] Ning Bian, Xianpei Han, Le Sun, Hongyu Lin, Yaojie Lu,              and Pete Florence. PaLM-E: An Embodied Multimodal Lan-
+    and Ben He. ChatGPT is a Knowledgeable but Inexperienced            guage Model, Mar. 2023. arXiv:2303.03378 [cs].
+    Solver: An Investigation of Commonsense Problem in Large       [12] Zihao Fu, Haoran Yang, Anthony Man-Cho So, Wai Lam,
+    Language Models, Mar. 2023. arXiv:2303.16421 [cs].                  Lidong Bing, and Nigel Collier. On the Effectiveness of
+[5] Aakanksha Chowdhery, Sharan Narang, Jacob Devlin,                   Parameter-Efficient Fine-Tuning. In AAAI, volume 37, pages
+    Maarten Bosma, Gaurav Mishra, Adam Roberts, Paul                    12799–12807, June 2023. Number: 11.
+    Barham, Hyung Won Chung, Charles Sutton, Sebas-                [13] Luyu Gao, Aman Madaan, Shuyan Zhou, Uri Alon, Pengfei
+    tian Gehrmann, Parker Schuh, Kensen Shi, Sasha                      Liu, Yiming Yang, Jamie Callan, and Graham Neubig. PAL:
+    Tsvyashchenko, Joshua Maynez, Abhishek Rao, Parker                  Program-aided Language Models. In ICML, 2023.
+    Barnes, Yi Tay, Noam Shazeer, Vinodkumar Prabhakaran,          [14] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-
+    Emily Reif, Nan Du, Ben Hutchinson, Reiner Pope, James              Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen.
+    Bradbury, Jacob Austin, Michael Isard, Guy Gur-Ari,                 LoRA: Low-Rank Adaptation of Large Language Models. In
+    Pengcheng Yin, Toju Duke, Anselm Levskaya, Sanjay                   ICLR, 2022.
+    Ghemawat, Sunipa Dev, Henryk Michalewski, Xavier               [15] Siyuan Huang, Zhengkai Jiang, Hao Dong, Yu Qiao, Peng
+    Garcia, Vedant Misra, Kevin Robinson, Liam Fedus, Denny             Gao, and Hongsheng Li. Instruct2Act: Mapping Multi-
+    Zhou, Daphne Ippolito, David Luan, Hyeontaek Lim,                   modality Instructions to Robotic Actions with Large Lan-
+    Barret Zoph, Alexander Spiridonov, Ryan Sepassi, David              guage Model, May 2023. arXiv:2305.11176 [cs].
+    Dohan, Shivani Agrawal, Mark Omernick, Andrew M.               [16] Takeshi Kojima, Shixiang (Shane) Gu, Machel Reid, Yutaka
+    Dai, Thanumalayan Sankaranarayana Pillai, Marie Pellat,             Matsuo, and Yusuke Iwasawa. Large Language Models are
+    Aitor Lewkowycz, Erica Moreira, Rewon Child, Oleksandr              Zero-Shot Reasoners. In NeurIPS, volume 35, pages 22199–
+    Polozov, Katherine Lee, Zongwei Zhou, Xuezhi Wang,                  22213, 2022.
+    Brennan Saeta, Mark Diaz, Orhan Firat, Michele Catasta,        [17] Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka
+    Jason Wei, Kathy Meier-Hellstern, Douglas Eck, Jeff Dean,           Matsuo, and Yusuke Iwasawa. Large Language Models are
+    Slav Petrov, and Noah Fiedel. PaLM: Scaling Language                Zero-Shot Reasoners, Jan. 2023. arXiv:2205.11916 [cs].
+    Modeling with Pathways, Oct. 2022. arXiv:2204.02311 [cs].      [18] Brian Lester, Rami Al-Rfou, and Noah Constant. The Power
+[6] Hyung Won Chung, Le Hou, Shayne Longpre, Barret                     of Scale for Parameter-Efficient Prompt Tuning. In EMNLP,
+    Zoph, Yi Tay, William Fedus, Yunxuan Li, Xuezhi Wang,               2021.
+    Mostafa Dehghani, Siddhartha Brahma, Albert Webson,            [19] John J. Nay. Law Informs Code: A Legal Informatics
+    Shixiang Shane Gu, Zhuyun Dai, Mirac Suzgun, Xinyun                 Approach to Aligning Artificial Intelligence with Humans.
+
+
+
+
+                                                                 908
+     Northwestern Journal of Technology and Intellectual Prop-       [34] Ou Zheng, Mohamed Abdel-Aty, Dongdong Wang, Zijin
+     erty, 20(3):309–392, 2022.                                           Wang, and Shengxuan Ding. ChatGPT Is on the Horizon:
+[20] OpenAI. GPT-4 Technical Report, Mar. 2023.                           Could a Large Language Model Be All We Need for Intelli-
+[21] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Car-               gent Transportation?, Mar. 2023. arXiv:2303.05382 [cs].
+     roll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini          [35] Xizhou Zhu, Yuntao Chen, Hao Tian, Chenxin Tao, Weijie
+     Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob              Su, Chenyu Yang, Gao Huang, Bin Li, Lewei Lu, Xiaogang
+     Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda            Wang, Yu Qiao, Zhaoxiang Zhang, and Jifeng Dai. Ghost
+     Askell, Peter Welinder, Paul F. Christiano, Jan Leike, and           in the Minecraft: Generally Capable Agents for Open-World
+     Ryan Lowe. Training language models to follow instruc-               Environments via Large Language Models with Text-based
+     tions with human feedback. In NeurIPS, volume 35, pages              Knowledge and Memory, June 2023. arXiv:2305.17144 [cs].
+     27730–27744, 2022.
+[22] Joon Sung Park, Joseph C. O’Brien, Carrie J. Cai, Mered-
+     ith Ringel Morris, Percy Liang, and Michael S. Bernstein.
+     Generative Agents: Interactive Simulacra of Human Behav-
+     ior, Aug. 2023. arXiv:2304.03442 [cs].
+[23] Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Er-
+     mon, Christopher D. Manning, and Chelsea Finn. Direct
+     Preference Optimization: Your Language Model is Secretly
+     a Reward Model, May 2023. arXiv:2305.18290 [cs].
+[24] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Rad-
+     ford, and Oleg Klimov. Proximal Policy Optimization Algo-
+     rithms, Aug. 2017. arXiv:1707.06347 [cs].
+[25] Noah Shinn, Federico Cassano, Beck Labash, Ashwin
+     Gopinath, Karthik Narasimhan, and Shunyu Yao. Reflex-
+     ion: Language Agents with Verbal Reinforcement Learning,
+     June 2023. arXiv:2303.11366 [cs].
+[26] Nisan Stiennon, Long Ouyang, Jeffrey Wu, Daniel Ziegler,
+     Ryan Lowe, Chelsea Voss, Alec Radford, Dario Amodei, and
+     Paul F Christiano. Learning to summarize with human feed-
+     back. In NeurIPS, volume 33, pages 3008–3021, 2020.
+[27] Sai Vemprala, Rogerio Bonatti, Arthur Bucker, and Ashish
+     Kapoor. ChatGPT for Robotics: Design Principles and
+     Model Abilities, July 2023. arXiv:2306.17582 [cs].
+[28] Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar,
+     Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandku-
+     mar. Voyager: An Open-Ended Embodied Agent with Large
+     Language Models, May 2023. arXiv:2305.16291 [cs].
+[29] Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed
+     Chi, Sharan Narang, Aakanksha Chowdhery, and Denny
+     Zhou. Self-Consistency Improves Chain of Thought Rea-
+     soning in Language Models. In ICLR, 2023.
+[30] Ziran Wang, Rohit Gupta, Kyungtae Han, Haoxin Wang, Ak-
+     ila Ganlath, Nejib Ammar, and Prashant Tiwari. Mobility
+     Digital Twin: Concept, Architecture, Case Study, and Future
+     Challenges. IEEE Internet of Things Journal, 9(18):17452–
+     17467, Sept. 2022.
+[31] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten
+     Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, and Denny
+     Zhou. Chain-of-Thought Prompting Elicits Reasoning in
+     Large Language Models. In NeurIPS, 2022.
+[32] Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran,
+     Karthik Narasimhan, and Yuan Cao. ReAct: Synergizing
+     Reasoning and Acting in Language Models. In ICLR, 2023.
+[33] Ou Zheng, Mohamed Abdel-Aty, Dongdong Wang, Chenzhu
+     Wang, and Shengxuan Ding. TrafficSafetyGPT: Tuning a
+     Pre-trained Large Language Model to a Domain-Specific Ex-
+     pert in Transportation Safety, July 2023. arXiv:2307.15311
+     [cs].
+
+
+
+
+                                                                   909
+

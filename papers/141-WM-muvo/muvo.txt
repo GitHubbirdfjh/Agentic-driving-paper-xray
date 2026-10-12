@@ -1,0 +1,842 @@
+MUVO: A Multimodal Generative World Model
+for Autonomous Driving
+with Geometric Representations
+Daniel Bogdoll†‡*, Yitian Yang†‡*, Tim Joseph†, Melih Yazgan†, and J. Marius Zöllner†‡
+†FZI Research Center for Information Technology, Germany
+bogdoll@fzi.de
+‡Karlsruhe Institute of Technology, Germany
+Abstract—World models for autonomous driving have the
+potential to dramatically improve the reasoning capabilities of
+today’s systems. However, most works focus on camera data,
+with only a few that leverage lidar data or combine both to
+better represent autonomous vehicle sensor setups. In addition,
+raw sensor predictions are less actionable than 3D occupancy
+predictions, but there are no works examining the effects of
+combining both multimodal sensor data and 3D occupancy
+prediction. In this work, we perform a set of experiments with a
+MUltimodal World Model with Geometric VOxel representations
+(MUVO) to evaluate different sensor fusion strategies to better
+understand the effects on sensor data prediction. We also analyze
+potential weaknesses of current sensor fusion approaches and
+examine the benefits of additionally predicting 3D occupancy.
+I. INTRODUCTION
+In machine learning, recent world models like Cosmos [1]
+or Genie [2], [3] have demonstrated the capability to take
+sequences of high-resolution input images, conditioned on
+instructions or actions, and generate future images, illustrating
+possible future scenarios. In autonomous driving, the majority
+of such world models focus on camera-based inputs [4]–[11]
+and some that work in lidar-space [12]–[14]. These works ne-
+glect typical sensor setups of autonomous vehicles. Only two
+recent works leverage both camera and lidar data [15], [16].
+However, they rely on Bird’s-Eye-View (BEV) features as part
+of their sensor fusion strategy, which is an acknowledged
+bottleneck due to missing height information [15]. Finally,
+world models that predict future 3D occupancies have been
+proposed, which are highly actionable but rely on visual inputs
+only [17] or operate in the occupancy space alone [18].
+In this work, we choose a simple model architecture to
+perform an extensive set of experiments with varying sensor
+fusion strategies that do not rely on BEV features and compare
+them against multiple BEV-based baselines. This way we want
+to shine some light on how sensor fusion strategies impact
+the prediction quality of world models. While the benefit of
+leveraging both camera and lidar data is well-established [19]–
+[21], previous works did not evaluate the impact on future
+predictions. Our experiment setup takes camera images and
+lidar point clouds as inputs to predict future observations
+conditioned on actions. In addition, we examine the effect
+*These authors contributed equally
+Fig. 1.
+Qualitative output of a sensor fusion experiment with occupancy
+prediction activated. The predictions shown for camera and lidar sensors and
+3D occupancy are based on past camera and lidar inputs.
+of an additional decoder component for the prediction of 3D
+occupancies. Our contributions are:
+• A multimodal world model with geometric representa-
+tions that does not rely on BEV features as a bottleneck
+• Extensive evaluation of sensor fusion strategies based on
+the prediction quality of the world model
+The code and model weights are available on GitHub1.
+II. RELATED WORK
+World Models. World models are generative models that
+embed observations into latent states, predict future states
+conditioned on actions, and decode these latent predictions
+into the observation space [22], [23].
+Many approaches rely on labels, privileged information, or
+expert-designed state spaces, limiting their ability to scale. A
+typical category is the prediction of BEV semantic labels based
+on supervision during training [24]–[26]. DriveDreamer [27]
+conditions real-world RGB images on HD maps and labeled
+3D bounding boxes. Based on a diffusion model [28], future
+frames and actions are jointly predicted. The style of predic-
+tions is guided by CLIP [29] embeddings, using annotated
+scenes during training. Contrary to these approaches, MUVO
+does not require labeled training data.
+There also exist self-supervised world models. DreamerV3
+is capable of predicting futures in Minecraft [30]. Drive-
+GAN [31] was trained on real-world data and acts as an
+action-conditioned neural simulator. DayDreamer [32], [33]
+1github.com/fzi-forschungszentrum-informatik/muvo
+arXiv:2311.11762v4  [cs.LG]  24 Apr 2025
+
+Actions
+RGB images
+Point clouds
+Enc
+Enc
+Enc
+Sensor Fusion
+Transition
+Transition
+World Model
+Dec
+Dec
+RGB images
+Point clouds
+3D Occupancy
+Dec
+Features
+Tokens
+Transformer
+Fig. 2. MUVO Overview: Raw camera images and lidar point clouds are processed and fused. The resulting latent representations are fed into our transition
+model. Conditioned on actions, future states are predicted. Finally, future states are decoded into 3D occupancy grids, raw point clouds, and raw images.
+learns robotic tasks from real-world visual inputs. A world
+model from Tesla [11], trained on proprietary multi-camera
+RGB data, was demonstrated to predict future observations
+and semantic or spatial data based on supervised fine-tuning.
+Following a recent line of work interpreting world models as
+a single sequence model [34]–[40], GAIA-1 [10] was trained
+on proprietary real-world camera data and can be conditioned
+with both actions and textual inputs. Vector quantization [41]
+was used to tokenize the data. Based on a video diffusion
+decoder, it achieved temporally consistent, high-resolution
+predictions. Similarly, VISTA [7] further increased the image
+resolution. Compared to recent models of these categories,
+MUVO is computationally efficient and does not require
+hundreds of GPUs for training.
+In spatial domains, several world models exist for lidar-
+data [12]–[14] or 3D occupancy grids [17], [18]. MUVO
+differs from those approaches by leveraging multimodal data.
+Most similar to our experiment setup, BEVWorld [15] and
+HoloDrive [16] leverage both camera and lidar data. BEV-
+World proposed a multi-model encoder that generates a unified
+BEV representation. Upsampled voxel features are used to pre-
+dict camera and lidar data. Differently, HoloDrive has separate
+models for image and lidar generation and introduces 2D-
+to-3D and 3D-to-2D structures to improve a joint generation
+leveraging BEV representations. In both cases, BEV features
+lack height information and are thus a bottleneck. MUVO does
+not require BEV features.
+Scene Completion. MonoScene [42] was the first work
+to infer 3D semantic voxels from a single 2D camera im-
+age, reconstructing visible areas and hallucinating occluded
+ones. Transformer-based architectures [43], [44] have im-
+proved by using sparse representations or hybrid encoders.
+Symphonies [45] leverages instance queries to model relations
+between pixels and voxels that belong to the same instance.
+OccDepth [46] uses stereo cameras to derive depth, while
+many others [47]–[52] utilize surround vision. Finally, also
+methods based on lidar point clouds exist [53]–[55]. Instead
+of relying on 3D supervision, recent works [56]–[59] utilize
+neural rendering to create voxel-based meshes. CLONeR [60]
+uses a single camera and lidar frame to predict occupancy
+grids based on neural rendering. S4C [61] predicts semantic
+occupancy from a single image, relying on supervision. While
+these works are related, they focus on data completion rather
+than world modeling, which can be seen as an additional
+system component to address occlusions and scene visibility
+as defined by the sensor setup.
+Forecasting. The OpenOcc benchmark [62] Was the first
+to include voxelwise flow information, similar to Open-
+Scene [63]. An occupancy network by Tesla was demonstrated
+to predict motion flow vectors for voxels [51]. Khurana et al.
+combined lidar data with motion sensors to predict future 3D
+occupancy [64]. Liu et al. introduced the task of occupancy
+completion and forecasting [65], whereas others utilize input
+images to forecast 3D occupancy [19], [66]–[68]. While these
+works are related, pure forecasting approaches are not action-
+conditioned and do not take into account how the planned
+actions of an agent contribute to future predictions.
+III. WORLD MODEL
+In this work, we evaluate sensor fusion strategies for world
+models for autonomous driving. To isolate the effect of fusion
+strategies, our experiment setup follows the fundamental ar-
+chitecture of MILE [24], which is much reduced in complexity
+compared to other approaches. As shown in Fig. 2, we
+introduce changes in the architecture to allow for sensor fusion
+of a typical sensor setup of autonomous vehicles, comprising
+stereo cameras and lidar [74], [75], and predict raw sensor data
+rather than low-resolution BEV masks based on camera data.
+In addition, we introduce an additional head to predict 3D
+
+Fig. 3. Sensor Fusion: With DRL
+val we evaluate representation learning, while DDS
+val examines robustness. We examined feature averaging (AVG) [69], feature
+concatenation (FC) [32], and a transformer-based architecture (TR) [21]. For lidar encodings, we evaluated PointPillars (PP) [70] and a range view (RR) [71]
+representation followed by a ResNet [72]. For camera, we evaluated direct encoding without BEV (WOB) and a BEV mapping [73].
+occupancy to analyze the effects of introducing a spatial loss
+in a sensor-independent space. This Multimodal World Model
+with Geometric Voxel Representations (MUVO) as our setup
+utilizes image and lidar sensor data from a typical autonomous
+vehicle setup, as shown in Fig. 1. First, we process, encode,
+and fuse RGB camera data and lidar point clouds. Second,
+we feed the latent representations of the sensor data to a
+transition model to derive a probabilistic model of the current
+state, followed by sampling, while concurrently predicting
+the probabilistic model of future states and sampling from
+it. Lastly, we decode both current and future states from
+the probabilistic models, forecasting raw RGB images, point
+clouds, and 3D occupancy.
+A. Observation Encoder
+We input RGB images from a front camera and point
+clouds from a top-mounted lidar. The 3D point cloud, com-
+prising up to 60, 000 points, is projected into a 2D cylindrical
+projection for lossless bijective representations. For images
+I ∈R3×Hi×Wi, we follow Hu et al [24] and use an input
+size of 600 × 960 pixels.
+For images I and point clouds R ∈R4×Hr×Wr in range
+view representation, we utilize a pre-trained backbone for
+feature extraction. We derive feature maps from different
+model layers similar to [24] and fuse them, culminating in
+image features Fc ∈RC×Hc×Wc and point cloud features
+FL ∈RC×HL×WL.
+B. Multimodal Fusion
+Similar to [21], [76], [77], we employ the self-attention
+mechanism of a Transformer [78] to fuse features of different
+sensors. It takes a sequence of tokens as input, where each
+token is a Dt-dimensional feature vector, so the input sequence
+is tin ∈RDt×Nt, with Dt representing the feature dimension
+of each token and Nt the number of tokens in the sequence.
+We flatten the H and W dimensions of the features F
+obtained from the encoder described in Sec. III-A, resulting
+in tokens f ∈RC×HW . Subsequently, we incorporate the 2D
+sinusoidal positional embedding [21], [78] e ∈RC×HW into
+each token to introduce spatial inductive biases. The learnable
+sensor embeddings s ∈RC×Ns are added, introducing a
+sensor category, where Ns is the number of sensors. The
+resulting tokens t ∈RC×HW are obtained, with each token
+ti(x, y) = fi(x, y) + ei(x, y) + si, where i indicates the i-th
+sensor, and (x, y) denotes the coordinate index of that token
+within the sensor feature. These tokens from all sensors are
+concatenated and fed into a Transformer encoder comprising k
+layers, each consisting of multi-head self-attention, Multilayer
+Perceptrons (MLP), and layer normalizations, resulting in new
+tokens tnew ∈RC×(P
+i HiWi).
+C. Transition Model
+The input consists of fused observation features o0:t and
+encoded actions a0:t ∈RT ×Da, based on a simple MLP,
+assuming access to a policy or motion planner. The output
+includes stochastic hidden states s0:t
+∈RT ×Ds and de-
+terministic historical states h0:t ∈RT ×Dh, predictions for
+future states st:t+n, and ht:t+n, T represents the number
+of frames, also referred to as the sequence length, and Da,
+Ds, Dh are the dimensions of each vector respectively. The
+deterministic historical variable ht+1 = fθ(ht, st) is modelled
+by a Gated Recurrent Unit (GRU) [79] fθ, enabling the model
+to remember past states. The posterior hidden state probability
+distribution is given by q(st | o≤t, a<t) ∼Nϕ(ot, ht, at),
+while the prior hidden state probability distribution, without
+the input of observed feature ot, is given by p(st | ht, at−1) ∼
+Nθ(ht, at−1). Here, Nϕ and Nθ are probability models mod-
+elled by a MLP. Given observations, st is sampled from the
+posterior distribution q. In the absence of observations, i.e.,
+during prediction, ˆst is sampled from the prior distribution p.
+We utilize the output tokens tnew from the sensor fusion
+in the form of a two-dimensional latent state as the encoded
+observations ot for the transition model. Compared to 1D
+states, we set the stochastic hidden states st, and deterministic
+historical states ht to shape Ch × (P
+j Tj), where Tj is the
+number of tokens of each output modality. For fθ, we replace
+all fully connected layers with convolutional layers in order
+to utilize two-dimensional states. The probability models Nϕ
+and Nθ are modeled by a transformer decoder. Learnable
+embeddings, which have the same shape as the stochastic
+
+Fig. 4. Two-dimensional Latent Space: We compare a 1D baseline to a set of 2D latent spaces, where we also examine the influence of a vision-transformer
+backbone and an additional perceptual loss term (PL). For the backbone, we evaluate ResNet18 (RN) and MobileVit-V2 (VIT).
+hidden states st, are used as queries, where ht, at, (ot) are
+concatenated as key-value pairs. Then, we query the state
+information in these through the attention mechanism to obtain
+stochastic hidden state tokens.
+D. Multimodal Decoder
+We decode into camera and lidar data and introduce an
+optional head for 3D occupancy. The input is a latent dynamic
+state (st, ht) with shape C × P
+j Tj which is provided by the
+transition model. We divide those tokens based on modalities
+and reshape each modality’s tokens C × Tj to fit the output
+shape. The occupancy decoder is of shape C × X × Y × Z.
+For camera and lidar data, first, the input is reshaped to
+C × H0 × W0, where H0 and W0 are determined by the final
+output resolution H ×W. Subsequently, we perform upscaling
+with convolutional networks similar to [80], [81] to produce
+a feature map of size Cn × H × W. For camera and lidar, we
+utilize two-dimensional convolutions, while we employ three-
+dimensional convolutions for voxels.
+IV. EVALUATION
+For the evaluation, we first present our utilized training
+setup in Sec. IV-A, followed by the evaluation of sensor fusion
+strategies in Sec. IV-B. Fig. 3 shows the impact of different
+fusion strategies, and Fig. 4 demonstrates the difference of
+differently sized latent spaces. Finally, we examine the effects
+of the optional 3D occupancy prediction in Sec. IV-C. Fig. 5
+shows the relation between camera-lidar based pre-training and
+3D occupancy prediction, and Fig. 6 shows the reverse impact
+of predicting occupancy on the quality of sensor predictions.
+A. Training Setup
+Training Losses. For our experiments, we follow a self-
+supervised training approach and do not require labels at any
+point. For each modality, we downsample multiple times with
+ratios of 1, 2, and 4. With this multi-scale approach, we
+compute losses at different resolutions. For images, we output
+RGB data that align with the size of the input and utilize the
+common L1 loss Limg for the minimization of the absolute
+discrepancies between target and prediction. For point clouds,
+we generate range view images of dimensions Hr × Wr × 4,
+which can be converted into N × 3 point cloud data. The
+target is the range view image transformed from the ground
+truth, where an L2 loss Lp, xyz is applied to minimize the Euler
+distance and an L1 loss Lp, r is based on range r. For 3D
+Occupancy, voxel grids of size 192 × 192 × 64 with 0.5m
+voxels contain the binary occupancy. The target is obtained
+by voxelizing fused depth maps from depth cameras and point
+clouds from lidar. The loss for voxel grids uses a Scene-Class
+Affinity Loss (SCAL) [42] LV, scal. The total loss is given by
+L =
+X
+λi
+ λimgLimg
+i
++ λpcd(Lpxyz
+i
++ Lpr
+i + Lpcd
+i ) + λVLV, scal
+i
+)
+(1)
+Datasets. We collected a training dataset Dtrain in the
+CARLA simulation environment [82] using an expert rein-
+forcement learning agent [24], [83] for a more realistic driving
+style . Our data collection encompasses four towns (Town01,
+Town03, Town04, Town06) and four weather conditions (Clear
+Noon, Wet Noon, Hard Rain Noon, Clear Sunset), gathered at
+a frequency of 10 FPS. For each town, we executed 25 runs,
+each lasting 300 seconds, with randomly selected weather
+conditions, amounting to 300,000 frames of data. We obtain
+RBG image I ∈R3×600×960, depth map ID ∈R1×600×960,
+e.g., derived from stereo cameras, point cloud P ∈R≤60,000×3
+obtained from a lidar with 64 vertical channels, route map
+route ∈R1×64×64 as the planned route in BEV space, speed
+v ∈R, and actions a ∈R2 in the form of acceleration and
+steering angle.
+We adopt the same setup as before for two distinct validation
+sets. For each town, we execute five 300-second long driving
+sessions with the following settings:
+DRL
+val: This set uses the same cities and weather conditions
+as the training set. However, the driving routes are randomized.
+The goal is to evaluate the effectiveness of our model in
+representation learning (RL) in familiar environments.
+DDS
+val : We maintain the same cities as in the training set
+but introduce different weather conditions. The driving routes
+are also randomized to evaluate the model performance under
+domain shifts (DS).
+Training Parameters. We sampled data at intervals of 0.2
+seconds, creating sequences of length 12 to serve as training
+
+Fig. 5. Pre-Training: Influence of camera-lidar pre-training for 50,000 steps on 3D occupancy prediction. We evaluate on both DRL
+val and DDS
+val . The green
+lines show our benchmark without pre-training. Violet lines show frozen weights of the pre-trained model, and weights remained open for the blue lines.
+inputs. All 12 frames were treated as known data. In the
+experiments containing voxel reconstructions, we reduced the
+length of sequences to 6 to speed up the training. We trained
+with a batch size of 16 and the AdamW optimizer with
+a learning rate of 10−4 and a weight decay of 0.01. For
+validation, we used 6/4 frames as given observations, while
+6/2 served as ground truth. For all experiments, we use a pre-
+trained ResNet18 [72] as our baseline backbone.
+B. Sensor Fusion Strategies
+Several prior multimodal world models rely on naive fusion
+approaches [26], [32], [84]. For our experiments, we compare
+those to a transformer-based architecture. To evaluate the
+effect of different sensor fusion strategies, we used metrics
+based on the evaluated modality: For assessing the quality
+of image predictions, we use the common Peak Signal-to-
+Noise Ratio (PSNR) to assess average differences. We use
+the Chamfer Distance to evaluate the accuracy of point cloud
+predictions. For the predictions of 3D occupancy grids, we
+used the metrics Intersection over Union (IoU), Precision, and
+Recall. We differentiate between IoU+ for occupied voxels
+and IoU−for empty ones.
+We first present the examined decoders and fusion methods.
+Subsequently, we provide an overview and a comparison of all
+analyzed combinations, as shown in Figure 3.
+Encoders. For image features Fc, we compare the standard
+encoder introduced in Sec. III-A to approaches that map
+features to BEV space [15], [24], [73], [85]. Here, features
+are first elevated into a 3D space. Then, these 3D feature
+voxels are aggregated into the BEV space, leading to image
+features Fb ∈RC×Hb×Wb. We evaluate both lossless and
+lossy representations for point clouds. We compare a range
+view-based representation with PointPillars [70] as an encoder,
+where point clouds are segmented into discrete pillars along
+the X and Y axes followed by data processing and feature
+extraction, resulting in a 2D BEV pseudo-image.
+Latent Space. In prior works, the latent space was com-
+monly modeled as one-dimensional vectors [24], [80], which
+may limit model performance by introducing a representa-
+tional bottleneck. We perform experiments with both a 1D
+and a 2D latent space. In addition, we examine an additional
+perceptual loss [86] and a vision transformer backbone [87].
+Figure 4 shows four evaluation graphs. It is divided into the
+prediction performance for camera (a), lidar (b), and 3D occu-
+pancy (c,d) on DDS
+val . The 2D latent state significantly benefits
+predictions for camera images and spatial voxel occupancies,
+while lidar predictions do not see any benefit. This might be
+due to the fact that camera data is much more complex than
+lidar data. Compared to the baseline 2D model (dark blue),
+we do not see a strong effect of utilizing a perceptual loss,
+as it produces visually poorer reconstructions and does not
+show any significant advantages. Using the vision transformer
+as an encoder does provide advantages for the prediction of
+camera images but shows no effect on other metrics. This
+shows that the 2D latent space itself provides the largest boost
+in performance, while other changes have little effect.
+Fusion Methods. We compare a transformer-based sensor
+fusion approach, as described in Sec. III-B, with naive
+combinations of encoded 1D features from each sensor
+modality, as found in the literature. We perform experiments
+for both averaging features as well as concatenating them,
+followed by a fully connected layer. To generate such latent
+states, the output tokens are reshaped into their original
+shape after the encoding, namely Fnew
+c
+∈RC×Hc×Wc and
+Fnew
+L
+∈RC×HL×WL. Each feature is then downsampled
+by convolutional layers, followed by pooling layers to get
+one-dimensional features fd ∈RD, which are subsequently
+concatenated and then passed through fully connected layers
+to reduce its dimensionality, producing the vector ot ∈RD.
+We evaluate the prediction performance of eight encoder-
+fusion combinations, as visible in Figure 3. We follow a
+naming scheme A-B-C: A represents the method of processing
+point clouds: PP stands for the use of PointPillars as the
+encoder; RV indicates the conversion of point clouds into
+range view. B denotes the approach of image processing: BEV
+implies mapping to BEV followed by feature extraction with a
+backbone; WOB denotes that no BEV mapping is performed.
+C describes the method of sensor fusion: AVG stands for
+the averaging of 1D features; FC means that concatenation
+followed by a fully connected layer is performed; TR denotes
+
+Fig. 6.
+Occupancy: Impact of predicting 3D occupancy on the quality of
+camera and lidar predictions, evaluated on both DRL
+val and DDS
+val .
+that the transformer-based multi-head self-attention mecha-
+nism was used, as described in Sec. III-B. In the following,
+we first discuss the effects on image predictions, followed by
+the effects on point cloud predictions.
+Image Prediction. The impact of the different experiments
+on the quality of camera predictions is shown in Fig. 3 a) and
+3 b). We observe a drop in performance for all networks in the
+DDS
+val dataset compared to DRL
+val, but the relative performance
+of different networks remains consistent across both datasets.
+Generally, the transformer-based architecture RV-WOB-TR per-
+forms on par or better compared to the other combinations,
+and range view-based lidar encodings show clear advantages
+over PointPillars. Methods with an additional BEV mapping
+of image features perform worse, and combinations with
+PointPillars suffer especially. We can see that the effectiveness
+of introducing a transformer-based architecture depends on the
+encoder used. It outperforms other approaches when combined
+with a ResNet-18 for feature extraction. In contrast, when
+combined with PP and BEV, its performance is lower than
+concatenating (FC) but higher than averaging (AVG).
+Point Cloud Prediction. The impact of the different ex-
+periments on the quality of camera predictions is shown
+in Fig. 3 c) and 3 d). Examining the Chamfer Distance
+plots, where lower values mean better performance, we find
+no significant performance disparity between both validation
+datasets. For DRL
+val, the transformer-based architecture RV-
+WOB-TR performs on par or better compared to the other
+combinations. However, on DDS
+val , its performance drops. As
+before, range view-based methods demonstrate superiority
+over PointPillars. Utilizing BEV features shows no clear
+disadvantage for this task. We can see that transformer-based
+architectures generally outperform other fusion techniques.
+We determine a transformer-based architecture with a 2D
+latent space and lossless range-view representations for point
+clouds as an optimal fusion strategy, while performance ben-
+efits are more pronounced for camera predictions.
+C. 3D Occupancy Prediction
+Next to analyzing fusion strategies, we are interested in the
+effects of also predicting more actionable 3D occupancies. Our
+experiments analyze whether an occupancy model can benefit
+from a pre-trained model which was trained by only predicting
+camera and lidar data, as shown in Fig. 5.
+Subsequently, we analyze if occupancy prediction improves
+the prediction of camera and lidar data, as shown in Fig. 6.
+3D Occupancy Prediction. We perform experiments in
+three scenarios, as shown in Figure 5. As we want to examine
+the effect of encoded knowledge of predicting camera and lidar
+data on 3D occupancy, we first train a model as a pre-trained
+starting point that predicts camera and lidar data alone for
+50,000 steps. For the first scenario, we employ the pre-trained
+model but freeze (PTF) all of its weights so that only the
+weights of the voxel decoder are trained. This approach allows
+us to assess the impact of fine-tuning only the voxel-specific
+aspects of the model while keeping the rest of the network, in
+particular all encoders, constant to evaluate if any information
+about a discrete geometry of the world is already encoded
+based on camera and lidar data. For the second scenario, the
+pre-trained weights were used as a starting point, but the entire
+network was open (PTO) for weight updates during training.
+Here, we analyze how the pre-trained weights influence the
+learning process when the whole network adapts and evolves
+during training. For the third scenario, no pre-training (NPT)
+is utilized, and we train the network from scratch.
+In Figure 5 we observe that the model trained from scratch
+(NPT) exhibits a similar performance on both validation
+datasets across all four metrics, while the other two models
+using pre-trained weights (PTF and PTO) generally performed
+better on DRL
+val than on DDS
+val across three metrics, exclud-
+ing IoU−. Interestingly, for IoU−we observe an opposite
+behavior, where the models perform better on DDS
+val . This is
+attributed to voxel occupancy grid predictions focusing more
+on occupied grids. Since voxel grids are mostly empty, models
+on DDS
+val tend to predict more noise, leading to lower IoU−
+scores. Comparing PTO to NPT, the PTO model showed
+advantages early on, supporting the idea that pre-trained
+weights contribute valuable spatial knowledge. However, in
+the later stages of training, the NPT model overtook the PTO
+model in Precision, while the PTO model remained superior
+for IoU−and Recall. This indicates that the non-pre-trained
+model adopts a more conservative strategy for 3D occupancy
+prediction. When we examine the PTF scenario, although the
+model underperformed compared to the other two, its perfor-
+mance improved over time by only training the voxel decoder.
+This improvement underscores that the pre-trained weights
+already contain some, however limited, spatial information,
+indicating that the model partially integrates image and point
+cloud features to form spatial voxel features even when trained
+only on these two modalities.
+As learning 3D occupancy is computationally intensive, we
+conclude that pre-training strategies on only camera and lidar
+data are generally recommendable, as they both speed up
+training and show overall superior performance.
+Sensor Data Predictions. We perform experiments to de-
+termine whether knowledge encoded through occupancy can
+be leveraged by lidar and camera predictions, as shown in
+Figure 6. Based on the chamfer Distance for point clouds
+
+and the PSNR metric for images, we observe only slightly
+increased performance gains for both modalities when occu-
+pancy prediction is included, with a more pronounced benefit
+for camera predictions under the DRL
+val setting.
+V. CONCLUSION
+We have presented an extensive set of experiments on sensor
+fusion strategies for predictive world models in autonomous
+driving. In addition, we have examined the effects of addi-
+tionally predicting 3D occupancy. This way, the effects of
+using typical sensor setups combined with learning actionable
+occupancy data can be better understood.
+We were particularly interested in the question of whether
+the introduction of a BEV feature representation, as typical in
+the literature [15], [16], might act as a bottleneck, as it misses
+height information. Our experiments demonstrate that lossless
+lidar representations with a standard transformer-based fusion
+and an increased 2D latent space are indeed beneficial in the
+case of camera-lidar fusion.
+When analyzing the effects of introducing actionable but
+computationally intensive spatial 3D occupancy predictions,
+our experiments show that occupancy predictions benefit from
+more efficient pre-training with only camera and lidar predic-
+tions. In addition, we observed that occupancy prediction leads
+to minor improvements for both camera and lidar predictions.
+For future work, we would be interested in performing
+large-scale experiments with real-world data as our approach
+does not require labels, leading to a better understanding of
+the implications of utilizing simulated data only. This might
+include a more complex sensor setup, raising the need to
+examine computational efficiency more thoroughly.
+ACKNOWLEDGMENT
+This work results from the just better DATA project sup-
+ported by the German Federal Ministry for Economic Affairs
+and Climate Action (BMWK), grant number 19A23003H.
+REFERENCES
+[1] N. Agarwal, A. Ali, M. Bala, Y. Balaji et al., “Cosmos world foundation
+model platform for physical ai,” arXiv: 2501.03575, 2025.
+[2] J. Bruce, M. Dennis, A. Edwards, J. Parker-Holder et al., “Genie:
+Generative interactive environments,” arXiv: 2402.15391, 2024.
+[3] J. Parker-Holder, P. Ball, J. Bruce, V. Dasagi et al., “Genie 2: A large-
+scale foundation world model,” , 2024.
+[4] X. Zhou, D. Liang, S. Tu, X. Chen et al., “Hermes: A unified self-driving
+world model for simultaneous 3d scene understanding and generation,”
+arXiv:2501.14729, 2025.
+[5] E. Ma, L. Zhou, T. Tang, Z. Zhang et al., “Unleashing generalization of
+end-to-end autonomous driving with controllable long video generation,”
+arXiv:2406.01349, 2024.
+[6] A. Popov, A. Degirmenci, D. Wehr, S. Hegde et al., “Mitigating covariate
+shift in imitation learning for autonomous vehicles using latent space
+generative world models,” arXiv 2409.16663, 2024.
+[7] S. Gao, J. Yang, L. Chen, K. Chitta et al., “Vista: A generalizable driving
+world model with high fidelity and versatile controllability,” in NeurIPS,
+2024.
+[8] J. Yang, S. Gao, Y. Qiu, L. Chen et al., “Generalized Predictive Model
+for Autonomous Driving,” in CVPR, 2024.
+[9] Y. Wang, J. He, L. Fan, H. Li, Y. Chen, and Z. Zhang, “Driving into
+the future: Multiview visual forecasting and planning with world model
+for autonomous driving,” in CVPR, 2024.
+[10] A. Hu, L. Russell, H. Yeo, Z. Murez et al., “GAIA-1: A Generative
+World Model for Autonomous Driving,” arXiv:2309.17080, 2023.
+[11] A. Elluswamy, “Foundation Models for Autonomy,” 2023, CVPR
+Workshop
+on
+Autonomous
+Driving.
+[Online].
+Available:
+https:
+//www.youtube.com/watch?v=6x-Xb_uT7ts
+[12] L. Zhang, Y. Xiong, Z. Yang, S. Casas, R. Hu, and R. Urtasun,
+“Learning Unsupervised World Models for Autonomous Driving via
+Discrete Diffusion,” in ICLR, 2024.
+[13] R. Chen, H. Park, B. Zhang, W. Shao, P. Luo, and A. Wong, “Trend:
+Unsupervised 3d representation learning via temporal forecasting for
+lidar perception,” arXiv: 2412.03054, 2024.
+[14] V. Zyrianov, H. Che, Z. Liu, and S. Wang, “Lidardm: Generative lidar
+simulation in a generated world,” arXiv 2404.02903, 2024.
+[15] Y. Zhang, S. Gong, K. Xiong, X. Ye et al., “Bevworld: A multimodal
+world model for autonomous driving via unified bev latent space,” arXiv
+2407.05679, 2024.
+[16] Z. Wu, J. Ni, X. Wang, Y. Guo et al., “Holodrive: Holistic 2d-
+3d multi-modal street scene generation for autonomous driving,”
+arXiv:2412.01407, 2024.
+[17] Y. Yang, J. Mei, Y. Ma, S. Du et al., “Driving in the occupancy world:
+Vision-centric 4d occupancy forecasting and planning via world models
+for autonomous driving,” AAAI, 2025.
+[18] L. Wang, W. Zheng, Y. Ren, H. Jiang, Z. Cui, H. Yu, and J. Lu, “Occsora:
+4d occupancy generation models as world simulators for autonomous
+driving,” arXiv:2405.20337, 2024.
+[19] S. Zhang, Y. Zhai, J. Mei, and Y. Hu, “Fusionocc: Multi-modal fusion
+for 3d occupancy prediction,” in ACM Multimedia 2024, 2024.
+[20] Z. Liu, H. Tang, A. Amini, X. Yang, H. Mao, D. L. Rus, and S. Han,
+“BEVFusion: Multi-Task Multi-Sensor Fusion with Unified Bird’s-Eye
+View Representation,” in ICRA, 2023.
+[21] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger, “Trans-
+Fuser: Imitation with Transformer-Based Sensor Fusion for Autonomous
+Driving,” IEEE TPAMI, 2022.
+[22] Y. LeCun, “A Path Towards Autonomous Machine Intelligence,”
+OpenReview:BZ5a1r-kVsf, 2022.
+[23] D. Bogdoll, L. Bosch, T. Joseph, H. Gremmelmaier, Y. Yang, and
+J. M. Zöllner, “Exploring the Potential of World Models for Anomaly
+Detection in Autonomous Driving,” in SSCI, 2023.
+[24] A. Hu, G. Corrado, N. Griffiths, Z. Murez et al., “Model-Based Imitation
+Learning for Urban Driving,” in NeurIPS, 2022.
+[25] H. Wang, X. Ye, F. Tao, C. Pan et al., “Adawm: Adaptive world model
+based planning for autonomous driving,” in ICLR, 2025.
+[26] Z. Gao, Y. Mu, R. Shen, C. Chen et al., “Enhance Sample Efficiency
+and Robustness of End-to-end Urban Autonomous Driving via Semantic
+Masked World Model,” in NeurIPSW, 2022.
+[27] X. Wang, Z. Zhu, G. Huang, X. Chen, and J. Lu, “DriveDreamer:
+Towards Real-world-driven World Models for Autonomous Driving,”
+arXiv:2309.09777, 2023.
+[28] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer,
+“High-Resolution Image Synthesis with Latent Diffusion Models,”
+arXiv:2112.10752, 2022.
+[29] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh et al., “Learning
+Transferable Visual Models From Natural Language Supervision,” in
+ICML, 2021.
+[30] D. Hafner, J. Pasukonis, J. Ba, and T. Lillicrap, “Mastering Diverse
+Domains through World Models,” arXiv:2301.04104, 2023.
+[31] S. W. Kim, , J. Philion, A. Torralba, and S. Fidler, “DriveGAN: Towards
+a Controllable High-Quality Neural Simulation,” in CVPR, 2021.
+[32] P. Wu, A. Escontrela, D. Hafner, K. Goldberg, and P. Abbeel, “Day-
+dreamer: World models for physical robot learning,” CoRL, 2022.
+[33] D. Hafner, T. Lillicrap, M. Norouzi, and J. Ba, “Mastering Atari with
+Discrete World Models,” in ICLR, 2021.
+[34] L. Chen, K. Lu, A. Rajeswaran, K. Lee et al., “Decision Transformer:
+Reinforcement Learning via Sequence Modeling,” in NeurIPS, 2021.
+[35] M. Janner, Q. Li, and S. Levine, “Offline Reinforcement Learning as
+One Big Sequence Modeling Problem,” in NeurIPS, 2021.
+[36] V. Micheli, E. Alonso, and F. Fleuret, “Transformers are Sample-
+Efficient World Models,” in ICLR, 2022.
+[37] S. Reed, K. Zolna, E. Parisotto, S. G. Colmenarejo et al., “A Generalist
+Agent,” in TMLR, 2022.
+[38] F. Liu, H. Liu, A. Grover, and P. Abbeel, “Masked Autoencoding for
+Scalable and Generalizable Decision Making,” in NeurIPS, 2023.
+
+[39] P. Wu, A. Majumdar, K. Stone, Y. Lin, I. Mordatch, P. Abbeel, and
+A. Rajeswaran, “Masked trajectory models for prediction, representation,
+and control,” in International Conference on Machine Learning, 2023.
+[40] comma.ai, “Commavq: A dataset of tokenized driving video and a GPT
+model,” 2023.
+[41] A. van den Oord, O. Vinyals, and K. Kavukcuoglu, “Neural Discrete
+Representation Learning,” in NeurIPS, vol. 30, 2017.
+[42] A.-Q. Cao and R. De Charette, “MonoScene: Monocular 3D Semantic
+Scene Completion,” in CVPR, 2022.
+[43] Y. Li, Z. Yu, C. Choy, C. Xiao et al., “Voxformer: Sparse voxel
+transformer for camera-based 3d semantic scene completion,” in CVPR,
+2023.
+[44] Y. Zhang, Z. Zhu, and D. Du, “OccFormer: Dual-path Transformer for
+Vision-based 3D Semantic Occupancy Prediction,” in ICCV, 2023.
+[45] H. Jiang, T. Cheng, N. Gao, H. Zhang, W. Liu, and X. Wang,
+“Symphonize 3D Semantic Scene Completion with Contextual Instance
+Queries,” in CVPR, 2024.
+[46] R. Miao, W. Liu, M. Chen, Z. Gong, W. Xu, C. Hu, and S. Zhou, “Oc-
+cDepth: A Depth-Aware Method for 3D Semantic Scene Completion,”
+arXiv:2302.13540, 2023.
+[47] Z. Li, Z. Yu, D. Austin, M. Fang, S. Lan, J. Kautz, and J. M. Alvarez,
+“FB-OCC: 3D Occupancy Prediction based on Forward-Backward View
+Transformation,” in CVPRW, 2023.
+[48] Y. Wei, L. Zhao, W. Zheng, Z. Zhu, J. Zhou, and J. Lu, “SurroundOcc:
+Multi-Camera 3D Occupancy Prediction for Autonomous Driving,” in
+ICCV, 2023.
+[49] Y. Huang, W. Zheng, Y. Zhang, J. Zhou, and J. Lu, “Tri-Perspective
+View for Vision-Based 3D Semantic Occupancy Prediction,” in CVPR,
+2023.
+[50] T. Vu, J.-H. Kim, M. Kim, S. Jung, and S.-G. Jeong, “MiLO: Multi-
+task Learning with Localization Ambiguity Suppression for Occupancy
+Prediction,” in CVPRW, 2023.
+[51] A. Elluswamy, “Occupancy Networks,” 2023, CVPR Workshop on
+Autonomous Driving. [Online]. Available: https://www.youtube.com/
+watch?v=jPCV4GKX9Dw
+[52] Y. Wang, Y. Chen, X. Liao, L. Fan, and Z. Zhang, “PanoOcc: Unified
+Occupancy Representation for Camera-based 3D Panoptic Segmenta-
+tion,” arXiv:2306.10013, 2023.
+[53] S. Song, F. Yu, A. Zeng, A. X. Chang, M. Savva, and T. Funkhouser,
+“Semantic Scene Completion from a Single Depth Image,” in CVPR,
+2017.
+[54] C. B. Rist, D. Emmerichs, M. Enzweiler, and D. M. Gavrila, “Semantic
+Scene Completion using Local Deep Implicit Functions on LiDAR
+Data,” in IEEE TPAMI, 2021.
+[55] X. Yan, J. Gao, J. Li, R. Zhang, Z. Li, R. Huang, and S. Cui,
+“Sparse Single Sweep LiDAR Point Cloud Segmentation via Learning
+Contextual Shape Priors from Scene Completion,” in AAAI, 2020.
+[56] A.-Q. Cao and R. de Charette, “SceneRF: Self-Supervised Monocular
+3D Scene Reconstruction with Radiance Fields,” in ICCV, 2023.
+[57] M. Pan, J. Liu, R. Zhang, P. Huang, X. Li, L. Liu, and S. Zhang, “Ren-
+derOcc: Vision-Centric 3D Occupancy Prediction with 2D Rendering
+Supervision,” arXiv:2309.09502, 2023.
+[58] F. Wimbauer, N. Yang, C. Rupprecht, and D. Cremers, “Behind the
+Scenes: Density Fields for Single View Reconstruction,” in CVPR, 2023.
+[59] M. Pan, L. Liu, J. Liu, P. Huang et al., “UniOcc: Unifying Vision-Centric
+3D Occupancy Prediction with Geometric and Semantic Rendering,” in
+CVPRW, 2023.
+[60] A. Carlson, M. S. Ramanagopal, N. Tseng, M. Johnson-Roberson,
+R. Vasudevan, and K. A. Skinner, “CLONeR: Camera-Lidar Fusion for
+Occupancy Grid-aided Neural Representations,” Rob. Aut. Lett., vol. 8,
+no. 5, 2023.
+[61] A. Hayler, F. Wimbauer, D. Muhle, C. Rupprecht, and D. Cremers,
+“S4C: Self-Supervised Semantic Scene Completion with Neural Fields,”
+in International Conference on 3D Vision (3DV), 2024.
+[62] C. Sima, W. Tong, T. Wang, L. Chen et al., “Scene as occupancy,” in
+ICCV, 2023.
+[63] O. Contributors, “Openscene: The largest up-to-date 3d occupancy
+prediction
+benchmark
+in
+autonomous
+driving,”
+2023.
+[Online].
+Available: https://github.com/OpenDriveLab/OpenScene
+[64] T. Khurana, P. Hu, D. Held, and D. Ramanan, “Point Cloud Forecasting
+as a Proxy for 4D Occupancy Forecasting,” in CVPR, 2023.
+[65] X. Liu, M. Gong, Q. Fang, H. Xie, Y. Li, H. Zhao, and C. Feng, “LiDAR-
+based 4D Occupancy Completion and Forecasting,” arXiv:2310.11239,
+2023.
+[66] M. Chen, Z. Dawei, X. Liang, N. Yiming, and D. Bin, “UniWorld: Au-
+tonomous Driving Pre-training via World Models,” arXiv:2308.07234,
+2023.
+[67] H. Zhang, Y. Xue, X. Yan, J. Zhang et al., “An efficient occupancy
+world model via decoupled dynamic flow and image-assisted training,”
+arXiv:2412.13772, 2024.
+[68] Z. Yang, L. Chen, Y. Sun, and H. Li, “Visual point cloud forecasting
+enables scalable autonomous driving,” in CVPR, 2024.
+[69] J. Chen, S. E. Li, and M. Tomizuka, “Interpretable End-to-End Urban
+Autonomous Driving With Latent Deep Reinforcement Learning,” T-ITS,
+vol. 23, 2022.
+[70] A. H. Lang, S. Vora, H. Caesar, L. Zhou, J. Yang, and O. Beijbom,
+“PointPillars: Fast Encoders for Object Detection From Point Clouds,”
+in CVPR, 2019.
+[71] B. Li, T. Zhang, and T. Xia, “Vehicle Detection from 3D Lidar Using
+Fully Convolutional Network,” in Rob. Sci. Sys., 2016.
+[72] K. He, X. Zhang, S. Ren, and J. Sun, “Deep Residual Learning for
+Image Recognition,” in CVPR, 2016.
+[73] J. Philion and S. Fidler, “Lift, Splat, Shoot: Encoding Images from
+Arbitrary Camera Rigs by Implicitly Unprojecting to 3D,” in ECCV,
+2020.
+[74] A. Geiger, P. Lenz, C. Stiller, and R. Urtasun, “Vision meets robotics:
+The kitti dataset,” International Journal of Robotics Research (IJRR),
+2013.
+[75] Waymo,
+“Introducing
+the
+5th-generation
+waymo
+driver,”
+2020.
+[Online]. Available: https://waymo.com/blog/2020/03/introducing-5th-
+generation-waymo-driver.html
+[76] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn et al., “An
+Image is Worth 16x16 Words: Transformers for Image Recognition at
+Scale,” in ICLR, 2020.
+[77] H. Shao, L. Wang, R. Chen, H. Li, and Y. Liu, “Safety-Enhanced
+Autonomous Driving Using Interpretable Sensor Fusion Transformer,”
+in CoRL, 2022.
+[78] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit et al., “Attention is All
+you Need,” in NeurIPS, vol. 30, 2017.
+[79] K. Cho, B. van Merrienboer, C. Gulcehre, D. Bahdanau, F. Bougares,
+H. Schwenk, and Y. Bengio, “Learning Phrase Representations using
+RNN Encoder-Decoder for Statistical Machine Translation,” in Conf. on
+Empirical Methods in Natural Language Processing (EMNLP), 2014.
+[80] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to Control:
+Learning Behaviors by Latent Imagination,” in ICLR, 2020.
+[81] D. Ha and J. Schmidhuber, “Recurrent world models facilitate policy
+evolution,” in NeurIPS, 2018.
+[82] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun,
+“CARLA: An open urban driving simulator,” in CoRL, 2017.
+[83] Z. Zhang, A. Liniger, D. Dai, F. Yu, and L. Van Gool, “End-to-end urban
+driving by imitating a reinforcement learning coach,” in ICCV, 2021.
+[84] E.
+Shrestha,
+C.
+Reddy,
+H.
+Wan,
+Y.
+Zhuang,
+and
+R.
+Vasude-
+van, “Sense, Imagine, Act: Multimodal Perception Improves Model-
+Based Reinforcement Learning for Head-to-Head Autonomous Racing,”
+arXiv:2305.04750, 2023.
+[85] T. Liang, H. Xie, K. Yu, Z. Xia et al., “BEVFusion: A Simple and
+Robust LiDAR-Camera Fusion Framework,” in NeurIPS, 2022.
+[86] J. Johnson, A. Alahi, and L. Fei-Fei, “Perceptual losses for real-time
+style transfer and super-resolution,” in ECCV, 2016.
+[87] S. Mehta and M. Rastegari, “Separable self-attention for mobile vision
+transformers,” TMLR, 2022.

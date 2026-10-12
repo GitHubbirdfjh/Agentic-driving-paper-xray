@@ -1,0 +1,1412 @@
+Distill to Think, Foresee to Act: Cognitive-Physical
+Reinforcement Learning for Autonomous Driving
+
+Yang Wu1
+
+Qiang Meng†
+
+arXiv:2605.21139v2 [cs.CV] 22 May 2026
+
+1
+
+Zhaojiang Liu3
+
+PCA Lab@NJUST
+
+2
+
+Youquan Liu4
+
+NJU
+
+3
+
+SJTU
+
+4
+
+Jian Yang1,2
+
+Jin Xie2∗
+
+FDU
+
+Abstract
+Current end-to-end autonomous driving models are fundamentally constrained
+by the behavioral cloning ceiling of imitation learning. While reinforcement
+learning offers a path to smarter autonomy, it demands two missing pieces of
+infrastructure: (1) a cognitive foundation that understands traffic semantics and
+driving intent, and (2) a foresighted physical environment that can anticipate the
+consequences of candidate actions. To this end, we propose CoPhy, a CognitivePhysical reinforcement learning framework for autonomous driving. To distill
+to think, we distill VLM knowledge into the BEV encoder and then discard the
+VLM entirely, retaining cognitive ability at zero inference cost while releasing the
+cognitive channel as a pluggable interface for optional human language commands.
+To foresee to act, we build an auto-regressive BEV world model that explicitly
+predicts future semantic maps conditioned on candidate actions, serving as an
+interpretable physical sandbox from which safety metrics are directly derived.
+Built upon this dual infrastructure, we optimize the driving policy via GRPO with
+a novel dual-reward mechanism: a physical reward derived from BEV rollouts
+enforces hard safety constraints, while a cognitive reward from a language-aligned
+scorer ensures intent compliance. Extensive experiments demonstrate that CoPhy
+not only achieves state-of-the-art results on NAVSIM v1 and v2 benchmarks, but
+also enables safer driving via cognitively informed scene compliance and flexible
+intent control through user-defined language instructions.
+
+1
+
+Introduction
+
+End-to-end (E2E) autonomous driving (AD) has advanced rapidly in recent years [5, 11, 3], learning
+driving policies directly from raw sensor inputs. Yet the dominant training paradigm, behavior cloning
+on expert demonstrations, introduces a fundamental bottleneck: models are largely confined to fitting
+predefined rules and expert trajectories [3, 62], severely restricting their safety and adaptability in
+open-world scenarios. A key limitation is the lack of cognitive scene understanding. Existing E2E
+methods [5, 11, 15, 23, 28] rely on pure visual features, skewing optimization towards short-sighted
+trajectory fitting and leaving them unable to comprehend complex traffic scenarios or incorporate
+driver intentions. Vision-Language Models (VLMs) [37, 41, 14, 67, 33] offer a promising pathway for
+scene reasoning. However, their prohibitive computational cost hinders edge deployment. Moreover,
+current VLM-based approaches over-rely on textual capabilities, often reducing driving to questionanswering or naively appending action heads, leaving a dangerous gap between semantic intent and
+physical execution, compounded by inherent reasoning hallucinations. As highlighted in Fig. 1,
+isolating these cognitive and physical dimensions inevitably leads to critical driving failures, such as
+ignoring traffic signals or violating spatial constraints. This calls for a lightweight mechanism that
+equips the E2E model with rich cognitive priors without online VLM overhead.
+Yet cognitive understanding alone is insufficient for safe driving. Regardless of how scene semantics
+are acquired, existing paradigms lack explicit physical-world reasoning to anticipate risks, such as
+∗ Corresponding author. † Independent researcher.
+
+Preprint.
+
+Cognitive information: “…... A Stop sign on the right. Stop immediately……”
+
+Physical
+
+Physical
+
+Cognitive
+
+Cognitive
+
+(a) Previous methods
+
+Cognitive 
+
+Physical 
+
+(b) Our method
+
+Physical  Cognitive 
+
+Figure 1: (a) Previous methods isolate cognitive and physical reasoning, leading to semantic failures
+like ignoring a STOP sign or spatial violations like halting on a crosswalk. (b) In contrast, CoPhy
+respects traffic semantics and maintains lane discipline, ensuring safe and cognitive-aligned driving.
+collisions and lane violations. Similar to human drivers who mentally simulate outcomes before
+acting, an autonomous system should be able to imagine the consequences of candidate actions and
+proactively avoid dangerous trajectories. While some methods [23, 57, 58, 42] utilize implicit world
+models or simulators [7] to predict future latent features, they fundamentally detach from interpretable
+physical states, failing to provide actionable safety assessment. This motivates an explicit world
+model that rolls out future BEV states as a “what-if” physical sandbox for trajectory evaluation.
+Furthermore, even with cognitive and physical foresight in place, models trained purely via imitation
+learning remain trapped within the behavioral cloning paradigm: the learned policy can only replicate
+the behaviors it has observed, without the ability to discover alternative strategies that may be
+equally or more effective [3]. This limitation manifests as distributional brittleness: when confronted
+with out-of-distribution scenarios, the policy lacks the exploratory experience needed to generalize.
+Reinforcement learning (RL) offers a principled mechanism to overcome this ceiling by allowing
+the agent to explore beyond expert data and optimize its policy through trial-and-error interaction.
+However, applying RL to E2E driving poses distinct challenges: it requires both a faithful environment
+for rollouts and meaningful reward signals. While recent approaches [16, 26, 67] have begun exploring
+RL for driving, a unified paradigm that integrates soft cognitive preferences (e.g., intent compliance)
+with hard physical constraints (e.g., collision avoidance) remains absent.
+In this work, we propose CoPhy, a cognitive-physical learning framework that addresses all the
+above challenges in a unified architecture. To bridge the cognitive gap, we introduce a cognitive
+prior distillation that distills rich offline language priors into BEV representations, endowing the E2E
+model with scene understanding at zero additional inference cost. To enable physical foresight, we
+establish a physical world model rollout that explicitly simulates future spatiotemporal evolutions
+conditioned on candidate actions, serving as a physical sandbox for “what-if” trajectory rollouts and
+safety assessment. To break the imitation learning ceiling, we propose cognitive-physical policy
+optimization. Powered by Group Relative Policy Optimization (GRPO), it explores the policy space
+via a dual-reward mechanism that synergizes hard physical constraints derived from BEV rollouts
+with soft cognitive preferences from a distilled language-aligned scorer. By harmonizing these
+components, CoPhy achieves a driving policy that is cognitively aware, physically safe, and intentionaligned. Extensive experiments on NAVSIM v1 and v2 benchmarks demonstrate that CoPhy sets
+a new state-of-the-art, achieving 91.4 PDMS and 86.1 EPDMS respectively, with leading safetycritical metrics across all sub-scores. Moreover, the distilled cognitive channel naturally enables
+intent-controllable driving via user language commands. Our main contributions are summarized as:
+• We propose CoPhy, a cognitive-physical framework for E2E AD. It grounds cognitive
+priors into spatial perception at zero inference cost via a cognitive prior distillation, while
+establishing an explicit “what-if” sandbox through a physical world model rollout.
+• To fully exploit this predictive sandbox and break the traditional imitation ceiling, we
+introduce a cognitive-physical policy optimization that leverages a GRPO-driven dualreward mechanism to balance hard physical constraints with soft cognitive preferences.
+• Extensive experiments on NAVSIM v1 and v2 demonstrate that CoPhy achieves state-ofthe-art performance with 91.4 PDMS and 86.1 EPDMS, alongside leading safety-critical
+sub-scores and an inherent intent-controllable driving capability.
+
+2
+
+Related Works
+
+End-to-end Autonomous Driving. End-to-end autonomous driving advances rapidly by integrating
+multi-task perception and planning into unified architectures [38, 11, 15]. Recent innovations span
+diverse algorithmic paradigms. For instance, generative and diffusion-based models [63, 28, 24, 55]
+significantly enhance trajectory robustness, while some world models [21, 23, 53, 61] forecast latent
+states for better planning. Concurrently, efforts to optimize computational efficiency introduce statespace models like Mamba [60] and multi-teacher knowledge distillation [27]. Nevertheless, because
+2
+
+these paradigms overwhelmingly rely on behavioral cloning, they remain fundamentally bottlenecked
+by the inherent brittleness and poor interpretability characteristic of pure imitation learning.
+VLMs for Autonomous Driving. Vision-Language Models significantly elevate autonomous driving via robust semantic understanding, predominantly following two technical routes. The first
+emphasizes semantic reasoning, leveraging visual question answering [17, 37, 41, 47, 14] and chainof-thought processes [51, 16, 30] for high-level decision-making. The second paradigm targets direct
+trajectory generation by appending action heads to foundational models [12, 66, 44, 22], unifying
+diverse tasks within a single linguistic space. However, these language-centric architectures largely
+overlook the interplay between cognitive semantics and rigid physical constraints. While recent
+efforts [20, 25] infuse spatial awareness via positional encoding, they critically lack an explicit
+physical rollout mechanism to verify safety consequences.
+Reinforcement Learning in Autonomous Driving. Following its success in foundational language
+models [9] and robotic systems [48], reinforcement learning aligns autonomous driving policies.
+DriveDPO [43] explicitly leverages it to unearth robust strategies, while broader vision-languageaction frameworks [16, 42, 26] similarly bridge semantic reasoning with strategic planning. For
+closed-loop exploration, predictive approaches [46, 58] derive intrinsic rewards from scene imaginations, while language-guided frameworks [67, 13] refine low-level execution using semantic feedback.
+Crucially, these paradigms isolate physical constraints from cognitive preferences, necessitating a
+unified dual-reward formulation to jointly optimize deterministic safety and intent compliance.
+
+3
+
+Methodology
+
+The core idea of CoPhy is to build a cognitive-physical learning framework, jointly ensuring physical
+safety and cognitive scene understanding for autonomous driving. As illustrated in Fig. 2, it comprises
+three modules: (1) cognitive prior distillation that injects language priors into the end-to-end model,
+(2) physical world model rollout that enables spatiotemporal reasoning of driving scenes, and (3)
+cognitive-physical policy optimization that breaks the imitation learning ceiling via dual rewards. We
+detail the training in Secs. 3.1 and 3.2 and the inference pipeline in Sec. 3.3.
+3.1
+
+Cognitive-Physical Imitation Learning
+
+Our end-to-end model takes multi-modal sensor inputs V = {VRGB , VLiDAR } and projects them via a
+multi-modal encoder Eθ to obtain the BEV state B0 = Eθ (V). Separately, N kinematic trajectory
+prototypes Tp are pre-extracted by clustering expert demonstrations [4, 5, 23], constraining the action
+space within physically feasible bounds. A trajectory refiner πθ then yields candidate trajectories
+T̂ = Tp + πθ (TE(Tp ), B0 ), where TE is the trajectory encoder. We will later augment this formulation
+with cognitive conditioning in Eq. (4). The candidates are supervised by the expert trajectory T via
+LTraj = ∥T̂ − T ∥1 .
+
+(1)
+
+Distill to Think: Cognitive Prior Distillation. Vision-Language Models (VLMs) excel at high-order
+reasoning, benefiting cognitive understanding in current VLA methods. However, their prohibitive
+computational cost hinders edge deployment in autonomous driving systems. Therefore, we distill
+the VLM’s cognitive ability into the end-to-end model during training and discard the VLM entirely
+at inference. Specifically, we fine-tune InternVL3-8B [68] via LoRA [10] across diverse driving
+VQA datasets [34, 39, 56, 47, 35], making it a domain-expert reasoning engine optimized to output
+cognitive priors such as traffic signs, road topologies, and driver intentions. Conditioned on visual
+inputs V and textual prompt Q, this domain-specific cognition is supervised by
+L
+X
+LVLM = −
+log Pξ (yl | y<l , V, Q),
+(2)
+l=1
+
+where yl is the l-th token of the target sequence and ξ denotes the LoRA parameters.
+Once trained, the VLM is frozen and used to generate textual descriptions during IL training, which
+are encoded by a CLIP text encoder [40] into the cognitive prior C. To bridge the cognitive-physical
+gap, we force Eθ to internalize these language priors via a cross-modal cosine distance objective:
+LDistill = 1 − BE(B0 ) · C/(∥BE(B0 )∥2 ∥C∥2 ),
+where BE is a BEV tokenizer to extract the cognitive feature from the BEV state B0 .
+3
+
+(3)
+
+Cognitive Prior Distillation
+
+Data
+
+BEV
+Tokenizer
+
+Multi-modal
+Encoder
+B0
+
+VLM
+Human
+
+p
+CLIP
+
+Cross-model
+Alignment
+
+Cognitive space
+
+Trajectories Prediction
+ˆ
+
+Trajectory
+Refiner
+
+C
+
+Physical space
+
+e0
+
+Trajectory
+Encoder
+
+GRPO
+
+{e k }kK=1
+
+Transformer
+Rollout
+
+Kj
+
+C
+
+Spatial
+Decoder
+
+Cognitive and Physical Trajectory Scores
+
+
+
+
+
+Co: 0.6 Phy: 0.7
+
+Co : 0.5 Phy: 0.7
+
+Sandbox
+C
+
+
+
+Cognitive information
+
+Co: 0.9 Phy: 0.8
+
+Candidate trajectories
+
+Selected
+
+Cogintive-Physical
+Rewards
+
+{B k }kK=1
+
+Cognitive-Physical Policy Optimization
+
+Physical World Model
+
+Good
+
+Off road
+
+Sharp turn
+
+Imminent collision
+
+Against cognitive
+
+Collision
+
+Figure 2: Overview of CoPhy. Multi-modal data are encoded into BEV state B0 . (a) The cognitive
+prior distillation module aligns B0 with VLM-derived cognitive feature C via cross-modal distillation,
+and injects C into the trajectory refiner to produce cognitively-aware candidates. (b) The physical
+world model rollout module auto-regressively rolls out future BEV states over K steps as a physical
+sandbox; trajectories are then scored along cognitive and physical axes via hierarchical selection. (c)
+The cognitive-physical policy optimization optimizes the policy with dual cognitive-physical rewards.
+In addition to the feature-level distillation, we further inject C into the trajectory refiner by
+T̂ = Tp + πθ (TE(Tp ), B0 , C).
+
+(4)
+
+This not only enriches trajectories with cognitive awareness, but also opens an interface for intentcontrollable driving via language commands, an underexplored capability of great practical value.
+Foresee to Act: Physical World Model Rollout. While cognitive distillation enriches the model with
+semantic understanding, it alone cannot address the core safety challenges of autonomous driving.
+Equally critical is the ability to imagine future states and anticipate potential dangers, enabling the
+model to proactively avoid unsafe trajectories. Moreover, breaking the imitation learning ceiling
+requires closed-loop exploration, where the agent reasons about consequences of diverse actions, a
+core principle underlying reinforcement learning. Thus, we introduce an auto-regressive world model
+that serves two purposes: (1) providing a physical sandbox to assess candidate trajectories via future
+rollouts, and (2) acting as the environment for reinforcement learning-based policy optimization.
+Unlike conventional methods constrained by external simulators or purely latent features [42, 23, 58],
+our world model operates directly within the BEV space, auto-regressively rolling out futures
+conditioned on both spatial geometries and cognitive priors. Specifically, a Transformer-based [50]
+world model takes the current BEV state B0 , the cognitive feature C, and N initial ego features
+e0 = TE(T̂ ) as input. To predict future states and actions, the model recursively unrolls the transitions:
+(Bk , ek ) = WM(Bk−1 , ek−1 , C),
+
+(5)
+
+where k ∈ {1, · · · , K} denotes the future time step. Since optimizing all future states is computationally expensive during training, we randomly sample an index j ∼ U(1, N ) in each iteration and use a
+lightweight spatial decoder to project the corresponding state BjK into dense BEV semantic maps
+M̂jK ∈ RH×W ×Cc , where Cc denotes the category count. Using nuPlan [1] to generate ground-truth
+maps MjK [23], we train the physical world model by supervising the predictions via Focal Loss [29]:
+LWM = FocalLoss(M̂jK , MjK ).
+
+(6)
+
+Cognitive and Physical Trajectory Scores. With trajectory generation and cognitive-physical
+representations in place, a key question remains: how to score the N predicted trajectories. We
+propose to score trajectories along two complementary axes, physical safety and cognitive compliance,
+and then select the optimal one.
+4
+
+Cognitive score
+filtering
+
+Co＜ ψ
+Co＞ ψ
+
+Cognitive information: “…. Wet road, be careful. …. Red
+light ahead, wait at the intersection……..”
+
+ψ
+
+1.0
+
+Physical score
+ranking
+
+Phy 0.92 0.89
+0.84
+
+……
+
+Top-1 trajectory
+
+Figure 3: Hierarchical trajectory selection. Candidates passing the cognitive threshold ŝCo ≥ ψ are
+subsequently ranked by the physical score ŝPhy to determine the optimal trajectory.
+The first criterion is the physical score [23], which relates to the distance d to the expert trajectory,
+yielding sPhy ∝ exp(−d). To predict this score, we concatenate the BEV states {Bk }K
+k=1 along the
+temporal dimension and compact them into a BEV vector b via a few convolutional layers. The vector,
+B×N
+along with the K-step ego features {ek }K
+via
+k=1 , is projected into the physical score ŝPhy ∈ R
+MLP and softmax. This explicitly favors expert-aligned behaviors and is optimized via cross-entropy:
+
+ŝPhy = Softmax MLP([b; e]) , LPhy = −sPhy log(ŝPhy ).
+(7)
+The second criterion is the cognitive alignment between C and the candidate trajectory T̂ , defined as
+the cosine similarity after projecting C and T̂ through two MLP layers. Since precise human labels
+are unavailable, we assume that the expert trajectory aligns well with the VLM’s cognitive intent, and
+supervise ŝCo ∈ RB×N via a contrastive InfoNCE loss [40, 36].
+
+exp(s+ /ϵ)
+ŝCo = cos MLP(T̂ ), MLP(C) , LCo = − log
+,
+(8)
+P5
+exp(s+ /ϵ) + m=1 exp(s−
+m /ϵ)
+where s+ is the similarity coupling the expert trajectory with C, s−
+m are the negative similarities from
+the 5 candidates with largest L2 distances to the expert, and ϵ is a temperature hyperparameter.
+Imitation Learning. Both Eqs. (7) and (8) encourage the highest-scoring trajectory to match the
+expert, forming the imitation learning objective in essence. Together with the trajectory, distillation,
+and world model losses, all modules except the VLM are jointly trained in an end-to-end manner via
+LIL = LTraj + LDistill + LWM + LPhy + LCo .
+3.2
+
+(9)
+
+Cognitive-Physical Policy Optimization
+
+While imitation learning (IL) provides a strong initialization, it implicitly assumes that the expert
+trajectory is optimal in both physical safety and cognitive coherence, an assumption that does not
+always hold. Moreover, the model never explores beyond the expert data, limiting its ability to
+generalize to unseen scenarios or surpass expert-level performance. Reinforcement learning (RL)
+offers a natural solution to break this ceiling, yet it typically requires a well-established environment
+and meaningful rewards, both of which are difficult to build in end-to-end autonomous driving.
+Fortunately, after the IL stage, the trained world model can already roll out future BEV states for any
+candidate trajectory, naturally serving as an internal driving environment. Building on this foundation,
+we employ RL to optimize only the trajectory refiner πθ via cognitive-physical policy optimization,
+while freezing all other parameters. This greatly reduces the training cost, and also prevents the
+environment (embedded in the world model parameters) from co-evolving with the policy, which
+would lead to training collapse. We next detail the designed rewards and the training objective.
+Physical Reward. Though the physical score in Eq. (7) can evaluate the trajectory itself, it derives
+from the expert trajectory without explicitly measuring physical safety, a property extremely important
+in autonomous driving. Therefore, we propose to derive the physical reward RPhy directly from the
+world model’s imagined BEV semantic maps M̂k . By projecting the ego-vehicle’s spatial footprint
+Fego onto these rollouts, we formulate RPhy as a weighted summation of five core metrics:
+RiPhy = ω1 RiNC + ω2 RiDAC + ω3 RiEP + ω4 RiTTC + ω5 RiComf ,
+
+(10)
+
+where i indexes the candidate trajectory and ω1...5 are balancing coefficients between components:
+(1) No Collision: RNC = 1[Fego ∩ Mobs = ∅] strictly avoids predicted obstacle channels Mobs .
+(2) Drivable Area: RDAC = 1[Fego ⊆ Mdrive ] strictly confines the ego vehicle within the predicted
+road boundary channels Mdrive to guarantee spatial safety.
+
+(3) Ego Progress: To encourage adaptive efficiency, we compute REP = σ (xK − µv )/σv , where
+xK is the final longitudinal displacement at the K-th step, µv = vego ∆T (∆T = 4.0s in our
+implementation) is the expected progress, and σv = max(0.3µv , 2.0) is the tolerance margin.
+5
+
+Cognitive  Physical 
+
+Cognitive  Physical 
+
+Cognitive  Physical 
+
+CoPhy Opt.
+
+Cognitive information: “……. Double yellow lines
+ahead. Do not cross them, keep straight.…….”
+
+CoPhy Opt.
+
+Cognitive information: “……. The traffic light
+ahead is green, proceed as normal.…….”
+
+CoPhy Opt.
+
+Cognitive information: “……. There is a Stop sign
+on the right. Stop immediately…….”
+
+Cognitive  Physical 
+
+Cognitive  Physical 
+
+Cognitive  Physical 
+
+Figure 4: Qualitative comparisons of trajectories before and after optimization. The dual-reward
+mechanism systematically rectifies cognitive lapses, such as ignoring a STOP sign, alongside physical
+infractions, such as crossing double yellow lines, thereby achieving rigorous joint compliance.
+(4) Time-to-Collision: To promote
+proactive safety margins, we reward maintaining a safe headway:
+
+RTTC = σ (dmin − dsafe )/∆d , where dmin is the minimal L2 distance to surrounding agents, with
+threshold dsafe = 5.0m and scaling factor ∆d = 2.0m.
+(5) Comfort: To ensure smooth kinematic execution, we penalize harsh dynamics via exponential
+decay: RComf = exp(−ā/λa ) · exp(−j̄/λj ), where ā and j̄ are the mean acceleration and jerk
+magnitudes over the K-step horizon, normalized by λa = 2.0 and λj = 5.0.
+Cognitive Reward. Physical metrics alone cannot capture high-level semantic compliance such as
+intent adherence. We therefore leverage the cognitive scorer trained during the IL phase to provide
+language-aligned feedback. For a sampled trajectory T̂ i , the cognitive reward is computed as:
+
+RiCo = cos MLP(T̂ i ), MLP(C) .
+(11)
+where the MLP projectors are frozen from the IL-trained language-aligned scorer. Fig. 4 shows how
+the dual rewards jointly rectify both cognitive lapses and physical infractions.
+Policy Optimization via GRPO. We optimize the policy via Group Relative Policy Optimization
+(GRPO) [45], which estimates advantages from intra-group reward statistics without requiring a
+separate critic network. At each iteration, the old policy πθold samples a group of G trajectories
+{T̂ 1 , . . . , T̂ G }. The unified reward for each candidate combines both components: Ri = RiPhy +RiCo .
+GRPO estimates the advantage Âi via intra-group normalization: Âi = (Ri − µR )/(σR + φ), where
+µR and σR are the group’s reward mean and standard deviation, and φ ensures numerical stability.
+Finally, πθ is updated over E epochs by maximizing the clipped surrogate objective. To prevent
+catastrophic forgetting of expert priors and encourage exploration, we augment the objective with the
+imitation learning loss LIL (Eq. (9)) and an entropy bonus H(πθ ):
+G
+
+JGRPO (θ) =
+
+
+i
+1 Xh
+min ρi Âi , clip(ρi , 1 − γ, 1 + γ)Âi + H(πθ ) − 0.2LIL ,
+G i=1
+
+(12)
+
+where ρi = πθ (T̂ i )/πθold (T̂ i ) is the importance sampling ratio, and the clipping threshold is γ = 0.2.
+3.3 Inference Pipeline
+We answer three practical questions that arise during inference: (1) how to select the final trajectory
+from multiple candidates, (2) how to remove the computationally expensive VLM without losing
+cognitive capability, and (3) how to enable intent-controllable driving via user language commands.
+Hierarchical Trajectory Selection. For trajectory selection, we propose a hierarchical strategy
+that scores trajectories along two complementary axes, cognitive compliance and physical safety,
+rather than a rigid weighted summation. Specifically, we first filter intention-violating candidates
+via a cognitive threshold ψ, forming a valid subset Ω = {i | ŝiCo ≥ ψ}. The optimal trajectory
+is then selected as the one with the highest physical score within Ω: i∗ = arg maxi∈Ω ŝiPhy . This
+ensures intent compliance while independently maximizing physical safety. As shown in Fig. 3, this
+mechanism steers trajectories toward an optimal cognitive-physical equilibrium.
+VLM-Free Inference. Although the VLM provides powerful scene understanding, deploying it
+online incurs prohibitive computational cost. We therefore discard the VLM entirely at inference
+time, which however means the cognitive feature C is no longer available. This would render the
+trajectory refiner, world model, and cognitive scorer non-functional, as they all require C as input.
+Fortunately, the distillation objective in Eq. (3) encourages BE(B0 ) to align with C, so the BEV
+6
+
+Table 1: Quantitative comparison with state-of-the-art methods on NAVSIM v1 NAVTEST. C:
+Camera, L: LiDAR. WM: World Model. Best results are in bold, second best are underlined.
+Method
+
+Venue
+
+Input
+
+WM
+
+NC ↑
+
+DAC ↑
+
+EP ↑
+
+TTC ↑
+
+C↑
+
+PDMS ↑
+
+UniAD [11]
+PARA-Drive [52]
+TransFuser [38]
+LAW [21]
+DRAMA [60]
+HydraMDP++ [19]
+ARTEMIS [8]
+World4Drive [64]
+Epona [61]
+TrajHF [18]
+GoalFlow [54]
+DiffusionDrive [28]
+WoTE [23]
+ResAD [65]
+DriveLaW [53]
+VADv2 [4]
+DriveSuprim [59]
+DriveDPO [43]
+
+CVPR’23
+CVPR’24
+CVPR’21
+ICLR’25
+arXiv’24
+arXiv’25
+RAL’25
+ICCV’25
+ICCV’25
+arXiv’25
+CVPR’25
+CVPR’25
+ICCV’25
+CVPR’26
+CVPR’26
+ICLR’26
+AAAI’26
+NeurIPS’25
+
+C
+C
+C+L
+C
+C+L
+C
+C+L
+C
+C
+C+L
+C+L
+C+L
+C+L
+C+L
+C
+C
+C+L
+C+L
+
+✗
+✗
+✗
+✓
+✗
+✗
+✗
+✓
+✓
+✓
+✗
+✗
+✓
+✗
+✓
+✗
+✗
+✗
+
+97.8
+97.9
+97.7
+96.4
+98.0
+97.6
+98.3
+97.4
+97.9
+96.6
+98.3
+98.2
+98.5
+98.0
+99.0
+98.3
+97.8
+98.5
+
+91.9
+92.4
+92.8
+95.4
+93.1
+96.0
+95.1
+94.3
+95.1
+96.6
+93.8
+96.2
+96.8
+97.5
+97.1
+97.4
+97.3
+98.1
+
+78.8
+79.3
+79.2
+81.7
+80.1
+80.4
+81.4
+79.9
+80.4
+84.5
+79.8
+82.2
+81.9
+83.3
+81.3
+82.3
+86.7
+84.3
+
+92.9
+93.0
+92.8
+88.7
+94.8
+93.1
+94.3
+92.8
+93.8
+92.1
+94.3
+94.7
+94.9
+94.1
+96.7
+95.7
+93.6
+94.8
+
+100
+99.8
+100
+99.9
+100
+100
+100
+100
+99.9
+100
+100
+100
+99.9
+100
+100
+100
+100
+99.9
+
+83.4
+84.0
+84.0
+84.6
+85.5
+86.6
+87.0
+85.1
+86.2
+87.6
+85.7
+88.1
+88.3
+88.8
+89.1
+89.3
+89.9
+90.0
+
+–
+
+C+L
+
+✓
+
+99.0
+
+98.2
+
+85.3
+
+96.8
+
+100
+
+91.4
+
+CoPhy (Ours)
+
+encoder already captures the necessary cognitive information. We thus simply substitute BE(B0 ) for
+C in Eqs. (4), (5) and (8) during inference, achieving zero additional overhead.
+Intent-Controllable Driving via User Commands. In practice, an autonomous system may not
+always satisfy human preferences, and users may wish to issue specific commands such as “speed
+up”, “change lane” or “pull over.” Our framework naturally supports such intent-controllable driving
+by replacing the cognitive input source. Instead of using the distilled BE(B0 ), we encode the user’s
+command via the CLIP text encoder to produce C, which finally achieves intent-controllable driving.
+
+4
+
+Experiments
+
+4.1
+
+Experimental Setup
+
+Implementation Details. Our CoPhy is trained in three stages. First, we fine-tune InternVL3-8B [68]
+with LoRA [10] on a mixture of driving VQA datasets [34, 39, 56, 47, 35] for 5 epochs with learning
+rate 2e-4. Second, with the VLM frozen, we train the world model and policy via imitation learning
+for 30 epochs with learning rate 5e-5. Finally, with all other modules frozen, we optimize the
+trajectory refiner via reinforcement learning for 10 epochs with learning rate 1e-5. The reward
+weights ω1...5 are set to 1, 1, 0.4, 0.4, 0.2 for NC, DAC, EP, TTC, and Comf, respectively, reflecting
+the relative importance of each driving criterion in NAVSIM [7]. The group size G is set to 8 in
+GRPO. All stages use AdamW [32] with linear warmup and cosine annealing [31] on 8 H20 GPUs.
+Datasets. Our method is evaluated on NAVSIM [7, 2], a planning-oriented dataset built upon
+OpenScene [6] with 1,192 training and 136 testing scenarios. We report results on two simulation
+versions: v1, which employs non-reactive log replay, and the more challenging v2, which features
+reactive traffic agents that respond to the ego vehicle’s actions in a pseudo-closed-loop setting.
+Evaluation Metrics. For NAVSIM v1, the primary metric is the Predictive Driver Model Score
+(PDMS), which aggregates five sub-metrics: No At-fault Collision (NC), Drivable Area Compliance
+(DAC), Ego Progress (EP), Time-to-Collision (TTC), and Comfort (C). The PDMS is formulated
+as: PDMS = NC × DAC × (5 × EP + 5 × TTC + 2 × C)/12. For NAVSIM v2, four additional
+sub-metrics are introduced: Driving Direction Compliance (DDC), Traffic Lights Compliance (TL),
+Lane Keeping (LK), and Extended Comfort (EC). The overall score becomes the Extended PDMS
+(EPDMS): EPDMS = NC × DAC × DDC × TL × (5 × TTC + 2 × C + 5 × EP + 2 × LK + 2 × EC)/16.
+4.2
+
+Main Results
+
+In this part, we compare CoPhy against 18 recent methods spanning diverse paradigms, including pure
+imitation learning, reinforcement learning, and world model-based approaches. Both quantitative
+results and qualitative visualizations are provided to demonstrate the effectiveness of our framework.
+Quantitative Comparison. Tab. 1 benchmarks CoPhy against state-of-the-art methods on NAVSIM
+v1. CoPhy establishes a new state-of-the-art with a PDMS of 91.4, surpassing the second-best
+7
+
+Table 2: Quantitative comparison with state-of-the-art methods on NAVSIM v2 NAVTEST.
+Method
+
+Venue
+
+NC ↑
+
+DAC ↑
+
+DDC ↑
+
+TL ↑
+
+EP ↑
+
+TTC ↑
+
+LK ↑
+
+C↑
+
+EC ↑
+
+EPDMS ↑
+
+Transfuser [5]
+HydraMDP++ [19]
+DriveSuprim [59]
+ARTEMIS [8]
+DiffusionDrive [28]
+ResAD [65]
+
+CVPR’21
+
+CVPR’26
+
+96.9
+97.2
+97.5
+98.3
+98.2
+97.8
+
+89.9
+97.5
+96.5
+95.1
+95.9
+97.2
+
+97.8
+99.4
+99.4
+98.6
+99.4
+99.5
+
+99.7
+99.6
+99.6
+99.8
+99.8
+99.8
+
+87.1
+83.1
+88.4
+81.5
+87.5
+88.2
+
+95.4
+96.5
+96.6
+97.4
+97.3
+96.9
+
+92.7
+94.4
+95.5
+96.5
+96.8
+97.0
+
+98.3
+98.2
+98.3
+98.3
+98.3
+98.4
+
+87.2
+70.9
+77.0
+87.7
+88.2
+
+76.7
+81.4
+83.1
+83.1
+84.5
+85.5
+
+–
+
+99.3
+
+97.6
+
+97.3
+
+100
+
+83.6
+
+99.1
+
+96.8
+
+97.4
+
+80.0
+
+86.1
+
+Ours
+
+DiffusionDrive
+
+arXiv’25
+AAAI’26
+RAL’25
+CVPR’25
+
+CoPhy (Ours)
+
+DiffusionDrive
+GT trajectory
+
+WoTE
+Ego trajectory
+
+Ego
+
+Agent
+
+WoTE
+Pedestrian
+
+Ours
+Barrier
+
+Lane
+
+DiffusionDrive
+
+WoTE
+
+Ours
+
+Walkway
+
+Crossway
+
+Parkarea
+
+Figure 5: Qualitative comparisons with DiffusionDrive [28] and WoTE [23].
+DriveDPO by +1.4. Crucially, it leads all safety-critical sub-metrics (NC 99.0, DAC 98.2, TTC
+96.8). While CoPhy (85.3) trails the pure IL method DriveSuprim (86.7) in EP, this baseline exhibits
+pronounced safety degradations (NC 97.8, TTC 93.6). This discrepancy exposes a fundamental IL
+limitation: aggressively fitting expert progress without explicit safety constraints. Conversely, our
+cognitive-physical policy optimization, grounded in BEV world model rollouts, delivers robust safety
+guarantees fundamentally unattainable by pure imitation.
+We further evaluate on the more challenging NAVSIM v2 and report results in Tab. 2. CoPhy
+achieves the highest EPDMS of 86.1. Safety-critical metrics show even larger gains than v1: NC
+reaches 99.3 (+1.0) and TTC achieves 99.1 (+1.7). Notably, CoPhy attains a perfect TL score of 100,
+demonstrating that the cognitive reward effectively enforces traffic light compliance, a capability that
+purely physical metrics cannot capture. We note that EP (83.6) and EC (80.0) are lower than some
+baselines, reflecting a principled safety-progress trade-off consistent with the v1 findings.
+Qualitative Comparison. Fig. 5 validates the holistic advantages of CoPhy across three representative
+scenarios. In the leftmost panel, competing methods deviate at a fork, whereas CoPhy accurately
+maintains the precise route via the intention-aware cognitive prior distillation. The middle panel
+demonstrates our cognitive reward strictly enforcing semantic compliance, effectively preventing
+the illegal double-yellow line crossings observed in baseline models. Finally, the rightmost panel
+highlights our physical reward optimizing spatial precision, ensuring rigorous lane centering during
+complex turns where alternative approaches consistently drift.
+4.3
+
+Ablation Studies
+
+We ablate key components on NAVSIM v1 NAVTEST, examining VLM distillation, world model
+rollout horizon, and the dual cognitive-physical scores/rewards. Since the physical score relies on
+world model rollouts and serves as the foundation for trajectory selection, we adopt this minimal
+configuration (A0) as the baseline, achieving 87.1 PDMS in Tab. 3.
+VLM Distillation. The goal of VLM distillation (VD) is to transfer cognitive priors from the
+VLM into the BEV encoder of the driving baseline. As visualized in Fig. 6, before distillation the
+BEV features exhibit clear separation from VLM cognitive features, whereas after distillation they
+substantially overlap, confirming effective internalization of cognitive priors. This knowledge transfer
+brings notable performance gains: as shown in Tab. 3, adding VD (A1) improves PDMS from 87.1 to
+88.6 (+1.5), with a notable EP gain of +2.5 and DAC of +1.9. Moreover, we observe a significant
+gap of 2.4 PDMS between generic and driving-adapted InternVL3-8B [68] in Tab. 4, indicating that
+domain-specific VLM is essential for autonomous driving.
+Hierarchical Trajectory Selection. Building on A1 in Tab. 3, we add the cognitive score (CS)
+to form hierarchical trajectory selection that combines both physical and cognitive criteria (A2).
+This yields PDMS of 88.9 (+0.3), with the most notable gain in TTC (+1.5). This is because the
+cognitive score captures semantic cues such as yielding intentions and traffic priority, enabling earlier
+anticipation of potential conflicts and thus maintaining safer time margins to other agents.
+8
+
+Table 3: Ablation of key components on NAVSIM v1. VD: VLM
+
+Table 4: Effect of VLM fine-tuning.
+
+distillation, PS/CS: physical/cognitive score, PRL/CRL: RL with
+physical/cognitive reward.
+
+VLM
+
+NC ↑ DAC ↑ EP ↑ TTC ↑ C ↑
+
+w/o FT
+w/ FT
+
+97.6
+99.0
+
+PS VD CS CRL PRL NC ↑ DAC ↑ EP ↑ TTC ↑ C ↑ PDMS ↑
+A0
+A1
+A2
+B1
+B2
+B3
+
+✓
+✓
+✓
+✓
+✓
+✓
+
+✓
+✓
+✓
+✓
+✓
+
+✓
+✓
+✓
+✓
+
+✓
+✓
+
+✓
+✓
+
+98.2
+98.1
+98.3
+98.8
+98.9
+99.0
+
+95.7
+97.6
+97.2
+97.1
+97.8
+98.2
+
+81.1
+83.6
+83.2
+84.2
+85.0
+85.3
+
+94.2
+93.0
+94.5
+95.1
+95.8
+96.8
+
+99.9
+100
+100
+100
+100
+100
+
+87.1
+88.6
+88.9
+90.2
+90.7
+91.4
+
+95.9
+98.2
+
+83.7
+85.3
+
+94.4
+96.8
+
+99.9
+100
+
+PDMS ↑
+89.0
+91.4
+
+Table 5: Effect of rollout horizon K in
+the world model.
+K NC ↑ DAC ↑ EP ↑ TTC ↑ C ↑ PDMS ↑
+1
+2
+4
+
+98.9
+99.0
+98.8
+
+97.2
+98.2
+98.0
+
+84.8
+85.3
+85.4
+
+95.3
+96.8
+95.1
+
+100
+100
+100
+
+90.8
+91.4
+91.2
+
+VLM Cognitive Information
+BEV State before Cognition Distillation
+BEV State after Cognition Distillation
+
+Original
+trajectory
+Human-intent
+trajectory
+
+Human command: I‘m in a very urgent
+situation, accelerate and run the red light!
+
+Figure 6: t-SNE [49] of distillation.
+
+Human command: Stop following slowly,
+do not tailgate. Change lanes to an open lane.
+
+Figure 7: Intent-controllable driving via user commands.
+
+Cognitive-Physical Policy Optimization. Starting from the IL-only configuration (A2), incorporating RL rewards brings the largest performance leap. CRL alone (B1) contributes +1.3 PDMS,
+primarily improving NC (+0.5) and EP (+1.0) by aligning with cognitive intentions. PRL alone (B2)
+contributes +1.8 PDMS with gains in DAC (+0.6), EP (+1.8), and TTC (+1.3), demonstrating that
+physical reward effectively guides safer and more efficient driving. When both rewards are combined
+(B3), the full model achieves 91.4 PDMS (+2.5 over A2), confirming that the cognitive-physical
+policy optimization mechanism jointly optimizes physical safety and intent compliance.
+Rollout Horizon in World Model. The world model rolls out future BEV states over a fixed 4s
+horizon, with K controlling the number of intermediate steps (i.e., each step spans 4/K seconds).
+As shown in Tab. 5, K = 1 yields suboptimal safety metrics (DAC 97.2, TTC 95.3), as a single
+coarse prediction cannot capture mid-trajectory violations. K = 2 substantially improves all metrics,
+achieving the best PDMS (91.4). Further refining to K = 4 yields marginal EP gain but degrades
+NC and TTC, likely due to compounding auto-regressive prediction errors across more intermediate
+steps. Thus, K = 2 strikes the best balance between temporal granularity and error accumulation.
+4.4
+
+Intent-Controllable Driving
+
+Because VLM distillation releases the cognitive channel at inference time, CoPhy naturally supports
+a pluggable intent interface: the distilled feature can be replaced by an encoded user command,
+steering the policy without retraining. Fig. 7 illustrates this capability through two scenarios. In the
+left example, the ego vehicle is decelerating for a red light under the default policy. Upon receiving
+“I’m in an urgent situation, accelerate and run the red light!”, CoPhy overrides traffic rule compliance
+and accelerates through the intersection. In the right example, the ego vehicle is following a slow
+predecessor. Given “Do not tailgate. Change lanes to an open lane.”, it promptly executes a left
+lane change. Notably, during intent-driven execution the world model rollout continues to enforce
+physical safety constraints, ensuring user commands are fulfilled without collisions. This confirms
+CoPhy functions as a controllable yet safe system capable of interpreting diverse human instructions.
+
+5
+
+Conclusion
+
+We have presented CoPhy, a cognitive-physical learning framework for end-to-end autonomous
+driving. By distilling VLM priors into BEV representations, rolling out future states via an explicit
+world model, and optimizing the policy through GRPO with dual cognitive-physical rewards, CoPhy
+has unified semantic understanding, physical safety reasoning, and closed-loop exploration in a single
+architecture. Experiments on NAVSIM v1 and v2 have validated the effectiveness of each component,
+with CoPhy achieving state-of-the-art performance across both benchmarks while enabling intentcontrollable driving via language commands. We hope this work inspires further research on bridging
+high-level cognition with low-level physical grounding in safety-critical autonomous systems.
+9
+
+References
+[1] Holger Caesar, Juraj Kabzan, Kok Seang Tan, Whye Kit Fong, Eric Wolff, Alex Lang, Luke
+Fletcher, Oscar Beijbom, and Sammy Omari. nuplan: A closed-loop ml-based planning
+benchmark for autonomous vehicles. arXiv preprint arXiv:2106.11810, 2021.
+[2] Wei Cao, Marcel Hallgarten, Tianyu Li, Daniel Dauner, Xunjiang Gu, Caojun Wang, Yakov
+Miron, Marco Aiello, Hongyang Li, Igor Gilitschenski, et al. Pseudo-simulation for autonomous
+driving.
+[3] Li Chen, Penghao Wu, Kashyap Chitta, Bernhard Jaeger, Andreas Geiger, and Hongyang Li.
+End-to-end autonomous driving: Challenges and frontiers. TPAMI, 46(12):10164–10183, 2024.
+[4] Shaoyu Chen, Bo Jiang, Hao Gao, Bencheng Liao, Qing Xu, Qian Zhang, Chang Huang, Wenyu
+Liu, and Xinggang Wang. Vadv2: End-to-end vectorized autonomous driving via probabilistic
+planning. ICLR, 2026.
+[5] Kashyap Chitta, Aditya Prakash, Bernhard Jaeger, Zehao Yu, Katrin Renz, and Andreas Geiger.
+Transfuser: Imitation with transformer-based sensor fusion for autonomous driving. TPAMI,
+45(11):12878–12895, 2022.
+[6] OpenScene Contributors. Openscene: The largest up-to-date 3d occupancy prediction benchmark in autonomous driving. https://github.com/OpenDriveLab/OpenScene, 2023.
+[7] Daniel Dauner, Marcel Hallgarten, Tianyu Li, Xinshuo Weng, Zhiyu Huang, Zetong Yang,
+Hongyang Li, Igor Gilitschenski, Boris Ivanovic, Marco Pavone, et al. Navsim: Data-driven
+non-reactive autonomous vehicle simulation and benchmarking. NeurIPS, 37:28706–28719,
+2024.
+[8] Renju Feng, Ning Xi, Duanfeng Chu, Rukang Wang, Zejian Deng, Anzheng Wang, Liping Lu,
+Jinxiang Wang, and Yanjun Huang. Artemis: Autoregressive end-to-end trajectory planning
+with mixture of experts for autonomous driving. RAL, 11(1):226–233, 2025.
+[9] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu,
+Ruoyu Zhang, Shirong Ma, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in
+llms via reinforcement learning. arXiv preprint arXiv:2501.12948, 2025.
+[10] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang
+Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. ICLR, 1(2):3,
+2022.
+[11] Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima, Xizhou Zhu, Siqi Chai, Senyao
+Du, Tianwei Lin, Wenhai Wang, et al. Planning-oriented autonomous driving. In CVPR, pages
+17853–17862, 2023.
+[12] Jyh-Jing Hwang, Runsheng Xu, Hubert Lin, Wei-Chih Hung, Jingwei Ji, Kristy Choi, Di Huang,
+Tong He, Paul Covington, Benjamin Sapp, et al. Emma: End-to-end multimodal model for
+autonomous driving. arXiv preprint arXiv:2410.23262, 2024.
+[13] Anqing Jiang, Yu Gao, Yiru Wang, Zhigang Sun, Shuo Wang, Yuwen Heng, Hao Sun, Shichen
+Tang, Lijuan Zhu, Jinhao Chai, et al. Irl-vla: Training an vision-language-action policy via
+reward world model. arXiv preprint arXiv:2508.06571, 2025.
+[14] Bo Jiang, Shaoyu Chen, Bencheng Liao, Xingyu Zhang, Wei Yin, Qian Zhang, Chang Huang,
+Wenyu Liu, and Xinggang Wang. Senna: Bridging large vision-language models and end-to-end
+autonomous driving. arXiv preprint arXiv:2410.22313, 2024.
+[15] Bo Jiang, Shaoyu Chen, Qing Xu, Bencheng Liao, Jiajie Chen, Helong Zhou, Qian Zhang,
+Wenyu Liu, Chang Huang, and Xinggang Wang. Vad: Vectorized scene representation for
+efficient autonomous driving. In ICCV, pages 8340–8350, 2023.
+[16] Bo Jiang, Shaoyu Chen, Qian Zhang, Wenyu Liu, and Xinggang Wang. Alphadrive: Unleashing
+the power of vlms in autonomous driving via reinforcement learning and reasoning. arXiv
+preprint arXiv:2503.07608, 2025.
+10
+
+[17] Bu Jin, Xinyu Liu, Yupeng Zheng, Pengfei Li, Hao Zhao, Tong Zhang, Yuhang Zheng, Guyue
+Zhou, and Jingjing Liu. Adapt: Action-aware driving caption transformer. In ICRA, pages
+7554–7561. IEEE, 2023.
+[18] Derun Li, Jianwei Ren, Yue Wang, Xin Wen, Pengxiang Li, Leimeng Xu, Kun Zhan, Zhongpu
+Xia, Peng Jia, Xianpeng Lang, et al. Finetuning generative trajectory model with reinforcement
+learning from human feedback. arXiv e-prints, pages arXiv–2503, 2025.
+[19] Kailin Li, Zhenxin Li, Shiyi Lan, Yuan Xie, Zhizhong Zhang, Jiayi Liu, Zuxuan Wu, Zhiding
+Yu, and Jose M Alvarez. Hydra-mdp++: Advancing end-to-end driving via expert-guided
+hydra-distillation. arXiv preprint arXiv:2503.12820, 2025.
+[20] Peizheng Li, Zhenghao Zhang, David Holtz, Hang Yu, Yutong Yang, Yuzhi Lai, Rui Song,
+Andreas Geiger, and Andreas Zell. Spacedrive: Infusing spatial awareness into vlm-based
+autonomous driving. arXiv preprint arXiv:2512.10719, 2, 2025.
+[21] Yingyan Li, Lue Fan, Jiawei He, Yuqi Wang, Yuntao Chen, Zhaoxiang Zhang, and Tieniu Tan.
+Enhancing end-to-end autonomous driving with latent world model. ICLR, 2025.
+[22] Yingyan Li, Shuyao Shang, Weisong Liu, Bing Zhan, Haochen Wang, Yuqi Wang, Yuntao Chen,
+Xiaoman Wang, Yasong An, Chufeng Tang, et al. Drivevla-w0: World models amplify data
+scaling law in autonomous driving. ICLR, 2026.
+[23] Yingyan Li, Yuqi Wang, Yang Liu, Jiawei He, Lue Fan, and Zhaoxiang Zhang. End-to-end
+driving with online trajectory evaluation via bev world model. In ICCV, pages 27137–27146,
+2025.
+[24] Yongkang Li, Kaixin Xiong, Xiangyu Guo, Fang Li, Sixu Yan, Gangwei Xu, Lijun Zhou, Long
+Chen, Haiyang Sun, Bing Wang, et al. Recogdrive: A reinforced cognitive framework for
+end-to-end autonomous driving. ICLR, 2026.
+[25] Yongkang Li, Lijun Zhou, Sixu Yan, Bencheng Liao, Tianyi Yan, Kaixin Xiong, Long Chen,
+Hongwei Xie, Bing Wang, Guang Chen, et al. Unidrivevla: Unifying understanding, perception,
+and action planning for autonomous driving. arXiv preprint arXiv:2604.02190, 2026.
+[26] Yue Li, Meng Tian, Dechang Zhu, Jiangtong Zhu, Zhenyu Lin, Zhiwei Xiong, and Xinhai Zhao.
+Drive-r1: Bridging reasoning and planning in vlms for autonomous driving with reinforcement
+learning. In AAAI, volume 40, pages 6708–6716, 2026.
+[27] Zhenxin Li, Kailin Li, Shihao Wang, Shiyi Lan, Zhiding Yu, Yishen Ji, Zhiqi Li, Ziyue Zhu,
+Jan Kautz, Zuxuan Wu, et al. Hydra-mdp: End-to-end multimodal planning with multi-target
+hydra-distillation. arXiv preprint arXiv:2406.06978, 2024.
+[28] Bencheng Liao, Shaoyu Chen, Haoran Yin, Bo Jiang, Cheng Wang, Sixu Yan, Xinbang Zhang,
+Xiangyu Li, Ying Zhang, Qian Zhang, et al. Diffusiondrive: Truncated diffusion model for
+end-to-end autonomous driving. In CVPR, pages 12037–12047, 2025.
+[29] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Dollár. Focal loss for dense
+object detection. In ICCV, pages 2980–2988, 2017.
+[30] Wei Liu, Jiyuan Zhang, Binxiong Zheng, Yufeng Hu, Yingzhan Lin, and Zengfeng Zeng.
+X-driver: Explainable autonomous driving with vision-language models. arXiv preprint
+arXiv:2505.05098, 2025.
+[31] Ilya Loshchilov and Frank Hutter. Sgdr: Stochastic gradient descent with warm restarts. In
+ICLR, 2017.
+[32] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. ICLR, 2018.
+[33] Yuechen Luo, Fang Li, Shaoqing Xu, Zhiyi Lai, Lei Yang, Qimao Chen, Ziang Luo, Zixun Xie,
+Shengyin Jiang, Jiaxin Liu, et al. Adathinkdrive: Adaptive thinking via reinforcement learning
+for autonomous driving. arXiv preprint arXiv:2509.13769, 2025.
+[34] Srikanth Malla, Chiho Choi, Isht Dwivedi, Joon Hee Choi, and Jiachen Li. Drama: Joint risk
+localization and captioning in driving. In WACV, pages 1043–1052, 2023.
+11
+
+[35] Ana-Maria Marcu, Long Chen, Jan Hünermann, Alice Karnsund, Benoit Hanotte, Prajwal
+Chidananda, Saurabh Nair, Vijay Badrinarayanan, Alex Kendall, Jamie Shotton, et al. Lingoqa:
+Visual question answering for autonomous driving. In ECCV, pages 252–269. Springer, 2024.
+[36] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Representation learning with contrastive
+predictive coding. arXiv preprint arXiv:1807.03748, 2018.
+[37] SungYeon Park, MinJae Lee, JiHyuk Kang, Hahyeon Choi, Yoonah Park, Juhwan Cho, Adam
+Lee, and DongKyu Kim. Vlaad: Vision and language assistant for autonomous driving. In
+CVPR, pages 980–987, 2024.
+[38] Aditya Prakash, Kashyap Chitta, and Andreas Geiger. Multi-modal fusion transformer for
+end-to-end autonomous driving. In CVPR, pages 7077–7087, 2021.
+[39] Tianwen Qian, Jingjing Chen, Linhai Zhuo, Yang Jiao, and Yu-Gang Jiang. Nuscenes-qa: A
+multi-modal visual question answering benchmark for autonomous driving scenario. In AAAI,
+volume 38, pages 4542–4550, 2024.
+[40] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In ICLR, pages 8748–8763. PMLR, 2021.
+[41] Katrin Renz, Long Chen, Elahe Arani, and Oleg Sinavski. Simlingo: Vision-only closed-loop
+autonomous driving with language-action alignment. In CVPR, pages 11993–12003, 2025.
+[42] Luke Rowe, Rodrigue de Schaetzen, Roger Girgis, Christopher Pal, and Liam Paull. Poutine:
+Vision-language-trajectory pre-training and reinforcement learning post-training enable robust
+end-to-end autonomous driving. arXiv preprint arXiv:2506.11234, 2025.
+[43] Shuyao Shang, Yuntao Chen, Yuqi Wang, Yingyan Li, and Zhaoxiang Zhang. Drivedpo: Policy
+learning via safety dpo for end-to-end autonomous driving. NeurIPS, 2025.
+[44] Hao Shao, Yuxuan Hu, Letian Wang, Guanglu Song, Steven L Waslander, Yu Liu, and Hongsheng Li. Lmdrive: Closed-loop end-to-end driving with large language models. In CVPR,
+pages 15120–15130, 2024.
+[45] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang,
+Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical
+reasoning in open language models. arXiv preprint arXiv:2402.03300, 2024.
+[46] Zihao Sheng, Xin Ye, Jingru Luo, Sikai Chen, and Liu Ren. Explorevla: Dense world modeling
+and exploration for end-to-end autonomous driving. arXiv preprint arXiv:2604.02714, 2026.
+[47] Chonghao Sima, Katrin Renz, Kashyap Chitta, Li Chen, Hanxue Zhang, Chengen Xie, Jens
+Beißwenger, Ping Luo, Andreas Geiger, and Hongyang Li. Drivelm: Driving with graph visual
+question answering. In ECCV, pages 256–274. Springer, 2024.
+[48] Chen Tang, Ben Abbatematteo, Jiaheng Hu, Rohan Chandra, Roberto Martín-Martín, and Peter
+Stone. Deep reinforcement learning for robotics: A survey of real-world successes. Annual
+Review of Control, Robotics, and Autonomous Systems, 8(1):153–188, 2025.
+[49] Laurens Van der Maaten and Geoffrey Hinton. Visualizing data using t-sne. JMLR, 9(11), 2008.
+[50] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. NeurIPS, 30, 2017.
+[51] Yan Wang, Wenjie Luo, Junjie Bai, Yulong Cao, Tong Che, Ke Chen, Yuxiao Chen, Jenna Diamond, Yifan Ding, Wenhao Ding, et al. Alpamayo-r1: Bridging reasoning and action prediction
+for generalizable autonomous driving in the long tail. arXiv preprint arXiv:2511.00088, 2025.
+[52] Xinshuo Weng, Boris Ivanovic, Yan Wang, Yue Wang, and Marco Pavone. Para-drive: Parallelized architecture for real-time autonomous driving. In CVPR, pages 15449–15458, 2024.
+12
+
+[53] Tianze Xia, Yongkang Li, Lijun Zhou, Jingfeng Yao, Kaixin Xiong, Haiyang Sun, Bing Wang,
+Kun Ma, Guang Chen, Hangjun Ye, et al. Drivelaw: Unifying planning and video generation in
+a latent driving world. CVPR, 2026.
+[54] Zebin Xing, Xingyu Zhang, Yang Hu, Bo Jiang, Tong He, Qian Zhang, Xiaoxiao Long, and Wei
+Yin. Goalflow: Goal-driven flow matching for multimodal trajectories generation in end-to-end
+autonomous driving. In CVPR, pages 1602–1611, 2025.
+[55] Mingwang Xu, Jiahao Cui, Feipeng Cai, Hanlin Shang, Zhihao Zhu, Shan Luan, Yifang Xu,
+Neng Zhang, Yaoyi Li, Jia Cai, et al. Wam-diff: A masked diffusion vla framework with moe
+and online reinforcement learning for autonomous driving. arXiv preprint arXiv:2512.11872,
+2025.
+[56] Zhenhua Xu, Yujia Zhang, Enze Xie, Zhen Zhao, Yong Guo, Kwan-Yee K Wong, Zhenguo
+Li, and Hengshuang Zhao. Drivegpt4: Interpretable end-to-end autonomous driving via large
+language model. RAL, 9(10):8186–8193, 2024.
+[57] Tianyi Yan, Tao Tang, Xingtai Gui, Yongkang Li, Jiasen Zhesng, Weiyao Huang, Lingdong
+Kong, Wencheng Han, Xia Zhou, Xueyang Zhang, et al. Ad-r1: Closed-loop reinforcement
+learning for end-to-end autonomous driving with impartial world models. arXiv preprint
+arXiv:2511.20325, 2025.
+[58] Zhenjie Yang, Xiaosong Jia, Qifeng Li, Xue Yang, Maoqing Yao, and Junchi Yan. Raw2drive:
+Reinforcement learning with aligned world models for end-to-end autonomous driving (in carla
+v2). arXiv preprint arXiv:2505.16394, 2025.
+[59] Wenhao Yao, Zhenxin Li, Shiyi Lan, Zi Wang, Xinglong Sun, Jose M Alvarez, and Zuxuan Wu.
+Drivesuprim: Towards precise trajectory selection for end-to-end planning. In AAAI, volume 40,
+pages 11910–11918, 2026.
+[60] Chengran Yuan, Zhanqi Zhang, Jiawei Sun, Shuo Sun, Zefan Huang, Christina Dao Wen Lee,
+Dongen Li, Yuhang Han, Anthony Wong, Keng Peng Tee, et al. Drama: An efficient end-to-end
+motion planner for autonomous driving with mamba. arXiv preprint arXiv:2408.03601, 2024.
+[61] Kaiwen Zhang, Zhenyu Tang, Xiaotao Hu, Xingang Pan, Xiaoyang Guo, Yuan Liu, Jingwei
+Huang, Li Yuan, Qian Zhang, Xiao-Xiao Long, et al. Epona: Autoregressive diffusion world
+model for autonomous driving. In ICCV, pages 27220–27230, 2025.
+[62] Jingyuan Zhao, Yuyan Wu, Rui Deng, Susu Xu, Jinpeng Gao, and Andrew Burke. A survey of
+autonomous driving from a deep learning perspective. ACM Computing Surveys, 57(10):1–60,
+2025.
+[63] Wenzhao Zheng, Ruiqi Song, Xianda Guo, Chenming Zhang, and Long Chen. Genad: Generative end-to-end autonomous driving. In ECCV, pages 87–104. Springer, 2024.
+[64] Yupeng Zheng, Pengxuan Yang, Zebin Xing, Qichao Zhang, Yuhang Zheng, Yinfeng Gao,
+Pengfei Li, Teng Zhang, Zhongpu Xia, Peng Jia, et al. World4drive: End-to-end autonomous
+driving via intention-aware physical latent world model. In ICCV, pages 28632–28642, 2025.
+[65] Zhiyu Zheng, Shaoyu Chen, Haoran Yin, Xinbang Zhang, Jialv Zou, Xinggang Wang, Qian
+Zhang, and Lefei Zhang. Resad: Normalized residual trajectory modeling for end-to-end
+autonomous driving. CVPR, 2026.
+[66] Xingcheng Zhou, Xuyuan Han, Feng Yang, Yunpu Ma, Volker Tresp, and Alois Knoll. Opendrivevla: Towards end-to-end autonomous driving with large vision language action model. In
+AAAI, volume 40, pages 13782–13790, 2026.
+[67] Zewei Zhou, Tianhui Cai, Seth Z Zhao, Yun Zhang, Zhiyu Huang, Bolei Zhou, and Jiaqi Ma.
+Autovla: A vision-language-action model for end-to-end autonomous driving with adaptive
+reasoning and reinforcement fine-tuning. NeurIPS, 2025.
+[68] Jinguo Zhu, Weiyun Wang, Zhe Chen, Zhaoyang Liu, Shenglong Ye, Lixin Gu, Hao Tian,
+Yuchen Duan, Weijie Su, Jie Shao, et al. Internvl3: Exploring advanced training and test-time
+recipes for open-source multimodal models. arXiv preprint arXiv:2504.10479, 2025.
+13
+
+

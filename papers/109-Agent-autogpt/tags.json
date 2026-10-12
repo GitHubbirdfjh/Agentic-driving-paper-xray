@@ -1,0 +1,1002 @@
+[
+  {
+    "name": "v0.6.44",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.6.44",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.6.44",
+    "commit": {
+      "sha": "dac99694fe0057cfbaed8200c83331a87868b766",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/dac99694fe0057cfbaed8200c83331a87868b766"
+    },
+    "node_id": "REF_kwDOJKSTjLFyZWZzL3RhZ3MvdjAuNi40NA"
+  },
+  {
+    "name": "v0.4.7",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.7",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.7",
+    "commit": {
+      "sha": "bb3a06d54b368b52994362adca3691fb2b98c8d5",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/bb3a06d54b368b52994362adca3691fb2b98c8d5"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC43"
+  },
+  {
+    "name": "v0.4.6",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.6",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.6",
+    "commit": {
+      "sha": "ec47a318bc3e63f585192d66e6d2f0494a2999fd",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/ec47a318bc3e63f585192d66e6d2f0494a2999fd"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC42"
+  },
+  {
+    "name": "v0.4.5",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.5",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.5",
+    "commit": {
+      "sha": "d76317fbf38945df2aa65e6d1fc26acae3739ead",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/d76317fbf38945df2aa65e6d1fc26acae3739ead"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC41"
+  },
+  {
+    "name": "v0.4.4",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.4",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.4",
+    "commit": {
+      "sha": "2240033b07d68beb1162e3c2f822e576d2e6e44b",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/2240033b07d68beb1162e3c2f822e576d2e6e44b"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC40"
+  },
+  {
+    "name": "v0.4.3",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.3",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.3",
+    "commit": {
+      "sha": "80151dd6b2870dc6f91aafadb3a451f2e440a3ba",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/80151dd6b2870dc6f91aafadb3a451f2e440a3ba"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC4z"
+  },
+  {
+    "name": "v0.4.3-alpha",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.3-alpha",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.3-alpha",
+    "commit": {
+      "sha": "5d5a35e38379bd0faaee63ecca81a9e66854d380",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/5d5a35e38379bd0faaee63ecca81a9e66854d380"
+    },
+    "node_id": "REF_kwDOJKSTjLZyZWZzL3RhZ3MvdjAuNC4zLWFscGhh"
+  },
+  {
+    "name": "v0.4.2",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.2",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.2",
+    "commit": {
+      "sha": "1fead303a0955d60730f1c46ac33321487326003",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/1fead303a0955d60730f1c46ac33321487326003"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC4y"
+  },
+  {
+    "name": "v0.4.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.1",
+    "commit": {
+      "sha": "abb397e442e84815876541b12bfcded027e31bab",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/abb397e442e84815876541b12bfcded027e31bab"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC4x"
+  },
+  {
+    "name": "v0.4.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.4.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.4.0",
+    "commit": {
+      "sha": "25a7957bb801cc2ffd088ac81269fe96c5696b23",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/25a7957bb801cc2ffd088ac81269fe96c5696b23"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuNC4w"
+  },
+  {
+    "name": "v0.3.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.3.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.3.1",
+    "commit": {
+      "sha": "3d494f1032f77884f348ba0e89cfe0fd5022f9f4",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/3d494f1032f77884f348ba0e89cfe0fd5022f9f4"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMy4x"
+  },
+  {
+    "name": "v0.3.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.3.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.3.0",
+    "commit": {
+      "sha": "d8f5cdbb506495f262c641835d1594e2b8790266",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/d8f5cdbb506495f262c641835d1594e2b8790266"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMy4w"
+  },
+  {
+    "name": "v0.2.2",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.2.2",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.2.2",
+    "commit": {
+      "sha": "c9bf95edf4ab93b7912b7c9240e625b37a64f722",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c9bf95edf4ab93b7912b7c9240e625b37a64f722"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMi4y"
+  },
+  {
+    "name": "v0.2.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.2.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.2.1",
+    "commit": {
+      "sha": "97d62cc16bf45fcd406efeb33d042ebd58c24670",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/97d62cc16bf45fcd406efeb33d042ebd58c24670"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMi4x"
+  },
+  {
+    "name": "v0.2.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.2.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.2.0",
+    "commit": {
+      "sha": "60b2b61b52c263dba25a6c33623561273e890229",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/60b2b61b52c263dba25a6c33623561273e890229"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMi4w"
+  },
+  {
+    "name": "v0.1.3",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.1.3",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.1.3",
+    "commit": {
+      "sha": "638c956f72e071f10d4b2fa8db3ff2e9def4ca77",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/638c956f72e071f10d4b2fa8db3ff2e9def4ca77"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMS4z"
+  },
+  {
+    "name": "v0.1.2",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.1.2",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.1.2",
+    "commit": {
+      "sha": "2a7bc5cb5c231a454b5c8943f752297c5688ee20",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/2a7bc5cb5c231a454b5c8943f752297c5688ee20"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMS4y"
+  },
+  {
+    "name": "v0.1.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.1.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.1.1",
+    "commit": {
+      "sha": "d43e2aedaa9b1e1b37bd4ab202b97da38525a0d0",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/d43e2aedaa9b1e1b37bd4ab202b97da38525a0d0"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMS4x"
+  },
+  {
+    "name": "v0.1.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/v0.1.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/v0.1.0",
+    "commit": {
+      "sha": "16b37fff1d65a7d998c39aeab9764973d76ea731",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/16b37fff1d65a7d998c39aeab9764973d76ea731"
+    },
+    "node_id": "REF_kwDOJKSTjLByZWZzL3RhZ3MvdjAuMS4w"
+  },
+  {
+    "name": "preview-seed-fixture",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/preview-seed-fixture",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/preview-seed-fixture",
+    "commit": {
+      "sha": "72921384e2e9b438a90d4927bd0f4cc421b01f17",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/72921384e2e9b438a90d4927bd0f4cc421b01f17"
+    },
+    "node_id": "REF_kwDOJKSTjL5yZWZzL3RhZ3MvcHJldmlldy1zZWVkLWZpeHR1cmU"
+  },
+  {
+    "name": "autogpt-v0.5.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-v0.5.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-v0.5.1",
+    "commit": {
+      "sha": "26324f29849967fa72c207da929af612f1740669",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/26324f29849967fa72c207da929af612f1740669"
+    },
+    "node_id": "REF_kwDOJKSTjLhyZWZzL3RhZ3MvYXV0b2dwdC12MC41LjE"
+  },
+  {
+    "name": "autogpt-v0.5.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-v0.5.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-v0.5.0",
+    "commit": {
+      "sha": "af3ebdf6af1704e42254ad07791bf7e1642c43d3",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/af3ebdf6af1704e42254ad07791bf7e1642c43d3"
+    },
+    "node_id": "REF_kwDOJKSTjLhyZWZzL3RhZ3MvYXV0b2dwdC12MC41LjA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.8.3",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.8.3",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.8.3",
+    "commit": {
+      "sha": "73cae306b4f6b197d2e1eaaa3162c326ec0ab076",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/73cae306b4f6b197d2e1eaaa3162c326ec0ab076"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuOC4z"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.8.2",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.8.2",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.8.2",
+    "commit": {
+      "sha": "bf6e0c33d0f615983082ed7a5343dbbfc25adaab",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/bf6e0c33d0f615983082ed7a5343dbbfc25adaab"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuOC4y"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.8.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.8.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.8.1",
+    "commit": {
+      "sha": "ead8f943f981ea650285eee3020c8ff0e7eda94d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/ead8f943f981ea650285eee3020c8ff0e7eda94d"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuOC4x"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.8.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.8.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.8.0",
+    "commit": {
+      "sha": "cdc8611c83a2b5270499c3f93437bfcab2d272c4",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/cdc8611c83a2b5270499c3f93437bfcab2d272c4"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuOC4w"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.7.4",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.7.4",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.7.4",
+    "commit": {
+      "sha": "bb917df100c440dbd8ee85813914c0c08769308a",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/bb917df100c440dbd8ee85813914c0c08769308a"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNy40"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.7.3",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.7.3",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.7.3",
+    "commit": {
+      "sha": "f49bcca95ed327396d8ebdd0bdf7810de482ac1a",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/f49bcca95ed327396d8ebdd0bdf7810de482ac1a"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNy4z"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.7.2",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.7.2",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.7.2",
+    "commit": {
+      "sha": "65e80c71591461d77b19fe64c939dd768ab455ef",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/65e80c71591461d77b19fe64c939dd768ab455ef"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNy4y"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.7.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.7.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.7.1",
+    "commit": {
+      "sha": "9c8bb5550f446ba5d3046b78896578742495b3cf",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/9c8bb5550f446ba5d3046b78896578742495b3cf"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNy4x"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.7.0",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.7.0",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.7.0",
+    "commit": {
+      "sha": "ce6ab7b074a625ce591c1f41ef17276c8093087d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/ce6ab7b074a625ce591c1f41ef17276c8093087d"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNy4w"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.70",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.70",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.70",
+    "commit": {
+      "sha": "c45b9e35817a2037fadeaa47924cf41681573c09",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c45b9e35817a2037fadeaa47924cf41681573c09"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi43MA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.69",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.69",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.69",
+    "commit": {
+      "sha": "483c0fc8d8e950b895fee4efac5ef0f50d659754",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/483c0fc8d8e950b895fee4efac5ef0f50d659754"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42OQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.68",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.68",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.68",
+    "commit": {
+      "sha": "f244390da74f4087ad94f34de3b938639b31d6c3",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/f244390da74f4087ad94f34de3b938639b31d6c3"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42OA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.67",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.67",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.67",
+    "commit": {
+      "sha": "500a5cafb446e05e0e4182f95a6a2a483f81b502",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/500a5cafb446e05e0e4182f95a6a2a483f81b502"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42Nw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.66",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.66",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.66",
+    "commit": {
+      "sha": "c807c3690060d8603338758219f5dfef7895cbc4",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c807c3690060d8603338758219f5dfef7895cbc4"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42Ng"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.65",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.65",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.65",
+    "commit": {
+      "sha": "e2711b1748bdc3fe702ab4e44c6a11df98458c53",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/e2711b1748bdc3fe702ab4e44c6a11df98458c53"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42NQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.64",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.64",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.64",
+    "commit": {
+      "sha": "150514f0502d96b0ff0b977168442bd8936e06c0",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/150514f0502d96b0ff0b977168442bd8936e06c0"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42NA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.63",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.63",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.63",
+    "commit": {
+      "sha": "5b603c0bd04c8db2afc12098d5af2d391b7816e7",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/5b603c0bd04c8db2afc12098d5af2d391b7816e7"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42Mw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.62",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.62",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.62",
+    "commit": {
+      "sha": "c194ab1b71839ef1fdb769f8343249c9e4f86abf",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c194ab1b71839ef1fdb769f8343249c9e4f86abf"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42Mg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.61",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.61",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.61",
+    "commit": {
+      "sha": "aa1d12ba23e3c21f9c0bad2c3bae6dfe1b2cafd5",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/aa1d12ba23e3c21f9c0bad2c3bae6dfe1b2cafd5"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42MQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.60",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.60",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.60",
+    "commit": {
+      "sha": "3073d443af3f1268394d4c4680cf1e96701f519b",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/3073d443af3f1268394d4c4680cf1e96701f519b"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42MA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.59",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.59",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.59",
+    "commit": {
+      "sha": "46e5795a49a4ef5fead2cdb02838094e8637d177",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/46e5795a49a4ef5fead2cdb02838094e8637d177"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41OQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.58",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.58",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.58",
+    "commit": {
+      "sha": "c08b9774dc90f45f0958c6c0d9e9538d094a08af",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c08b9774dc90f45f0958c6c0d9e9538d094a08af"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41OA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.57",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.57",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.57",
+    "commit": {
+      "sha": "6fcbe95645c337115045629fc3bd58a0452b94c6",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/6fcbe95645c337115045629fc3bd58a0452b94c6"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41Nw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.56",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.56",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.56",
+    "commit": {
+      "sha": "ab3221a2511a0690fcb2013d942ff0819b27a279",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/ab3221a2511a0690fcb2013d942ff0819b27a279"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41Ng"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.55",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.55",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.55",
+    "commit": {
+      "sha": "c9fa6bcd629bf0b5e817a09e7441cd73890a5fde",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c9fa6bcd629bf0b5e817a09e7441cd73890a5fde"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41NQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.54",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.54",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.54",
+    "commit": {
+      "sha": "ef477ae4b9ea1d6f06807306ed0fde80dbd615a3",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/ef477ae4b9ea1d6f06807306ed0fde80dbd615a3"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41NA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.53",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.53",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.53",
+    "commit": {
+      "sha": "866563ad25a663b5960b369df3c4cca0146755dc",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/866563ad25a663b5960b369df3c4cca0146755dc"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41Mw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.52",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.52",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.52",
+    "commit": {
+      "sha": "f01f6686744e1913334641bd2242fc0ed2a1bbc6",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/f01f6686744e1913334641bd2242fc0ed2a1bbc6"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41Mg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.51",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.51",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.51",
+    "commit": {
+      "sha": "c51dc7ad99265f68d9ea6c5b3a04a955dc06f575",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c51dc7ad99265f68d9ea6c5b3a04a955dc06f575"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41MQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.50",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.50",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.50",
+    "commit": {
+      "sha": "b342bfa3baaaa48b88fecef9edf8f8592059b0e7",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/b342bfa3baaaa48b88fecef9edf8f8592059b0e7"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41MA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.49",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.49",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.49",
+    "commit": {
+      "sha": "b9aac420561ac8942583088f825ed03f8c6dc94e",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/b9aac420561ac8942583088f825ed03f8c6dc94e"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40OQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.48",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.48",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.48",
+    "commit": {
+      "sha": "062fe1aa709217136b896c8b950e0f04435afb32",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/062fe1aa709217136b896c8b950e0f04435afb32"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40OA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.47",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.47",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.47",
+    "commit": {
+      "sha": "4df5b7bde7ba548364b75ddce7a91ef6d5ecf5e4",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/4df5b7bde7ba548364b75ddce7a91ef6d5ecf5e4"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40Nw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.46",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.46",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.46",
+    "commit": {
+      "sha": "7e5b84cc5c963979e3e7c35d768a155c70bd643e",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/7e5b84cc5c963979e3e7c35d768a155c70bd643e"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40Ng"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.45",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.45",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.45",
+    "commit": {
+      "sha": "27b72062f2768fb59a6dd609374220f04c9fff0c",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/27b72062f2768fb59a6dd609374220f04c9fff0c"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40NQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.43",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.43",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.43",
+    "commit": {
+      "sha": "5d0cd88d9824edea08aead02f95802a4244a95a6",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/5d0cd88d9824edea08aead02f95802a4244a95a6"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40Mw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.42",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.42",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.42",
+    "commit": {
+      "sha": "3b09a94e3f9a1765b3697e0cec689fb382637860",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/3b09a94e3f9a1765b3697e0cec689fb382637860"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40Mg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.41",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.41",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.41",
+    "commit": {
+      "sha": "fc8434fb30fe67055b388c8d1e1cbbe406760ea0",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/fc8434fb30fe67055b388c8d1e1cbbe406760ea0"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40MQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.40",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.40",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.40",
+    "commit": {
+      "sha": "152e747ea630686110fe086e187ee877b7f42139",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/152e747ea630686110fe086e187ee877b7f42139"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40MA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.39",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.39",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.39",
+    "commit": {
+      "sha": "233ff40a24dd90952e6f0eb34ef714d40579eabf",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/233ff40a24dd90952e6f0eb34ef714d40579eabf"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zOQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.38",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.38",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.38",
+    "commit": {
+      "sha": "ec6f593edc6c668814a48e8bcd88e0b8950278f2",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/ec6f593edc6c668814a48e8bcd88e0b8950278f2"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zOA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.37",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.37",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.37",
+    "commit": {
+      "sha": "8b3a741f60976c08ff67f75aadf14cc77e39640e",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/8b3a741f60976c08ff67f75aadf14cc77e39640e"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zNw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.36",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.36",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.36",
+    "commit": {
+      "sha": "5559d978d75ce308c9ad434fc91f1480c4e636e6",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/5559d978d75ce308c9ad434fc91f1480c4e636e6"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zNg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.35",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.35",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.35",
+    "commit": {
+      "sha": "e6fb649ced0cfa9243e72c8d121b4955188e6fc4",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/e6fb649ced0cfa9243e72c8d121b4955188e6fc4"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zNQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.34",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.34",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.34",
+    "commit": {
+      "sha": "e2a9923f3056157b89f6659bb1a201e301eff0f7",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/e2a9923f3056157b89f6659bb1a201e301eff0f7"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zNA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.33",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.33",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.33",
+    "commit": {
+      "sha": "9469b9e2eb4504a75147f5026d83790f219e64df",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/9469b9e2eb4504a75147f5026d83790f219e64df"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zMw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.32",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.32",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.32",
+    "commit": {
+      "sha": "73603a8ce54418bc4eba730429854bf072a65f7f",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/73603a8ce54418bc4eba730429854bf072a65f7f"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zMg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.31",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.31",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.31",
+    "commit": {
+      "sha": "18bbd8e5722ee4e92c0ce04292f8b67fbc5a68e3",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/18bbd8e5722ee4e92c0ce04292f8b67fbc5a68e3"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zMQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.30",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.30",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.30",
+    "commit": {
+      "sha": "9c6cc5b29d8eee21e6bdf1839c1978ca49989d79",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/9c6cc5b29d8eee21e6bdf1839c1978ca49989d79"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4zMA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.29",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.29",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.29",
+    "commit": {
+      "sha": "3f19cba28f935415b25c4b95b6ae0f0297fb9151",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/3f19cba28f935415b25c4b95b6ae0f0297fb9151"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yOQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.28",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.28",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.28",
+    "commit": {
+      "sha": "634f826d82e8b93af293cee4966efa00adaa00e7",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/634f826d82e8b93af293cee4966efa00adaa00e7"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yOA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.27",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.27",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.27",
+    "commit": {
+      "sha": "fb8fbc9d1f7cb0cd005ead948b5d3e47397aba9c",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/fb8fbc9d1f7cb0cd005ead948b5d3e47397aba9c"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yNw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.26",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.26",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.26",
+    "commit": {
+      "sha": "986245ec439d50bf248339314157ba098479762b",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/986245ec439d50bf248339314157ba098479762b"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yNg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.25",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.25",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.25",
+    "commit": {
+      "sha": "82618aede0de1c072eb9c42b00f42671f0fe9525",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/82618aede0de1c072eb9c42b00f42671f0fe9525"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yNQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.24",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.24",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.24",
+    "commit": {
+      "sha": "c4483fa6c7c74bec415d565fc63a891fcbe5b0e0",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c4483fa6c7c74bec415d565fc63a891fcbe5b0e0"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yNA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.23",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.23",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.23",
+    "commit": {
+      "sha": "c4483fa6c7c74bec415d565fc63a891fcbe5b0e0",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c4483fa6c7c74bec415d565fc63a891fcbe5b0e0"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yMw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.22",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.22",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.22",
+    "commit": {
+      "sha": "2d436caa841558dd958beb53355d539098421e57",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/2d436caa841558dd958beb53355d539098421e57"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yMg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.21",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.21",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.21",
+    "commit": {
+      "sha": "b68e490868cb9700a82b3c8031ff66ac11258dfa",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/b68e490868cb9700a82b3c8031ff66ac11258dfa"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yMQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.20",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.20",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.20",
+    "commit": {
+      "sha": "a28b2cf04f4b81690cc766d37952c375d3af2c48",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/a28b2cf04f4b81690cc766d37952c375d3af2c48"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4yMA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.19",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.19",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.19",
+    "commit": {
+      "sha": "98482664742b322ebd0f75b5e8fa728e7449f7c8",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/98482664742b322ebd0f75b5e8fa728e7449f7c8"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xOQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.18",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.18",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.18",
+    "commit": {
+      "sha": "903a3b80b4657375d21f05e190906dd7fc65ab37",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/903a3b80b4657375d21f05e190906dd7fc65ab37"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xOA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.17",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.17",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.17",
+    "commit": {
+      "sha": "070e1c02ba7bfeff4c4773d2647a8f1f4a2f7ec3",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/070e1c02ba7bfeff4c4773d2647a8f1f4a2f7ec3"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xNw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.16",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.16",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.16",
+    "commit": {
+      "sha": "a07b0c7a7a8d9e392f3ca9abb6993cd1899cd8cf",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/a07b0c7a7a8d9e392f3ca9abb6993cd1899cd8cf"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xNg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.15",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.15",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.15",
+    "commit": {
+      "sha": "b7f9dcf4194d5cd3b32c239154039815663de4de",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/b7f9dcf4194d5cd3b32c239154039815663de4de"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xNQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.14",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.14",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.14",
+    "commit": {
+      "sha": "68749a28d4250a19e05baeb4ce8f4b955e0e9bdf",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/68749a28d4250a19e05baeb4ce8f4b955e0e9bdf"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xNA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.13",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.13",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.13",
+    "commit": {
+      "sha": "753a2bf2005ae4c52d778e574ae33c4a256b2e6f",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/753a2bf2005ae4c52d778e574ae33c4a256b2e6f"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xMw"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.12",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.12",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.12",
+    "commit": {
+      "sha": "da0482b54e50d1ab9172f140304232c495d7e9b2",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/da0482b54e50d1ab9172f140304232c495d7e9b2"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xMg"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.11",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.11",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.11",
+    "commit": {
+      "sha": "9f2b9d08c97c07b470733011ff0ee9f268129668",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/9f2b9d08c97c07b470733011ff0ee9f268129668"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xMQ"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.10",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.10",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.10",
+    "commit": {
+      "sha": "c73c6fe5c380cd1fbe8b64ea3662c86526ea4a5b",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c73c6fe5c380cd1fbe8b64ea3662c86526ea4a5b"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJ3JlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4xMA"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.9",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.9",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.9",
+    "commit": {
+      "sha": "e8bc83445a33c25e1ab809c29400d64f30b529af",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/e8bc83445a33c25e1ab809c29400d64f30b529af"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi45"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.8",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.8",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.8",
+    "commit": {
+      "sha": "602f887623e7367a76b3c2cff6dc3d917868b124",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/602f887623e7367a76b3c2cff6dc3d917868b124"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi44"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.7",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.7",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.7",
+    "commit": {
+      "sha": "4ddb206f867fb808ed0c5c56c76228dbb0112582",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/4ddb206f867fb808ed0c5c56c76228dbb0112582"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi43"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.6",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.6",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.6",
+    "commit": {
+      "sha": "c80d35714913a593fc0de20c83ab52ba7c297a5d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c80d35714913a593fc0de20c83ab52ba7c297a5d"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi42"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.5",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.5",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.5",
+    "commit": {
+      "sha": "c783f64b33e296138f7aa16253ef866dcd589c75",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c783f64b33e296138f7aa16253ef866dcd589c75"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi41"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.4",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.4",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.4",
+    "commit": {
+      "sha": "3ccbc317051aece197f01981c1a0e290b6ac622d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/3ccbc317051aece197f01981c1a0e290b6ac622d"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi40"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.3",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.3",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.3",
+    "commit": {
+      "sha": "cda07e81d1ed9effc8a0985cea3193686aa9c823",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/cda07e81d1ed9effc8a0985cea3193686aa9c823"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4z"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.2",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.2",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.2",
+    "commit": {
+      "sha": "62361ccc48327b3124549543b45d933d16f622d2",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/62361ccc48327b3124549543b45d933d16f622d2"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4y"
+  },
+  {
+    "name": "autogpt-platform-beta-v0.6.1",
+    "zipball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/zipball/refs/tags/autogpt-platform-beta-v0.6.1",
+    "tarball_url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/tarball/refs/tags/autogpt-platform-beta-v0.6.1",
+    "commit": {
+      "sha": "c6703dd89128b59f1fab79dc38eaa8e24009adce",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/commits/c6703dd89128b59f1fab79dc38eaa8e24009adce"
+    },
+    "node_id": "REF_kwDOJKSTjNoAJnJlZnMvdGFncy9hdXRvZ3B0LXBsYXRmb3JtLWJldGEtdjAuNi4x"
+  }
+]

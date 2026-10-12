@@ -1,0 +1,925 @@
+                                        THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                                              1
+
+
+
+
+                                          PlanAgent: A Multi-modal Large Language Agent
+                                              for Closed-loop Vehicle Motion Planning
+                                                           Yupeng Zheng∗† , Zebin Xing∗ , Qichao ZhangB , Bu Jin, Pengfei Li, Yuhang Zheng,
+                                                          Zhongpu Xia, Kun Zhan, Xianpeng Lang, Yaran Chen, Dongbin Zhao Fellow, IEEE
+
+
+
+                                           Abstract—Vehicle motion planning is an essential component                                  Non-reactive Closed-loop Evaluation on nuPlan
+                                        of autonomous driving technology. Current rule-based vehicle                     100
+                                        motion planning methods perform satisfactorily in common                               Score                                       PDM-Closed      PlanTF
+arXiv:2406.01587v2 [cs.RO] 4 Jun 2024
+
+
+
+
+                                        scenarios but struggle to generalize to long-tailed situations.                                                                    DTPP            PlanAgent
+                                                                                                                          90        92.51                   93.26
+                                        Meanwhile, learning-based methods have yet to achieve superior                                              89.64
+                                        performance over rule-based approaches in large-scale closed-
+                                        loop scenarios. To address these issues, we propose PlanAgent, the                80
+
+                                        first mid-to-mid planning system based on a Multi-modal Large                                       76.78
+                                        Language Model (MLLM). MLLM is used as a cognitive agent to                       70                                                   72.68           72.51
+                                        introduce human-like knowledge, interpretability, and common-
+                                        sense reasoning into the closed-loop planning. Specifically, PlanA-                                                            65.07
+                                                                                                                          60
+                                        gent leverages the power of MLLM through three core modules.                                                                                   59.44
+                                        First, an Environment Transformation module constructs a Bird’s
+                                        Eye View (BEV) map and a lane-graph-based textual description                     50
+
+                                        from the environment as inputs. Second, a Reasoning Engine                                            Val14                            Test14-hard
+                                        module introduces a hierarchical chain-of-thought from scene
+                                                                                                                         Fig. 1. Quantitative results of non-reactive closed-loop motion planning on
+                                        understanding to lateral and longitudinal motion instructions,
+                                                                                                                         nuPlan [1] Val14 and Test14-hard benchmarks compared with the state-of-the-
+                                        culminating in planner code generation. Last, a Reflection module                art rule-based method PDM-Closed [2] and learning-based method PlanTF [3]
+                                        is integrated to simulate and evaluate the generated planner                     and DTPP [4]. Our proposed PlanAgent achieves state-of-the-art performance
+                                        for reducing MLLM’s uncertainty. PlanAgent is endowed with                       in common scenarios (Val14 benchmark) and demonstrated generalization
+                                        the common-sense reasoning and generalization capability of                      in more challenging long-tailed scenarios (Test14-hard benchmark). Other
+                                        MLLM, which empowers it to effectively tackle both common                        methods either perform poorly in common scenarios or find it difficult to
+                                        and complex long-tailed scenarios. Our proposed PlanAgent is                     generalize to long-tailed scenarios. Please note that PDM-Closed, PlanTF,
+                                        evaluated on the large-scale and challenging nuPlan benchmarks.                  DTPP, and PlanAgent are denoted by purple, green, yellow, and orange,
+                                        A comprehensive set of experiments convincingly demonstrates                     respectively. The best performances are represented in italics and underlined.
+                                        that PlanAgent outperforms the existing state-of-the-art in the
+                                        closed-loop motion planning task. Codes will be soon released.
+                                          Index Terms—Multi-modal Language Model, Language Agent,                        autonomous driving planning. However, due to the complexity
+                                        Autonomous Driving, Closed-loop Motion Planning.                                 and uncertainty of open-world autonomous driving, current
+                                                                                                                         rule-based and learning-based methods still face a series of
+                                                                                                                         challenges when it comes to high-level closed-loop planning in
+                                                                  I. I NTRODUCTION
+                                                                                                                         large-scale scenarios. As shown in Fig. 1, rule-based methods,
+                                           Motion planning for autonomous driving aims to predict                        such as those noted in [2], [16], have shown adeptness in
+                                        the optimal trajectory of the ego vehicle to achieve driving                     handling common scenarios but they often struggle with long-
+                                        with comfort, safety, and efficiency. Recently, it has attracted                 tailed situations that demand more complex driving maneu-
+                                        increasing research interest as one of the key components                        vers. Conversely, learning-based approaches frequently grap-
+                                        of autonomous vehicles. With advancements in deep learn-                         ple with issues of overfitting and long-tailed situations, which
+                                        ing [5]–[8], reinforcement learning [9]–[12] and rule-based                      leads them to perform worse than the rule-based method [2]
+                                        [13]–[15] techniques, significant progress has been made in                      in large-scale closed-loop scenarios. Moreover, most learning-
+                                                                                                                         based methods are grounded in imitation learning in open-loop
+                                           Yupeng Zheng, Zebin Xin, Qichao Zhang, Bu Jin, Yaran Chen, and Dongbin
+                                        Zhao are with The State Key Laboratory of Multimodal Artificial Intelligence
+                                                                                                                         settings as pointed out in [17], and struggle to generalize to
+                                        Systems, Institute of Automation, Chinese Academy of Sciences, Beijing           closed-loop scenarios [18].
+                                        100190, China, and also with the School of Artificial Intelligence, University      Recently, the advancements in Large Language Models
+                                        of Chinese Academy of Sciences, Beijing 100049, China. Zebin Xing is also
+                                        with the Beijing University of Posts and Telecommunications, Beijing 100876,     (LLMs) have opened up new possibilities for autonomous driv-
+                                        China. Yuhang Zheng is with the School of Mechanical Engineering and             ing planning. These LLMs, along with their subsequent vari-
+                                        Automation, Beihang University, Beijing 100191, China. Pengfei Li is with        ants, such as Multi-modal Large Language Models (MLLMs),
+                                        the Department of Computer Science and Technology, Tsinghua University,
+                                        Beijing 100084, China. Zhongpu Xia is an independent researcher. Kun Zhan        have demonstrated nearly human-level common-sense reason-
+                                        and Xianpeng Lang are with Li Auto, Beijing, China.                              ing capabilities in a range of domains, including robotics
+                                           ∗ Yupeng Zheng and Zebin Xing contribute equally to this work.
+                                           B Qichao Zhang is the corresponding author.                                   manipulation [19]–[23], multi-modal understanding [24]–[26]
+                                           † This work was done when Yupeng Zheng conducted an internship                and human-like agent [27]–[31]. They have become leaders in
+                                        at Li Auto.                                                                      zero-shot learning and domain adaptation. As shown in Tab.
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                         2
+
+
+
+                                                              TABLE I
+                                  C OMPARISON BETWEEN P LANAGENT AND RECENT LLM- BASED APPROACHES .
+
+         Attribute          DiLu [32]            GPT-Driver [35]   Agent-Driver [34]   LLM-ASSIST [33]              PlanAgent (Ours)
+     Multi-modal inputs     %(Text)              %(Text)           %(Text)             %(Text)                      !(Text & BEV)
+   Closed-loop Evaluation   !(Closed-loop)       %(Open-loop)      %(Open-loop)        !(Closed-loop)               !(Closed-loop)
+    Real-world scenarios    %(Highway-env)       !(nuScenes)       !(nuScenes)         !(nuPlan)                    !(nuPlan)
+        GPT Model           !(GPT-3.5 & GPT-4)   !(GPT-3.5)        !(GPT-3.5)          !(GPT-3.5)                   !(GPT-4V)
+        CoT Output          !(Action)            !(Waypoints)      !(Waypoints)        %(Waypoints or Parameters)   !(Hierarchical CoT)
+
+
+
+I, some recent studies [32]–[35] have attempted to integrate            • For efficient scene information representation, we pro-
+the capabilities of LLMs and MLLMs into autonomous driv-                  pose an efficient Environment Transformation module
+ing planning. However, they encounter the following limita-               that extracts multi-modal information inputs with lane-
+tions: (1) running in simple simulation environments such as              graph representation.
+Highway-env [32] or open-loop scenarios [34], which do not              • For common-sense reasoning and safety planning, we
+validate the capabilities of LLMs for closed-loop planning in             design a Reasoning Engine module that introduces a
+complex real-world scenarios; (2) using an excessive amount               hierarchical chain-of-thought (CoT) to instruct MLLM to
+of coordinate numbers as tokens to represent map details [33],            generate planner code and a Reflection module that com-
+or lacking key information such as lanes [35], which express              bines simulation and scoring to filter out unreasonable
+scene information inefficiently and harms the performance                 proposals generated by the MLLM.
+of LLM for motion planning; (3) using trajectory waypoints              • Our approach delivers competitive and generalizable per-
+[35] generated by the large language model directly, which                formance on both common Val14 and long-tailed Test14-
+introduces safety hazards due to the uncertainty of the LLM.              hard benchmarks of the nuPlan dataset. Furthermore,
+   To overcome these challenges and enhance the planner’s                 compared to the LLM-based state-of-the-art (SOTA)
+ability to generalize to diverse real-world scenarios, we pro-            methods, PlanAgent only requires one-third of the num-
+pose PlanAgent, the first mid-to-mid planning agent driven by             ber of tokens needed for a textual description.
+an MLLM. In particular, PlanAgent leverages the power of
+MLLM through the following modules: (1) An Environment
+                                                                                             II. R ELATED W ORK
+Transformation module extracts multi-modal key information
+from the environment and efficiently converts them to serve           A. Motion Planning for Autonomous Driving
+as prompt inputs. This is achieved by constructing a Bird’s
+                                                                         End-to-end approaches, which utilize raw sensor data as in-
+Eye View (BEV) map for global positional information and
+                                                                      puts to predict the future trajectory of the ego vehicle directly,
+utilizing a lane-graph-based representation to generate textual
+                                                                      have made significant progress in terms of designing network
+descriptions for local motion information. (2) A Reasoning
+                                                                      architecture [36], improving intermediate representation [37],
+Engine module introduces a hierarchical chain-of-thought to
+                                                                      fusing multi-modal information [38]–[40] and incorporating
+perform multi-round iterated reasoning to instruct the MLLM.
+                                                                      generative models [41] through the utilization of CARLA sim-
+Through in-context learning, the chain-of-thought bridges
+                                                                      ulation benchmarks [42] and nuScenes [43] datasets. However,
+high-level scene understanding, intermediate-level longitudinal
+                                                                      the absence of realistic closed-loop simulators often leads to
+and lateral motion instructions, and low-level generation of
+                                                                      evaluations being conducted in open-loop settings or confined
+planner code. (3) A Reflection module that verifies the planner
+                                                                      to simple traffic scenarios within simulators, resulting in a
+generated by the MLLM through simulation and scoring. It
+                                                                      lack of authenticity and diversity necessary for comprehensive
+aims to filter out unreasonable planners, thereby reducing the
+                                                                      evaluation.
+impact of LLM’s uncertainty on the safety of planning.
+                                                                         Mid-to-Mid approaches take recorded real-world percep-
+   The proposed PlanAgent framework effectively enhances
+                                                                      tion results and HD Map as input to produce the future trajec-
+the scene understanding capability and planning performance
+                                                                      tory of the ego-vehicle. Mid-to-mid planning has significantly
+of the MLLM. Leveraging our designed approach and the
+                                                                      progressed thanks to the new release of the large-scale nuPlan
+common-sense reasoning ability of LLMs, PlanAgent achieves
+                                                                      dataset and simulation benchmarks. The rule-based method
+state-of-the-art performance on both closed-loop reactive and
+                                                                      PDM [2] achieved SOTA performance on the nuPlan Val14
+non-reactive settings of nuPlan Val14 and Test14-hard bench-
+                                                                      benchmark by executing intelligent driving models (IDM [16])
+marks. Detailed ablation studies provide insight into the me-
+                                                                      with varying parameters and evaluating them through simula-
+chanics and effectiveness of each module.
+                                                                      tion. However, PDM struggles to generalize to long-tail scenar-
+   For convenient reference, our contributions can be summa-          ios, underperforming on the subsequent long-tail benchmark
+rized as follows:                                                     Test14-hard [3]. Learning-based methods [4], [44]–[47] like
+  • We introduce the PlanAgent pipeline, which, to the best           GC-PGP [45] transforms high-performance prediction models
+    of our knowledge, is the first closed-loop mid-to-mid             into goal-oriented planners using the representation of lane
+    autonomous driving planning agent system based on a               graphs. Gameformer [46] utilizes the DETR [48] architecture,
+    Multi-modal Large Language Model (MLLM).                          and Hoplan [47] predicts future trajectories by forecasting
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                   3
+
+
+
+spatial-temporal occupancy heatmaps. These methods typi-                                 III. M ETHODOLOGY
+cally incorporate post-optimizers to enhance the reliability of     A. Overall Architecture
+produced trajectories. DTPP [4] introduces a differentiable
+                                                                       Inspired by Large Language Model agents, we have intro-
+framework for the joint training of ego-conditioned prediction
+                                                                    duced a novel and effective autonomous driving framework
+and cost models. PlanTF [3] introduces an attention-based
+                                                                    named PlanAgent, which utilizes an MLLM as a vehicle
+state dropout encoder (SDE) and augmentation techniques,
+                                                                    motion planning agent. As depicted in Fig. 2, the architecture
+effectively mitigating compound errors. Moreover, based on
+                                                                    of PlanAgent includes three core modules: Environment Trans-
+the nuPlan test split, PlanTF proposes a long-tail scenario
+                                                                    formation module, Reasoning Engine module, and Reflection
+benchmark Test14-hard for validating model generalization in
+                                                                    module. At a given planning interval, PlanAgent retrieves
+long-tailed scenarios. Our research is grounded in the mid-
+                                                                    scene information through the Environment Transformation
+to-mid closed-loop setting, delving into the common sense
+                                                                    module, calls the Reasoning Engine to generate a planner and
+reasoning and generalization capabilities of multi-modal large
+                                                                    finally verifies the planner using the Reflection module.
+language models in vehicle motion planning.
+                                                                       Specifically, we first introduce how the Environment Trans-
+                                                                    formation module efficiently extracts key information from
+                                                                    the environment to construct a BEV map and lane-graph-
+B. Large Language Models for Autonomous Planning                    based textual description as scenario prompts in section III-B.
+   The LLM has demonstrated exceptional common-sense                Next, in section III-C, we elaborate on how to define the
+reasoning and zero-shot generalization capabilities. Its subse-     system prompt and how to design a hierarchical chain-of-
+quent variant, the MLLM, further incorporates encoding for          thought in Reasoning Engine to instruct the large model
+additional modalities, enabling the understanding of multi-         through in-context learning to understand the scene, give
+modal data. On the one hand, some research endeavors have           instructions, and generate code of a planner. Finally, in section
+attempted to integrate LLMs and MLLMs in vision-centric             III-D, we introduce how the Reflection module examines the
+autonomous driving to enhance interpretability [49], [50]           generated planners from the MLLM to mitigate the impact
+and generalization capabilities [51]–[53]. Agent-Driver [34]        of the MLLM’s uncertainty on planning safety. The following
+employs an LLM as an agent to invoke perception tools to            sections will elaborate on implementing Environment Trans-
+acquire scene information from raw images for reasoning and         formation, Reasoning Engine, and Reflection modules.
+predicting trajectories. These methods use temporal image
+sequences or LiDAR as input to produce vehicle motion com-          B. Environment Transformation
+mands, control signals, or predict future trajectories in open-        The quality of prompts is a key factor in the quality of
+loop environments, ignoring issues such as cumulative errors        output produced by LLMs. To efficiently obtain prompts from
+and tracking errors. Based on the CARLA [42] simulator,             complex environment data to be consistent with the semantic
+LMDrive [54] has implemented the first LLM-based closed-            space of LLM, we design an Environment Transformation
+loop end-to-end autonomous driving system. DriveLLM [55]            module. It divides the scene information into two parts: global
+presents a novel framework that integrates LLMs with existing       and local. The global information represents the scenario type,
+autonomous driving modules, enabling informed decision-             providing semantic priors for vehicle motion planning, such
+making in real-world scenarios.                                     as the necessity to exercise caution with vehicle merging at
+   On the other hand, some recent research [32], [33], [35],        roundabouts, the prohibition against lane-changing on single-
+[56] have applied LLM in mid-to-mid autonomous driving              lane roads, and so on. The local information represents the
+planning. DiLu [32] introduced a closed-loop framework              motion of the ego-vehicle and surrounding agents, directly
+paradigm for LLMs that includes reasoning, reflection, and          affecting the vehicle’s longitudinal and lateral action planning.
+memory modules that incorporate human knowledge. GPT-               Specifically, the Environment Transformation module first
+driver [35] achieves motion planning through natural language       extracts essential scene context information and converts it
+modeling by converting scenes into language and fine-tuning         into a BEV map as global semantic information. Next, it
+GPT. LLM-ASSIST [33] employs LLMs to generate con-                  constructs a lane-graph to record maps and related agents.
+troller parameters. Unlike these methodologies, we propose          The lane-graph will be converted into textual description as
+a planning agent framework based on MLLM. Given BEV                 local motion information. To simultaneously introduce global
+map and lane-graph-based scene descriptions extracted from          semantic information and local motion information, we use
+the environment, we design a hierarchical chain-of-thought          BEV map and textual description to serve as multi-modal
+from perception to longitudinal and lateral motion instruction      scenario prompts.
+and planner code generation. Utilizing this in-context learning        BEV Map: We first extract map information, agent in-
+process, we effectively integrate multi-modal large language        formation, and obstacle information from the environment.
+models into autonomous driving planning tasks, leveraging           Map information includes (1) centerlines, (2) crosswalks, and
+their capabilities to enhance planning reliability and safety.      (3) lanes. Agent information covers the (4) ego-vehicle, (5)
+Moreover, unlike existing LLM-based approaches that directly        other vehicles, (6) bicycles, and (7) pedestrians. Obstacle
+convert scenes into textual inputs, we propose a more efficient     information represents (8) static obstacles. The eight road
+Environment Transformation module that reduces the usage of         elements mentioned above are visualized with different col-
+the tokens to describe the scenario.                                ors when constructing the BEV map to enhance the multi-
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                                                     4
+
+
+
+
+                                                                     Environment
+                                                                      Environment
+
+         Environment Transformation                                                             Reason Engine                                Reflection
+                                                                                                                                           Rethink     Planning
+        Environment Info                     BEV Map                           MLLM Agent                          Hierarchical CoT         Yes             No
+                                                                                                              Scene Understanding             (𝑠𝑐𝑜𝑟𝑒 < 𝜆) and
+                                                                                                              - Question1: …               (𝑒𝑥𝑒𝑐𝑢𝑡𝑖𝑜𝑛𝑠 < max 𝑒𝑥𝑒𝑐 )
+                                                                                                              - Question2: …
+                                                                                                              -…
+                                                                                                              - Reasoning …
+
+                                                                                                              Motion Instruction
+                                                                                                              - Longitudinal: …
+                                                                                                              - Lateral Decision: …
+                                                                                                                                          Simulation & Scoring
+                                          Textual Description                                                 - Reasoning: …
+             Lane Graph                                                       System Prompt
+                                                Textual Description                System Prompt              Planner Generation
+                                         Ego Motion State              :    Task Definition Prompt        :   - Generate_Planner (
+                                         Speed; Velocity; Location (Node)   Output Format; Param.; Role;              leading_agent,
+                                                                                                                      centerline,
+                                         Agents Motion State            :   Common Sense Prompt           :
+                                                                                                                      speed_limit,
+                                         Speed; Velocity; Location (Node)   Traffic Rule; Driving Knowledge
+                                                                                                                      max_acceleration,
+                                         Maps:                          :   Chain of Thoughts Prompt      :
+                                                                                                                      mac_deceleration)
+                                         Node Relationships             .                                     - Reasoning …
+
+
+Fig. 2. Based on a MLLM, we propose a novel planning agent pipeline comprising three modules: Environment Transformation, Reasoning Engine, and
+Reflection Module. In the Environment Transformation module, key information about the environment is extracted to form a BEV map and construct a
+lane-graph representation. Subsequently, the lane graph is translated into textual descriptions and used as scenario prompts along with the BEV map. In the
+Reasoning Engine module, an MLLM generates planner codes based on the IDM [16] planner through hierarchical chain-of-thought reasoning with scenario
+prompts and pre-defined system prompts (including task definition prompts, common sense prompts, and chain-of-thought guidance prompts). In the Reflection
+module, the planner generated by Reason Engine is simulated and evaluated. Whether to execute or rethink depends on the assessed score.
+
+
+
+modal large model’s comprehension of the road structure. To                              information about other agents and obstacles, we retain only
+illustrate the scene’s dynamic and stationary information, each                          the agents and obstacles on the eight-lane nodes around the
+agent is marked with a red arrow pointing in the direction of                            node where the ego-vehicle is located. We obtain their speed,
+movement. The length of the arrow symbolizes the agent’s                                 distance from the ego-vehicle, and the located lane node from
+speed as shown in the left side of Fig. 2.                                               the environment and then translate this information into textual
+   Textual Description: Previous methods [33], [35] that                                 description as shown in the bottom of Fig. 4. It is notable that
+deliver all agent information and lane information into LLMs                             we also describe the status of traffic lights.
+in the form of numerical coordinates are redundant and inef-                                The Environment Transformation module develops both
+ficient. Furthermore, an abundance of numerical coordinates                              a BEV map for global information and a lane-graph-based
+might not properly align with the semantic space of LLM,                                 textual description for local information from the environment.
+subsequently diminishing its performance and its ability to                              These serve as scenario prompts for the MLLM employed by
+understand scenes effectively. To effectively align map lane                             the subsequent Reasoning Engine.
+information with the semantic space of LLM, we represent
+map lanes as a set of lane nodes in the form of a lane-graph.                            C. Reasoning Engine
+The positional and connection relationships between nodes                                   How to introduce the power of MLLMs into the autonomous
+provide a good semantic and geometry representation of the                               driving planning process to achieve a planning system capable
+relationships between lanes. Specifically, in order to ensure                            of common-sense reasoning and generalization remains an
+that the length of each node is the same in complex road                                 open area of exploration. In this section, we propose the
+situations, we divide the centerlines of lanes into segments of                          Reasoning Engine for autonomous driving planning, as shown
+equal length, using these segments as nodes in the lane-graph.                           on the middle side of Fig. 2. It takes the scenario prompts
+As shown in Fig. 4, for a three-lane scene, each node naturally                          constructed by the Environment Transformation module and
+forms eight types of adjacent nodes in different directions.                             predefined system prompts as inputs. Next, an MLLM gener-
+We convert the positional and connection information between                             ates the planner code based on the IDM [16] planner through
+nodes into textual description, efficiently representing com-                            multiple rounds of reasoning under the guidance of the hierar-
+plex real-world map lane information. To efficiently convey                              chical chain-of-thought. In this process, the reasoning ability
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                                                                                                                 5
+
+
+
+
+                                                                                                                                                     System Prompt
+                                                                                                          Task Definition Prompt:
+                                           vehicle                                                        You will act as the brain of a rule-based autonomous driving algorithm. You are expected to accomplish two tasks…
+                                           004
+                             vehicle 003                                                                  Here is an example for you to learn how to give the right answer:
+                                                                                                          …
+
+                                                                                                          TASK ONE:
+                                            vehicle 000
+                                                                                                          You will be given a Bird's Eye View map of a city road scene. The black lines represent the centerlines of the lanes,
+                                                                                                          and all vehicles are driving along these centerlines…
+                                      vehicle 001                                                         Output: the answer to TASK ONE
+
+                                                                                                          TASK TWO:
+                                                                                                          Based on the analysis of TASK ONE, you will be given the scenario description about the motion of the ego vehicle
+                                                                                                          and surrounding vehicles within 30m. You should…
+                                                                                                          Output: leading agent, centerline, speed limit, max acceleration, and deceleration.
+                                                                                                          The speed limit is not the target you should reach, but the maximum speed you can't exceed.
+                                      Textual Description                                                 Max acceleration and max deceleration are the targets you want to reach in 1s. To ensure comfort, you should
+                                                                                                          choose a value near the current values.
+  Node Relationship:                                                                                      …
+
+  The lane segment with color #FF0000 is the node where the ego vehicle is driving on. The front,         Common Sense Prompt:
+  left front, left, left rear, rear, right rear, right and right front nodes are denoted with #FFFF00,    Avoid any collision with the other vehicles.
+  # F6B6EE , #FFC000, #BE6914, #5B9BD5, #00B0F0, #7030A0 and #8FAADC, respectively. All                   Proceed as far as you can, especially when there are no vehicles around.
+  nodes have the same direction.                                                                          You are not allowed to move against the normal direction of traffic flow.
+                                                                                                          …
+  Motion State:
+  The ego vehicle’s speed is 4.00m/s, acceleration is 0.98m/s^2.                                          Chain of Thoughts Prompt:
+                                                                                                          You should analyze the scenario and give reasonable instructions step by step by following the guidance below:
+  The vehicle 004 is driving on the front node of yours, in the same lane. The distance is 11.61m.
+                                                                                                          Firstly, you are supposed to answer the questions in Task One thoroughly.
+  Velocity is 2.02m/s.
+                                                                                                          Secondly, you need to observe the vehicles on the surrounding lane nodes and assess the potential for future
+  The vehicle 003 is driving on rear right node of yours, in the right adjacent lane. The distance is     interactions with them. This involves identifying their speed, direction, and any potential changes in their trajectory.
+  10.53m. Velocity is 1.98m/s.                                                                            Thirdly, based on your answers to Task One and your assessment of the surrounding vehicles, you need to decide
+  …                                                                                                       which lane you should follow.
+                                                                                                          Finally, utilizing this reasoning process, you should generate the necessary parameters for a rule-based algorithm
+Fig. 3. The top of the picture shows the process of constructing a lane                                   that can satisfy the given request.
+map (top right) based on the environment (top left). The white square on
+the left represents the ego vehicle. The red node on the right indicates the                             Fig. 4. The detailed example of the system prompt for PlanAgent. It consists
+centerline segment where the ego vehicle is located, while nodes of other                                of a task definition prompt, a common sense prompt, and a chain-of-thought
+colors correspond to lane segments of the same color on the left. The bottom                             prompt.
+of the picture displays the converted text description of the scenario based on
+the lane-graph, including node relationships and motion states.
+                                                                                                         understand the scene, give motion instructions, and generate
+                                                                                                         planner codes step by step. To achieve this goal, we design a
+of the MLLM is introduced into the driving planning task                                                 series of questions to provide more guidance. Details of the
+through in-context learning. The formulation of the predefined                                           hierarchical chain-of-thought are explained in the next section.
+system prompt and the design of the hierarchical chain-of-                                                  Hierarchical Chain-of-thought: As shown in the middle
+thought are expanded below:                                                                              of Fig. 2, hierarchical chain-of-thought includes scene under-
+   System Prompt Formulation: The prompts provided to the                                                standing, motion instruction, and planner generation.
+reasoning engine are divided into two parts: scenario prompts                                               Scene Understanding: By analyzing PDM-Closed [2], we
+used to describe the scene and system prompts used to define                                             find that different types of scenarios require different planners.
+tasks, introduce driving common sense, and instruct hierar-                                              In particular, IDM planners with different parameters have
+chical reasoning. Since the MLLM that has not been fine-                                                 large performance differences in different types of scenarios.
+tuned with autonomous driving data can not execute accurate                                              Therefore, understanding the global and local information of
+reasoning when handling complex closed-loop planning tasks,                                              the scenarios is crucial for the MLLM to generate the right
+the system prompt needs to feed the task definition, format,                                             planner. To this end, we design global understanding questions
+and a reasonable case of planner generation information to                                               such as the type of the scenario, traffic light status, precautions
+the MLLM in the form of in-context learning. As shown in                                                 in this type of scene, and local understanding questions such as
+the middle of Fig. 2, the predefined system prompts consist                                              the status of the ego-vehicle, whether there are other vehicles
+of a task definition prompt, a common sense prompt, and a                                                in the same lane, etc. These questions provide guidance to the
+chain-of-thought prompt.                                                                                 MLLM to understand the scenario.
+   Specifically, the task definition prompt represents the role                                             Motion Instruction Production: Next, according to the anal-
+of the MLLM in the planning task. Its goal is to standardize                                             ysis of this scenario, we ask the MLLM to provide the
+the format of input data, give demonstration cases of planner                                            longitudinal and lateral motion instruction for the ego-vehicle
+code generation and clarify the meaning of the generated code,                                           and give the rationale behind the instruction. The longitudinal
+that is, the physical meaning of each parameter in the IDM                                               instruction includes accelerating, decelerating, and maintain-
+planner of the generated controller, including the followed                                              ing the current speed, and the lateral instruction includes
+centerline (c), the leading agent (la), driving speed limit (v0 ),                                       changing to the left lane, changing to the right lane, and
+maximum acceleration (acc) and maximum deceleration (dec).                                               keeping the current lane.
+The common sense prompt is made up of the basic knowledge                                                   Planner Code Generation: After analyzing the scenario
+and traffic rules usually needed for safe driving on the road.                                           and providing the motion instruction for the ego-vehicle,
+The chain-of-thought prompt aims to instruct the MLLM to                                                 the MLLM learns how to generate planner python code by
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                     6
+
+
+
+understanding the physical meaning of each parameter in the                           IV. E XPERIMENTAL S ETUP
+IDM planner and learning the demonstration planner case in          A. Implementation Details
+the system prompt. When given a centerline c and the leading
+agent la, the distance to the leading agent s, and the current         MLLM Agent: PlanAgent utilizes a pre-trained Multi-
+velocity v, IDM generates the longitudinal acceleration as          moda Large Language Model and can be applied to planning
+following:                                                          tasks without training. Specifically, in this paper, we choose
+                                                                    GPT-4V as the MLLM agent. Other MLLM experiments will
+                             δ  ∗ 2 !
+                               v        s                           be shown in the Sec. V-E.
+              a = acc 1 −           −           ,          (1)         Hyperparameters: The threshold λ is set to 0.75 and the
+                              v0         s
+                                                                    maximum number of executions maxexec is set to 3.
+
+                dv
+                   = min(acc, max(a, dec))                   (2)    B. Datasets
+                dt
+                                                                       nuPlan [1] is a large-scale closed-loop planning benchmark
+where v0 is the speed limit, acc is the acceleration limit and      for autonomous driving, which consists of 1500h human
+dec is the deceleration limit. v0 , acc, dec and c are four         driving data from 4 cities: Boston, Pittsburgh, Las Vegas, and
+important hyperparameters that directly affect longitudinal         Singapore. These cities are across the US, posing challenges
+and lateral motion. Based on the IDM planner, the MLLM              for planners to identify and adapt to the varying traffic patterns.
+generates the Python code which calls IDM planner with              In our experiments, we exploit the nuPlan Val14 and nuPlan
+different hyperparameters as follows:                               Test14-hard to investigate the effectiveness of our PlanAgent.
+                                                                    nuPlan Val14 is the original validation set of nuPlan. nuPlan
+       Generate IDM P lanner(c, la, v0 , acc, dec).          (3)    Test14-hard represents the long-tailed scenarios in nuPlan,
+                                                                    defined in PlanTF [3].
+
+D. Reflection                                                       C. Metrics
+   For autonomous driving planning tasks, safety is crucial.           We use the official closed-loop evaluation metrics non-
+Inspired by the human decision-making principle of ”Look            reactive closed-loop score (NR-CLS) and reactive closed-
+before you leap,” we design a Reflection module in our              loop score (R-CLS) officially provided by nuPlan [1] as
+PlanAgent system, as depicted on the right side of Fig. 2. This     our evaluation metrics. R-CLS and NR-CLS have the same
+module intends to mitigate the effects of uncertainty from the      calculation method. The “reactive” means the background
+MLLM in the Reasoning Engine, thereby enhancing the safety          traffic is controlled by the IDM [16], while the “non-reactive”
+of closed-loop planning.                                            utilizes the log-reply of other agents. They measure the actual
+   In particular, we integrate the simulation process proposed      driving performance in simulation, including (1) traffic rule
+by the PDM-Closed [2] method with the planner generation of         violations, like collision, off-road trajectories, and speed limit;
+the MLLM agent. Every planner produced by the Reasoning             (2) human driving similarities, like longitudinal velocity error,
+Engine undergoes simulation, and a simulated driving score          longitudinal stop position error, or lateral position error; (3)
+(denoted as s) is derived based on metrics such as potential        vehicle dynamics, like comfort or feasibility; (4) goal achieve-
+for collision and comfort levels. If the simulated driving score    ment, progress along the experts’ route. Both NR-CLS and
+drops below a specific threshold (denoted as λ), indicating         R-CLS range from 0 to 100, where higher scores are better.
+an incorrect decision and planner generation, the Reasoning
+Engine will be notified to reprocess the chain-of-thought and
+                                                                    D. Baseline Methods
+create a new planner. The process is formulated as
+                                                                       We compare state-of-the-art methods with our PlanAgent,
+                                                                    including (1) RasterModel [1], which utilizes a CNN to
+                         
+                             Planning,      s≥λ
+             Decision =                                      (4)    encode the raster and generate the future trajectory of the ego
+                             Rethinking, s < λ
+                                                                    car; (2) UrbanDriver [44], which introduces a PointNet-like
+Unlike the long-term simulation deployed in PDM, we employ          architecture to encode the input elements (state observation)
+short-term simulation, intending to minimize the impact of          and employs transformer layers for global reasoning; (3)
+uncertainty with each invocation of the MLLM. Moreover,             GameFormer [46], which is based on transformer encoder-
+since PDM simulation utilizes a uniform speed model to              decoder architecture and formulates the planning as level-k
+predict the future motion of other agents, our short-term           game; (4) PlanTF [3], which introduces state dropout encoder
+simulation can minimize the cumulative error in predicting          (SDE) to address the shortcut learning problems in planning;
+dynamic agents’ motion. This results in a more accurate sim-        (5) DTPP [4], which employs a differentiable joint training
+ulation score. Lastly, it is notable that due to decision-making    method for both ego-conditioned prediction and cost models;
+time constraints, the Reflection module is set to perform           (6) PDM [2], a well designed rule-based architecture that
+a maximum number of executions (designated as maxexec ).            extend IDM with different hyper-parameters; and (7) LLM-
+Once this limit is exceeded, the last generated controller code     ASSIST [33], employing a LLM to choose the better hyper-
+is selected as the final output.                                    parameters for PDM.
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                           7
+
+
+
+                                                              TABLE II
+   C OMPARISON WITH C OMPETITIVE M ETHODS ON VAL 14 AND T EST 14- HARD BENCHMARKS OF NU P LAN C LOSED -L OOP P LANNING C HALLENGE .
+
+                                         Planners                                             Val14                      Test14-hard
+
+            Category                    Method                 Publication         NR-CLS ↑           R-CLS ↑     NR-CLS ↑        R-CLS ↑
+
+             Expert                    Log-replay                   -                 94.03            75.86         85.96         68.80
+
+                                    IDM [16]               Physical Review E          70.39            72.42         56.16         62.26
+           Rule-based
+                                  PDM-Closed [2]              CoRL 2023               92.51            91.79         65.07         75.18
+
+                                 RasterModel [1]              CVPR 2021               69.66            67.54         49.47         52.16
+                                 UrbanDriver [44]             CoRL 2022               63.27            61.02         51.54         49.07
+                                   GC-PGP [45]                ITSC 2023               55.99            51.39         43.22         39.63
+         Learning-based           PDM-Open [2]                CoRL 2023               52.80            57.23         33.51         35.83
+                                 GameFormer [46]              ICCV 2023               80.80            79.31         66.59         68.83
+                                    PlanTF [3]                ICRA 2024               84.83            76.78         72.68         61.70
+                                    DTPP [4]                  ICRA 2024               89.64            89.78         59.44         62.94
+
+                              LLM-ASSISTUNC * [33]             arXiv 2024             90.11            90.32           -             -
+              LLM             LLM-ASSISTPAR * [33]             arXiv 2024             93.05            92.20           -             -
+                                 PlanAgent(Ours)                    -                 93.26            92.75         72.51         76.82
+         * Since the LLM-ASSIST [33] is not open-source, we only report its results publicly available on Val14 benchmark.
+         The best and second-best performances are represented by bold and underline respectively.
+
+
+
+                 NR-CLS on nuPlan Test14-hard Benchmark                      of PlanAgent in closed-loop autonomous driving planning
+   100
+                                 PDM     PlanAgent
+                                                                             tasks, thereby enhancing the safety of autonomous driving
+    90
+                                                                             planning systems. In addition, Fig. 5 shows the comparison
+    80
+    70
+                                                                             of the NR-CLS metric between our proposed PlanAgent
+    60                                                                       and PDM-Closed [2] across 14 scenario types based on the
+    50                                                                       nuPlan Test14-hard benchmark. PlanAgent performs better
+    40
+    30
+                                                                             in changing lane, turn, high lateral acceleration, travers-
+    20                                                                       ing pickup dropoff and other scenarios that require complex
+                                                                             driving maneuvers, demonstrating the effectiveness of PlanA-
+                                                                             gent in complex scenarios.
+                                                                                Generalizable Results: The rule-based method PDM-
+Fig. 5. The comparison of the NR-CLS metric between our proposed             Closed [2] performs well on Val14 benchmark but demon-
+PlanAgent and PDM-Closed [2] across 14 scenario types based on the nuPlan    strates limited generalization on the long-tailed scenarios of
+Test14-hard benchmark.                                                       Test14-hard benchmark. The learning-based method planTF
+                                                                             [3] achieves the highest NR-CLS score in long-tailed scenarios
+                          V. E XPERIMENTS                                    but its performance significantly drops in regular scenarios.
+                                                                             Compared to the aforementioned methods, our proposed Plan-
+A. Comparison with SOTA Methods                                              Agent demonstrates good performance on both Val14 and
+   In this section, we first compare the proposed PlanAgent                  Test14-hard, indicating that the generalization and reasoning
+with three categories of state-of-the-art methods: rule-based,               capabilities of multi-modal large language models are success-
+learning-based, and LLM-based approaches in both closed-                     fully transferred to the autonomous driving planning system,
+loop reactive and closed-loop non-reactive settings on the                   thereby enhancing its generalization across diverse driving
+nuPlan Val14 and Test14-hard benchmarks. The specific quan-                  scenarios.
+titative results are presented in Tab II. Our proposed PlanAgent                Tokens Utilization: We then compare the average num-
+delivers competitive and generalizable performance compared                  ber of tokens used for the scene description of PlanAgent
+to other methods.                                                            with other LLM-based methods, namely GPT-driver [35] and
+   Competitive Results: In the common scenarios of Val14                     LLM-ASSIST [33] in Tab. III. A lower average token usage
+benchmark, PlanAgent outperforms other rule-based, learning-                 represents a more efficient scene description. To ensure a fair
+based, and large language model-based methods regarding                      comparison, the scene description prompts of DiLu and GPT-
+NR-CLS and R-CLS metrics. In the more challenging long-                      driver are adapted for nuPlan scenarios. The token usage of
+tailed scenarios of the Test14-hard benchmark, PlanAgent                     scene description prompts in LLM-ASSIST is counted based
+achieves a higher R-CLS score than the other three categories                on the sample prompts provided in the paper. As shown in
+of state-of-the-art methods, with only a slightly lower NR-                  Tab. III, our proposed PlanAgent has the lowest average token
+CLS score compared to planTF [3]. The outstanding per-                       usage, achieving SOTA performance while describing scenes
+formance in closed-loop scenarios validates the effectiveness                more efficiently compared to other LLM-based methods due
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                                                 8
+
+
+
+                          TABLE III                                                                        TABLE V
+ T HE AVERAGE NUMBER OF TOKENS USED TO DESCRIBE THE SCENE IN                   A BLATION STUDY OF R EASON E NGINE AND R EFLECTION M ODULE ON
+                  THE TEXTUAL DESCRIPTION .                                                      T EST 14- HARD BENCHMARK .
+
+     Method     GPT-Driver†     LLM-ASSIST*           PlanAgent (Ours)        Row Scene Understanding Instruction Reflection NR-CLS ↑ R-CLS ↑
+    Tokens ↓       448.66           425.81                 141.32               1             ×                    ✓             ✓         70.09          75.26
+                                                                                2             ✓                    ×             ✓         70.60          75.39
+    * denotes the result based on the sample prompts provided in the paper.     3             ✓                    ✓             ×         69.84          74.08
+    † denotes the results adapted for nuPlan scenarios.                         4             ✓                    ✓             ✓         72.51          76.82
+
+                            TABLE IV
+ A BLATION STUDY OF E NVIRONMENT T RANSFORMATION M ODULE ON                                               TABLE VI
+                  T EST 14- HARD BENCHMARK .                                  A BLATION STUDY OF THE I NTERVAL OF MLLM C ALLS ON T EST 14- HARD
+                                                                                                         BENCHMARK .
+
+       Row     BEV Map        Lane-graph      NR-CLS ↑       R-CLS ↑
+                                                                                       MLLM Interval (iteration)          NR-CLS ↑              R-CLS ↑
+         1          ×              ×             67.96         72.44
+         2          ×              ✓             70.97         75.61                            10 (1s)                        71.85             76.10
+         3          ✓              ×             71.23         75.25                            20 (2s)                        72.51             76.82
+         4          ✓              ✓             72.51         76.82                            30 (3s)                        71.35             75.26
+
+
+
+to the designed lane-graph-based textual description.                            In the first case, the PlanAgent recognizes that it’s dealing
+                                                                              with a roundabout scenario where vehicles are merging. Based
+                                                                              on the local motion information of other agents, it is deduced
+B. Ablation Study                                                             that the vehicle ahead is waiting for vehicles to merge. Con-
+   We conducted a detailed analysis of the effectiveness of each              sequently, PlanAgent provides a lateral instruction to change
+component of PlanAgent on the nuPlan Test14-hard bench-                       to the left lane and then generates the corresponding planner
+mark. Tab. IV presents the effectiveness of each component in                 code. This left lane change allows PlanAgent to avoid being
+the Environment Transformation module, while Tab. V shows                     stuck in the middle of the road like PDM-Closed.
+the effectiveness of each component in the Reason Engine and                     In the second case, the PlanAgent recognizes that it’s deal-
+the Reflection module.                                                        ing with a scenario with multiple lanes and a crosswalk and the
+   Ablation Study of Environment Transformation Module.                       traffic light is red. Based on the local motion information of
+The comparisons in the first and third rows of Tab. IV as well                other agents, it infers that the other vehicles are waiting for the
+as the second and third rows, demonstrate the effectiveness                   red light. Thus, PlanAgent provides longitudinal instruction to
+of adding BEV map modality input and utilizing lane-graph                     decelerate for a safe and comfortable stop in the stop line
+representation in the Environment Transformation module.                      if pedestrians enter the crosswalk. This allows PlanAgent to
+They result in score improvements of 1.5 and 1.3 in NR-CLS,                   avoid stopping in the middle of the road like PDM-Closed.
+and 1.2 and 1.6 in R-CLS, respectively.
+   Ablation Study of Reasoning Engine Module and Reflec-
+                                                                              D. Interval of MLLM Calls.
+tion Module. The comparisons in the first and fourth rows of
+Tab. V, as well as the second and fourth rows, demonstrate                       PlanAgent calls the MLLM to understand the scene and
+the efficacy of high-level scene understanding and mid-level                  generate planner code with a fixed planning interval. In Tab.
+motion instruction generation in the hierarchical chain-of–                   VI, we conducted an ablation experiment on the planning
+thought in the Reason Engine on the generation of planner                     interval (frequency) of PlanAgent’s MLLM calls for planner
+code in PlanAgent. The absence of in-context learning for                     generation. It is important to note that since the nuPlan
+scene understanding and mid-level motion instruction gen-                     simulation frequency is 10 Hz, every 10 planning iterations
+eration in the prompt leads to a decrease of 2.42 and 1.91                    represent 1 second in the real world. The results in Tab. VI
+in NR-CLS scores, respectively. The comparison in the third                   demonstrate that PlanAgent achieves the best performance at
+and fourth rows of Tab. V validates the importance of the                     a moderate frequency, specifically with a time interval of
+Reflection module for safe closed-loop planning. The absence                  2 seconds. Higher or lower call frequencies will hurt the
+of the Reflection module, which performs safety checks on                     planning performance.
+the planner generated by the MLLM, leads to a significant
+decrease in planning performance, with a reduction of 2.67
+in NR-CLS score, illustrating the impact of uncertainty in the                                             TABLE VII
+                                                                                    P ERFORMANCE OF DIFFERENT M ULTI - MODAL L ARGE L ANGUAGE
+MLLM on the safety of the planning system.                                             M ODELS FOR P LANAGENT ON T EST 14- HARD BENCHMARK .
+
+                                                                                       MLLM               Param.        Time           NR-CLS ↑      R-CLS ↑
+C. Qualitative Results.
+                                                                                CogVLM-chat [24]           17B         4405 ms          68.37            72.21
+   Fig. 6 shows the qualitative results of our PlanAgent com-                    LLaVa-7B [25]             7B          2936 ms          67.73            72.06
+parison with PDM-Closed and the example of PlanAgent’s                           LLaVa-13B [25]            13B         3694 ms          69.40            73.89
+                                                                                  GPT-4V [57]               -          5568 ms          72.51            76.82
+hierarchical reasoning.
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                                                                                                 9
+
+
+
+
+                          PlanAgent (Ours)                                    PDM-Closed [2]                                           PlanAgent (Ours)                            PDM-Closed [2]
+                                                               Case1: Start                                                                                    Case2: Start
+
+
+
+                               vehicle_000                                     vehicle_000
+                                             vehicle_001                                        vehicle_001
+  Planning
+
+
+
+
+                                                            vehicle_002                                          vehicle_002
+   Results
+
+
+
+
+                                   vehicle_003                                    vehicle_003
+
+
+                                                                 Case1: End                                                                                     Case2: End
+
+
+                                                                                                                                                                                      stuck
+                                                                                                stuck
+                                   vehicle_000                                     vehicle_000
+                                                           vehicle_002                                           vehicle_002
+                                    vehicle_001                                                    vehicle_001
+
+
+                                                                                    vehicle_003
+                                   vehicle_003
+
+
+
+                        Please can start analyzing the scene by answering the following questions:                                   Please can start analyzing the scene by answering the following questions:
+
+
+                       Q: What type is this scenario?                                                                              Q: What type is this scenario?
+
+
+                       A: This scenario is a multi-lane city roundabout with a lane merging.                                       A: This scenario is a city road with multiple lanes and a crosswalk.
+
+
+                       Q: What is the status of the ego car?                                                                       Q: What is the status of the ego car?
+  Understanding
+
+
+
+
+                       A: The status of the ego car is that it's in the rightmost lane, and it's                                    A: The status of the ego car is   in the third lane from the right, moving
+                       currently moving.                                                                                            forward.
+     Scene
+
+
+
+
+                       Q: What is the status of traffic light?                                                                      Q: What is the status of traffic light?
+
+
+                       A: Green.                                                                                                    A: Red.
+
+
+                       Global analysis…                                                                                             Global analysis…
+
+
+                       Q: Is there any car in the same lane as the ego car and in front of it?                                      Q: Is there any car in the same lane as the ego car and in front of it?
+
+
+                       A: Yes, there is a car in the same lane as the ego car and in front of the
+                                                                                                                                    A: There is no car directly in front of the ego car in the same lane.
+                       ego car.
+
+
+                       Local analysis…                                                                                             Local analysis…
+
+
+
+                       Based on your analysis of this scenario, please provide the appropriate                                     Based on your analysis of this scenario, please provide the appropriate
+                       motion planning for the ego car by answering the following questions:                                       motion planning for the ego car by answering the following questions:
+
+
+                       Q: What is the right motion planning for the ego car? Should it change to                                   Q: What is the right motion planning for the ego car? Should it change to
+                       the left lane, change to the right lane, or keep the current lane?                                          the left lane, change to the right lane, or keep the current lane?
+
+
+                       A: Change to the left lane, as the vehicle ahead in the same lane has a
+                                                                                                                                    A: Keep the current lane, as there are no immediate obstacles ahead and the
+                       velocity of 0.00m/s, indicating it is stopped. It may wait for the vehicle
+                                                                                                                                    lane is clear.
+                       merging from the outside.
+  Instruction
+    Motion
+
+
+
+
+                       Q: What is the right motion planning for the ego car? Should it accelerate,                                 Q: What is the right motion planning for the ego car? Should it accelerate,
+                       decelerate, or maintain the current speed?                                                                  decelerate, or maintain the current speed?
+
+
+                       A: Maintain to safely execute the lane change and match the speed of the                                    A: The ego car should decelerate, ensuring it is following the speed
+                       traffic in the new lane.                                                                                    limit and prepared to stop in stop line if pedestrians enter the crosswalk.
+
+                       R: Since the vehicle in front is stationary, changing lanes to the left                                      R: Given that all surrounding vehicles are stationary and waiting at a red
+                       seems like a viable option to avoid any potential collision and to proceed                                   light, there's no need for any lateral movement. I don't need to aim for
+                       with a smoother flow. However, I should also consider the presence of                                        high speeds. Instead, I should choose a speed limit and deceleration that
+                       vehicles in the left lane and their relative speeds.                                                         allows for a safe and comfortable stop.
+
+                       Q: What are the longitudinal and lateral motion instruction based on these                                  Q: What are the longitudinal and lateral motion instruction based on these
+                       analysis?                                                                                                   analysis?
+
+
+                       A: (Change lane to left, maintain the speed)                                                                A: (Keep the current lane, decelerate)
+
+
+
+                  def Generate_IDM_Planner(                                                                                    def Generate_IDM_Planner(
+  Planner
+
+
+
+
+                      la=vehicle_001,                                                                                              la=stop_line
+   Code
+
+
+
+
+                      c=change_left,                                                                                               c=keep_currunt_lane,
+                      v0=9.0,                                                                                                      v0=3.0,
+                      acc=1.5,                                                                                                     acc=1.5,
+                      dec=3.0))                                                                                                    dec=3.0))
+
+
+
+Fig. 6. Qualitative comparison between PlanAgent (ours) and PDM-Closed and qualitative example of the hierarchical reasoning of PlanAgent.
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                              10
+
+
+
+E. Performance of Different MLLMs.                                                            VII. C ONCLUSION
+   To evaluate the efficacy of various multi-modal large lan-
+                                                                       In this paper, we present PlanAgent, a novel MLLM-based
+guage models in autonomous driving planning tasks, we incor-
+                                                                    human-like planning agent system for mid-to-mid vehicle
+porated widely-used open-source models such as CogVLM-
+                                                                    motion planning. PlanAgent introduces an Environment Trans-
+chat [24], LLaVa-7B [25], and LLaVa-13B [25] into the Plan-
+                                                                    formation module to extract BEV map and efficiently gener-
+Agent system. These models served as MLLM agents within
+                                                                    ate lane-graph-based textual description as input, proposes a
+the system. As shown in Tab. VII, LLaVa-13B outperforms the
+                                                                    Reasoning Engine module with a well-designed hierarchical
+other open-source MLLMs. All these three open-source mod-
+                                                                    chain-of-thought to instruct MLLM to understand driving sce-
+els show significant enhancement over the rule-based method
+                                                                    nario, give motion instruction, and generate planner code step
+PDM-Closed on the NR-CLS metric, evaluated on the nuPlan
+                                                                    by step. Furthermore, PlanAgent emulates the principles of
+Test14-hard benchmark. The respective improvements in their
+                                                                    human decision-making and incorporates a Reflection module,
+driving scores are 5.1%, 4.1%, and 6.7%, illustrating the
+                                                                    which includes simulation deduction and evaluation scoring, to
+compatibility of PlanAgent system when working with various
+                                                                    enhance the safety of planning. Owing to these enhancements,
+MLLM models. In addition, Tab. VII also demonstrates the
+                                                                    PlanAgent delivers competitive as well as generalizable results
+average time for each MLLM to infer once in the closed-loop
+                                                                    on the nuPlan Val14 and Test14-hard benchmarks and im-
+simulation.
+                                                                    proves the token usage efficiency when describing the driving
+                                                                    scenarios.
+            VI. L IMITATIONS AND F UTURE W ORK
+A. Limitations.
+   Despite the numerous benefits offered by PlanAgent, it is                                      R EFERENCES
+also subject to the following limitations. Firstly, PlanAgent
+                                                                     [1] H. Caesar, J. Kabzan, K. S. Tan, W. K. Fong, E. Wolff, A. Lang,
+needs to accurately understand the scenario represented by               L. Fletcher, O. Beijbom, and S. Omari, “NuPlan: A closed-loop ML-
+the BEV map and text description, and generate the planner               based planning benchmark for autonomous vehicles,” arXiv preprint
+code based on the understanding of the planner parameters.               arXiv:2106.11810, 2021.
+                                                                     [2] D. Dauner, M. Hallgarten, A. Geiger, and K. Chitta, “Parting with
+Thus, PlanAgent is sensitive to the quality of the prompts that          Misconceptions about Learning-based Vehicle Motion Planning,” CoRL,
+describe scenario and planner parameters. However, the cur-              2023.
+rent MLLMs such as GPT-4V and LLaVA are sometimes not                [3] J. Cheng, Y. Chen, X. Mei, B. Yang, B. Li, and M. Liu, “Rethinking
+                                                                         Imitation-based Planner for Autonomous Driving,” ICRA, 2024.
+accurate enough in scene understanding and planner parameter
+                                                                     [4] Z. Huang, H. Liu, J. Wu, and C. Lv, “Differentiable Integrated Motion
+meaning, leading to the generation of unreasonable planner               Prediction and Planning With Learnable Cost Function for Autonomous
+code. Secondly, the current implementation of PlanAgent                  Driving,” ICRA, 2024.
+involves invoking the MLLM to generate the planner code at           [5] S. Mozaffari, O. Y. Al-Jarrah, M. Dianati, P. Jennings and A. Mouzakitis,
+                                                                         “Deep Learning-Based Vehicle Behavior Prediction for Autonomous
+regular time intervals. However, there are instances where the           Driving Applications: A Review,” IEEE Transactions on Intelligent
+traffic situation in the scene is relatively straightforward, and        Transportation Systems, vol. 23, no. 1, pp. 33-47, 2022
+it does not necessitate the involvement of the MLLM. In such         [6] K. Muhammad, A. Ullah, J. Lloret, J. D. Ser and V. H. C. de
+                                                                         Albuquerque, “Deep Learning for Safe Autonomous Driving: Current
+cases, rule-based methods such as PDM-Closed [2] can create              Challenges and Future Directions,” IEEE Transactions on Intelligent
+a safe plan. Such a fixed-time interval calling MLLM increases           Transportation Systems, vol. 22, no. 7, pp. 4316-4336, 2021
+the computational burden of closed-loop control. Lastly, as          [7] D. Li, Q. Zhang, S. Lu, Y. Pan, and D. Zhao, “Conditional Goal-
+                                                                         Oriented Trajectory Prediction for Interacting Vehicles,” IEEE Trans-
+seen in Tab .VII, it takes about 5 seconds to call GPT-4V                actions on Neural Networks and Learning Systems, pp. 1–13, doi:
+which does introduce difficulties in deployment. We believe it           10.1109/TNNLS.2023.3321564, 2023.
+can be solved with the development of the MLLMs.                     [8] D. Li, Q. Zhang, Z. Xia, Y. Zheng, K. Zhang, M. Yi, W. Jin, and
+                                                                         D. Zhao, “Planning-Inspired Hierarchical Trajectory Prediction via
+                                                                         Lateral-Longitudinal Decomposition for Autonomous Driving,” IEEE
+B. Future Work                                                           Transactions on Intelligent Vehicles, vol. 9, no. 1, pp. 692–703, 2023.
+                                                                     [9] Y. Liu, Q. Zhang, Y. Gao, and D. Zhao, “Deep Reinforcement Learning-
+    Considering the aforementioned limitations, we have iden-            Based Driving Policy at Intersections Utilizing Lane Graph Networks,”
+tified several areas to focus on in our future work. Firstly, we         IEEE Transactions on Cognitive and Developmental Systems, pp. 1–16,
+will delve into enhancing the MLLM’s ability to understand               doi: 10.1109/TCDS.2024.3384269, 2024.
+                                                                    [10] Aradi, Szilárd, “Survey of Deep Reinforcement Learning for Motion
+scenarios by fine-tuning it using data collected from au-                Planning of Autonomous Vehicles,” IEEE Transactions on Intelligent
+tonomous driving datasets. This approach aims to improve the             Transportation Systems, vol. 23, no. 2, pp. 740–759, 2022.
+accuracy and precision of the MLLM’s scene-understanding            [11] J. Wang, Q. Zhang, and D. Zhao, “Dynamic-Horizon Model-
+                                                                         Based Value Estimation With Latent Imagination,” IEEE Transac-
+capabilities. Secondly, we explore how to determine when                 tions on Neural Networks and Learning Systems, pp. 1–14, doi:
+MLLM involvement is required, thereby reducing the fre-                  10.1109/TNNLS.2022.3215788, 2022.
+quency of MLLM calls and significantly reducing the time            [12] J. Wang, Q. Zhang, Y. Mu, D. Li, D. Zhao, Y. Zhuang, P. Luo,
+and computational resources required for closed-loop plan-               B. Wang, and J. Hao, “Prototypical Context-Aware Dynamics for
+                                                                         Generalization in Visual Control With Model-Based Reinforcement
+ning. Lastly, we will investigate the utilization of closed-loop         Learning,” IEEE Transactions on Industrial Informatics, pp. 1–11, doi:
+simulators to achieve human-like alignment of the MLLM. By               10.1109/TII.2024.3396525, 2024.
+incorporating feedback from the simulator, we aim to enhance        [13] S. Thrun, M. Montemerlo, H. Dahlkamp, D. Stavens, A. Aron, J. Diebel,
+                                                                         P. Fong, J. Gale, M. Halpenny, G. Hoffmann, et al., “Stanley: The Robot
+the performance and reliability of the MLLM in real-world                That Won the DARPA Grand Challenge,” Journal of field Robotics,
+driving scenarios.                                                       vol. 23, no. 9, pp. 661–692, 2006.
+THIS WORK HAS BEEN SUBMITTED TO THE IEEE FOR POSSIBLE PUBLICATION                                                                                           11
+
+
+
+[14] A. Bacha, C. Bauman, R. Faruque, M. Fleming, C. Terwelp, C. Rein-                 tonomous Driving,” IEEE Transactions on Pattern Analysis and Machine
+     holtz, D. Hong, A. Wicks, T. Alberi, D. Anderson, et al., “Odin: Team             Intelligence, vol. 45, no. 11, pp. 12878–12895, 2022.
+     VictorTango’s entry in the DARPA Urban Challenge,” Journal of field          [39] T. Ye, W. Jing, C. Hu, S. Huang, L. Gao, F. Li, J. Wang, K. Guo,
+     Robotics, vol. 25, no. 8, pp. 467–492, 2008.                                      W. Xiao, W. Mao, et al., “FusionAD: Multi-modality Fusion for Pre-
+[15] A. Kesting, M. Treiber, and D. Helbing, “General Lane-Changing Model              diction and Planning Tasks of Autonomous Driving,” arXiv preprint
+     MOBIL for Car-Following Models,” Transportation Research Record,                  arXiv:2308.01006, 2023.
+     vol. 1999, no. 1, pp. 86–94, 2007.                                           [40] K. Chitta, A. Prakash, and A. Geiger, “NEAT: Neural Attention Fields
+[16] M. Treiber, A. Hennecke, and D. Helbing, “Congested Traffic States in             for End-to-End Autonomous Driving,” ICCV, 2021.
+     Empirical Observations and Microscopic Simulations,” Physical Review         [41] W. Zheng, R. Song, X. Guo, and L. Chen, “GenAD: Generative End-
+     E, vol. 62, no. 2, p. 1805, 2000.                                                 to-End Autonomous Driving,” arXiv preprint arXiv:2402.11502, 2024.
+[17] J.-T. Zhai, Z. Feng, J. Du, Y. Mao, J.-J. Liu, Z. Tan, Y. Zhang, X. Ye,      [42] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun,
+     and J. Wang, “Rethinking the Open-Loop Evaluation of End-to-End                   “CARLA: An Open Urban Driving Simulator,” CoRL, 2017.
+     Autonomous Driving in nuScenes,” arXiv preprint arXiv:2305.10430,            [43] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu, A. Kr-
+     2023.                                                                             ishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuScenes: A Multimodal
+[18] Q. Zhang, Y. Gao, Y. Zhang, Y. Guo, D. Ding, Y. Wang, P. Sun, and                 Dataset for Autonomous Driving,” CVPR, 2020.
+     D. Zhao, “TrajGen: Generating Realistic and Diverse Trajectories with        [44] O. Scheel, L. Bergamini, M. Wolczyk, B. Osiński, and P. Ondruska,
+     Reactive and Feasible Agent Behaviors for Autonomous Driving,” IEEE               “Urban Driver: Learning to Drive from Real-world Demonstrations
+     Transactions on Intelligent Transportation Systems, vol. 23, no. 12, pp.          Using Policy Gradients,” CoRL, 2022.
+     24 474–24 487, 2022.                                                         [45] M. Hallgarten, M. Stoll, and A. Zell, “From Prediction to Planning With
+[19] W. Huang, C. Wang, R. Zhang, Y. Li, J. Wu, and L. Fei-Fei, “VoxPoser:             Goal Conditioned Lane Graph Traversals,” ITSC, 2023.
+     Composable 3D Value Maps for Robotic Manipulation with Language              [46] Z. Huang, H. Liu, and C. Lv, “GameFormer: Game-theoretic Modeling
+     Models,” CoRL, 2023.                                                              and Learning of Transformer-based Interactive Prediction and Planning
+[20] J. Liang, W. Huang, F. Xia, P. Xu, K. Hausman, B. Ichter, P. Florence,            for Autonomous Driving,” ICCV, 2023.
+     and A. Zeng, “Code as Policies: Language Model Programs for Embod-           [47] Y. Hu, K. Li, P. Liang, J. Qian, Z. Yang, H. Zhang, W. Shao, Z. Ding,
+     ied Control,” ICRA, 2023.                                                         W. Xu, and Q. Liu, “Imitation with Spatial-Temporal Heatmap: 2nd
+[21] X. Li, M. Zhang, Y. Geng, H. Geng, Y. Long, Y. Shen, R. Zhang, J. Liu,            Place Solution for NuPlan Challenge,” arXiv preprint arXiv:2306.15700,
+     and H. Dong, “ManipLLM: Embodied Multimodal Large Language                        2023.
+     Model for Object-Centric Robotic Manipulation,” CVPR, 2024.                  [48] N. Carion, F. Massa, G. Synnaeve, N. Usunier, A. Kirillov, and
+[22] Y. Zheng, X. Chen, Y. Zheng, S. Gu, R. Yang, B. Jin, P. Li, C. Zhong,             S. Zagoruyko, “End-to-End Object Detection with Transformers,”
+     Z. Wang, L. Liu, et al., “GaussianGrasper: 3D Language Gaus-                      ECCV, 2020.
+     sian Splatting for Open-vocabulary Robotic Grasping,” arXiv preprint         [49] B. Jin, X. Liu, Y. Zheng, P. Li, H. Zhao, T. Zhang, Y. Zheng, G. Zhou,
+     arXiv:2403.09637, 2024                                                            and J. Liu, “ADAPT: Action-aware Driving Caption Transformer,” ICRA,
+[23] Y. Zheng, Q. Wang, C. Zhong, H. Liang, Z. Han, and Y. Zheng, “En-                 2023.
+     hancing Daily Life Through an Interactive Desktop Robotics System,”          [50] B. Jin, Y. Zheng, P. Li, W. Li, Y. Zheng, S. Hu, X. Liu, J. Zhu, Z. Yan,
+     CAAI International Conference on Artificial Intelligence, 2023                    H. Sun, et al., “TOD3Cap: Towards 3D Dense Captioning in Outdoor
+[24] W. Wang, Q. Lv, W. Yu, W. Hong, J. Qi, Y. Wang, J. Ji, Z. Yang, L. Zhao,          Scenes,” arXiv preprint arXiv:2403.19589, 2024.
+     X. Song, et al., “CogVLM: Visual Expert for Pretrained Language              [51] B. Li, Y. Wang, J. Mao, B. Ivanovic, S. Veer, K. Leung, and M. Pavone,
+     Models,” arXiv preprint arXiv:2311.03079, 2023.                                   “Driving Everywhere with Large Language Model Policy Adaptation,”
+                                                                                       CVPR, 2024.
+[25] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual Instruction Tuning,”
+                                                                                  [52] M. Z. Hasan, J. Chen, J. Wang, M. S. Rahman, A. Joshi, S.
+     NeurIPS, 2024.
+                                                                                       Velipasalar, C. Hegde, A. Sharma, and S. Sarkar, “Vision-Language
+[26] R. Zhang, J. Han, C. Liu, P. Gao, A. Zhou, X. Hu, S. Yan, P. Lu,
+                                                                                       Models Can Identify Distracted Driver Behavior From Naturalistic
+     H. Li, and Y. Qiao, “LLaMA-Adapter: Efficient Fine-tuning of Language
+                                                                                       Videos,” IEEE Transactions on Intelligent Transportation Systems, doi:
+     Models with Zero-init Attention,” ICLR, 2024.
+                                                                                       10.1109/TITS.2024.3381175, 2024.
+[27] G. Wang, Y. Xie, Y. Jiang, A. Mandlekar, C. Xiao, Y. Zhu, L. Fan,
+                                                                                  [53] C. Pan, B. Yaman, T. Nesti, A. Mallik, A. Allievi, S. Velipasalar, and
+     and A. Anandkumar, “Voyager: An Open-Ended Embodied Agent with
+                                                                                       L. Ren, “VLP: Vision Language Planning for Autonomous Driving,”
+     Large Language Models,” arXiv preprint arXiv:2305.16291, 2023.
+                                                                                       CVPR, 2024.
+[28] X. Li, E. Liu, T. Shen, J. Huang, and F.-Y. Wang, “ChatGPT-Based             [54] H. Shao, Y. Hu, L. Wang, S. L. Waslander, Y. Liu, and H. Li, “LMDrive:
+     Scenario Engineer: A New Framework on Scenario Generation for                     Closed-Loop End-to-End Driving with Large Language Models,” CVPR,
+     Trajectory Prediction,” IEEE Transactions on Intelligent Vehicles, vol. 9,        2024.
+     no. 3, pp. 4422–4431, 2024.                                                  [55] Y. Cui, S. Huang, J. Zhong, Z. Liu, Y. Wang, C. Sun, B. Li, X. Wang, and
+[29] S. Wang, Y. Zhu, Z. Li, Y. Wang, L. Li, and Z. He, “ChatGPT as Your               A. Khajepour, “DriveLLM: Charting the Path Toward Full Autonomous
+     Vehicle Co-Pilot: An Initial Attempt,” IEEE Transactions on Intelligent           Driving With Large Language Models,” IEEE Transactions on Intelligent
+     Vehicles, vol. 8, no. 12, pp. 4706–4721, 2023.                                    Vehicles, vol. 9, no. 1, pp. 1450–1464, 2024.
+[30] Y. Wei, Z. Wang, Y. Lu, C. Xu, C. Liu, H. Zhao, S. Chen, and Y. Wang,        [56] H. Sha, Y. Mu, Y. Jiang, L. Chen, C. Xu, P. Luo, S. E. Li,
+     “Editable Scene Simulation for Autonomous Driving via Collaborative               M. Tomizuka, W. Zhan, and M. Ding, “LanguageMPC: Large Language
+     LLM-Agents,” CVPR, 2024                                                           Models as Decision Makers for Autonomous Driving,” arXiv preprint
+[31] J. Chen, X. Li, X. Ye, C. Li, Z. Fan, and H. Zhao, “Idea-2-3D: Col-               arXiv:2310.03026, 2023.
+     laborative LMM Agents Enable 3D Model Generation from Interleaved            [57] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman,
+     Multimodal Inputs,” arXiv preprint arXiv:2404.04363, 2024                         D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat, et al., “GPT-4
+[32] L. Wen, D. Fu, X. Li, X. Cai, T. Ma, P. Cai, M. Dou, B. Shi, L. He,               Technical Report,” arXiv preprint arXiv:2303.08774, 2023.
+     and Y. Qiao, “DiLu: A Knowledge-Driven Approach to Autonomous
+     Driving with Large Language Models,” ICLR, 2024.
+[33] S. Sharan, F. Pittaluga, M. Chandraker, et al., “LLM-Assist: Enhancing
+     Closed-Loop Planning with Language-Based Reasoning,” arXiv preprint
+     arXiv:2401.00125, 2023.
+[34] J. Mao, J. Ye, Y. Qian, M. Pavone, and Y. Wang, “A Language Agent
+     for Autonomous Driving,” arXiv preprint arXiv:2311.10813, 2023.
+[35] J. Mao, Y. Qian, H. Zhao, and Y. Wang, “GPT-Driver: Learning to Drive
+     with GPT,” arXiv preprint arXiv:2310.01415, 2023.
+[36] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin,
+     W. Wang, et al., “Planning-oriented Autonomous Driving,” CVPR, 2023.
+[37] B. Jiang, S. Chen, Q. Xu, B. Liao, J. Chen, H. Zhou, Q. Zhang, W. Liu,
+     C. Huang, and X. Wang, “VAD: Vectorized Scene Representation for
+     Efficient Autonomous Driving,” ICCV, 2023.
+[38] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger,
+     “TransFuser: Imitation with Transformer-Based Sensor Fusion for Au-
+

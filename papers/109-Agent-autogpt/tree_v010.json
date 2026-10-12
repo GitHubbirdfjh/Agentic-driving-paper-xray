@@ -1,0 +1,484 @@
+{
+  "sha": "16b37fff1d65a7d998c39aeab9764973d76ea731",
+  "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/16b37fff1d65a7d998c39aeab9764973d76ea731",
+  "tree": [
+    {
+      "path": ".env.template",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6fbc84243b176d8cf28070b37e14811a925b9665",
+      "size": 540,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/6fbc84243b176d8cf28070b37e14811a925b9665"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "675584f28f4bce720ffd48eea482757d7a752db3",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/675584f28f4bce720ffd48eea482757d7a752db3"
+    },
+    {
+      "path": ".github/FUNDING.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "54ef10844fe9217bc8f4626d013bcd53a7f77bb9",
+      "size": 67,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/54ef10844fe9217bc8f4626d013bcd53a7f77bb9"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "77dd939a58a628cc7a4c1d2cf3decd471d34e2ff",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/77dd939a58a628cc7a4c1d2cf3decd471d34e2ff"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/1.bug.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cf49ab5f838dd57265c5894eedbc21cc3ccda545",
+      "size": 1307,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/cf49ab5f838dd57265c5894eedbc21cc3ccda545"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/2.feature.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0ea882ef6a4e6978b45c45529935c17c42c17a20",
+      "size": 1139,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/0ea882ef6a4e6978b45c45529935c17c42c17a20"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9fa565936058a219f2e363600978cb46d8994f91",
+      "size": 2434,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/9fa565936058a219f2e363600978cb46d8994f91"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "66fce23b4b678b594a2fd3af6d7d2c9da296cc2d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/66fce23b4b678b594a2fd3af6d7d2c9da296cc2d"
+    },
+    {
+      "path": ".github/workflows/auto_format.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c33cd39755d51b37bdb95ca2466d203d44843f77",
+      "size": 808,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/c33cd39755d51b37bdb95ca2466d203d44843f77"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b739d49be6248fdff9acfbd36da7c513148c8703",
+      "size": 223,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/b739d49be6248fdff9acfbd36da7c513148c8703"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0529cbd94952639d72e5709655da5cdf7f8a5bb7",
+      "size": 1720,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/0529cbd94952639d72e5709655da5cdf7f8a5bb7"
+    },
+    {
+      "path": "Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "146a3747170f4957131914d3876729cf312bfa62",
+      "size": 141,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/146a3747170f4957131914d3876729cf312bfa62"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "601935b85ec87d3393291792475a08a66727358f",
+      "size": 1077,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/601935b85ec87d3393291792475a08a66727358f"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "73847deea0cc852527da8a895c4cc607c5a9c0a6",
+      "size": 16263,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/73847deea0cc852527da8a895c4cc607c5a9c0a6"
+    },
+    {
+      "path": "ai_settings.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b37ba849f916e1a0b58f7375e70e9cd0ec57184c",
+      "size": 283,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/b37ba849f916e1a0b58f7375e70e9cd0ec57184c"
+    },
+    {
+      "path": "outputs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e799770cb436059be2b9b61cadff3fa7ad870497",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/e799770cb436059be2b9b61cadff3fa7ad870497"
+    },
+    {
+      "path": "outputs/guest_post_email.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d4c46093da4462ea095abb5e40f806bb96cdb3ca",
+      "size": 2538,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/d4c46093da4462ea095abb5e40f806bb96cdb3ca"
+    },
+    {
+      "path": "outputs/how_to_save_money_on_energy_bills.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "02c651bdfda99a9ca4f709a23239efa031625042",
+      "size": 3703,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/02c651bdfda99a9ca4f709a23239efa031625042"
+    },
+    {
+      "path": "outputs/logs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "226853d75b94d7ee0cc20f3249160fbb17600725",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/226853d75b94d7ee0cc20f3249160fbb17600725"
+    },
+    {
+      "path": "outputs/logs/message-log-1.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8a719016ce23f5428e1f655b8806f7d0f4a10a2b",
+      "size": 25199,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/8a719016ce23f5428e1f655b8806f7d0f4a10a2b"
+    },
+    {
+      "path": "outputs/logs/message-log-2.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a9fe8d338658c4bf77aad1b7ed7bd96fe5bf9787",
+      "size": 54983,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/a9fe8d338658c4bf77aad1b7ed7bd96fe5bf9787"
+    },
+    {
+      "path": "outputs/logs/message-log-3.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6e9061617bc74b59865887db900bc9ceb29bfa80",
+      "size": 35543,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/6e9061617bc74b59865887db900bc9ceb29bfa80"
+    },
+    {
+      "path": "outputs/logs/message-log-4.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c913a3023da1391ea41fcc50fa38efe50bc95e3",
+      "size": 9811,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/4c913a3023da1391ea41fcc50fa38efe50bc95e3"
+    },
+    {
+      "path": "outputs/post1_output.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cedbd2142e4cff6fa8a7fd2fc409a46eb0c84e10",
+      "size": 3286,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/cedbd2142e4cff6fa8a7fd2fc409a46eb0c84e10"
+    },
+    {
+      "path": "outputs/post2_output.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9069c08a062f333bfabca437d1196f68db2b8914",
+      "size": 4951,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/9069c08a062f333bfabca437d1196f68db2b8914"
+    },
+    {
+      "path": "requirements.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6a9ba6433004288b5f09aa611b363352780b725e",
+      "size": 309,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/6a9ba6433004288b5f09aa611b363352780b725e"
+    },
+    {
+      "path": "scripts",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "252435979429401ff7615d50f39d6f3776d29a4d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/252435979429401ff7615d50f39d6f3776d29a4d"
+    },
+    {
+      "path": "scripts/agent_manager.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a0e5f1648213ef3d1cb645712dbd99d5585fae5d",
+      "size": 1776,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/a0e5f1648213ef3d1cb645712dbd99d5585fae5d"
+    },
+    {
+      "path": "scripts/ai_config.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bd373944fca13b6bde977d4c4dcd610d5ee40889",
+      "size": 3255,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/bd373944fca13b6bde977d4c4dcd610d5ee40889"
+    },
+    {
+      "path": "scripts/ai_functions.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8ad77441dc319a28950a1a1ab09897fb354bdd54",
+      "size": 2431,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/8ad77441dc319a28950a1a1ab09897fb354bdd54"
+    },
+    {
+      "path": "scripts/browse.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b0c745ef420d6bff4c67486bf0cbc229e63ce25e",
+      "size": 4160,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/b0c745ef420d6bff4c67486bf0cbc229e63ce25e"
+    },
+    {
+      "path": "scripts/call_ai_function.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f8238658695a27189f6cbd05b99b1bfe7cc12703",
+      "size": 945,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/f8238658695a27189f6cbd05b99b1bfe7cc12703"
+    },
+    {
+      "path": "scripts/chat.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c64be3b84b55429553e9fe17ba454dab3da49615",
+      "size": 6373,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/c64be3b84b55429553e9fe17ba454dab3da49615"
+    },
+    {
+      "path": "scripts/commands.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "92d46ae18ae4a404a9925ba8c0e39309fed1d43f",
+      "size": 10691,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/92d46ae18ae4a404a9925ba8c0e39309fed1d43f"
+    },
+    {
+      "path": "scripts/config.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a280e6cc15e9531c9c3cb50c187508caa596e368",
+      "size": 5366,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/a280e6cc15e9531c9c3cb50c187508caa596e368"
+    },
+    {
+      "path": "scripts/data.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f80c2875d8ef84a0c2f39a5309ea2683c72fdd29",
+      "size": 524,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/f80c2875d8ef84a0c2f39a5309ea2683c72fdd29"
+    },
+    {
+      "path": "scripts/data",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ce6e3a9339850d6a54b92c2f27501e20936f6851",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/ce6e3a9339850d6a54b92c2f27501e20936f6851"
+    },
+    {
+      "path": "scripts/data/prompt.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fc68f3ae0d28d740950f3e76ac09a4436882e4ea",
+      "size": 2792,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/fc68f3ae0d28d740950f3e76ac09a4436882e4ea"
+    },
+    {
+      "path": "scripts/execute_code.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8f909116ee9d966eb7758f9cddb81af715d5c0b",
+      "size": 1391,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/a8f909116ee9d966eb7758f9cddb81af715d5c0b"
+    },
+    {
+      "path": "scripts/file_operations.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c6066ef930291ede1d316e71cc579fc53f9cfdf9",
+      "size": 2392,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/c6066ef930291ede1d316e71cc579fc53f9cfdf9"
+    },
+    {
+      "path": "scripts/image_gen.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4481696ffa2197efeb3c8c998b2b308ca4a72816",
+      "size": 1414,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/4481696ffa2197efeb3c8c998b2b308ca4a72816"
+    },
+    {
+      "path": "scripts/json_parser.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e96c43f6649add2770ca035fc7e45fe0c39a6f4e",
+      "size": 3984,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/e96c43f6649add2770ca035fc7e45fe0c39a6f4e"
+    },
+    {
+      "path": "scripts/json_utils.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "80aab1928132815340acb898bdd45d7d99bcd6f0",
+      "size": 3505,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/80aab1928132815340acb898bdd45d7d99bcd6f0"
+    },
+    {
+      "path": "scripts/llm_utils.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94ba5f131649c002b791834e4d932bf5de800bc2",
+      "size": 807,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/94ba5f131649c002b791834e4d932bf5de800bc2"
+    },
+    {
+      "path": "scripts/main.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "15af0c381249dfa3c4c4687d30efa51e5b14b681",
+      "size": 15739,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/15af0c381249dfa3c4c4687d30efa51e5b14b681"
+    },
+    {
+      "path": "scripts/memory",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "225bb61b31c2e94e36de8c7f9a809489389fbcd8",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/225bb61b31c2e94e36de8c7f9a809489389fbcd8"
+    },
+    {
+      "path": "scripts/memory/__init__.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a441a46aa94ee3a0f8a95e02f3f5e1f81fa46aff",
+      "size": 1164,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/a441a46aa94ee3a0f8a95e02f3f5e1f81fa46aff"
+    },
+    {
+      "path": "scripts/memory/base.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d7ab7fcf1f55522f7a74470772785d5e40d93a80",
+      "size": 659,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/d7ab7fcf1f55522f7a74470772785d5e40d93a80"
+    },
+    {
+      "path": "scripts/memory/local.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "372b59c442b2d30707739a06e9383c3c54b2b495",
+      "size": 3008,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/372b59c442b2d30707739a06e9383c3c54b2b495"
+    },
+    {
+      "path": "scripts/memory/pinecone.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8e1eaa570fee6d26b4ad3f0fb78d6d6ec775cf88",
+      "size": 2003,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/8e1eaa570fee6d26b4ad3f0fb78d6d6ec775cf88"
+    },
+    {
+      "path": "scripts/memory/redismem.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2082fe58876423e840a251cf82d6faaaf7832aad",
+      "size": 4337,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/2082fe58876423e840a251cf82d6faaaf7832aad"
+    },
+    {
+      "path": "scripts/speak.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5eed28d4381bd6e6e91400cb98561ca4d6b5f81b",
+      "size": 2527,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/5eed28d4381bd6e6e91400cb98561ca4d6b5f81b"
+    },
+    {
+      "path": "scripts/spinner.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "df1f4ddf937258e9341abb8da82752c5b8756c5e",
+      "size": 1128,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/df1f4ddf937258e9341abb8da82752c5b8756c5e"
+    },
+    {
+      "path": "scripts/token_counter.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a28a9868ed8effc0f481d06c3cbcd3f99e7c7635",
+      "size": 2476,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/a28a9868ed8effc0f481d06c3cbcd3f99e7c7635"
+    },
+    {
+      "path": "scripts/utils.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5039796fbd18659aef77d71fa67e8d5bd7142fda",
+      "size": 189,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/5039796fbd18659aef77d71fa67e8d5bd7142fda"
+    },
+    {
+      "path": "tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "66f3c36ba6caffb22fd292773e29578e6a79af0d",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/66f3c36ba6caffb22fd292773e29578e6a79af0d"
+    },
+    {
+      "path": "tests/integration",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "edecd3f8195e1fc00b7e2d358cd1cd1277bc7ade",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/edecd3f8195e1fc00b7e2d358cd1cd1277bc7ade"
+    },
+    {
+      "path": "tests/integration/memory_tests.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ed444d919640ed1154f33d5c8bfa8b2487cfaf1d",
+      "size": 1602,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/ed444d919640ed1154f33d5c8bfa8b2487cfaf1d"
+    },
+    {
+      "path": "tests/test_browse_scrape_text.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bfc3b4251d364ccab0e9def6d6a265e00ae41402",
+      "size": 4418,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/bfc3b4251d364ccab0e9def6d6a265e00ae41402"
+    },
+    {
+      "path": "tests/unit",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0cf881049925bc94e972c30d1ddd8ec7914253c7",
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/trees/0cf881049925bc94e972c30d1ddd8ec7914253c7"
+    },
+    {
+      "path": "tests/unit/json_tests.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fdac9c2f771efb1b37bd6728c8d946871c3f56ed",
+      "size": 5704,
+      "url": "https://api.github.com/repos/Significant-Gravitas/AutoGPT/git/blobs/fdac9c2f771efb1b37bd6728c8d946871c3f56ed"
+    }
+  ],
+  "truncated": false
+}

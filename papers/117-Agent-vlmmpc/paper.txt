@@ -1,0 +1,967 @@
+VLM-MPC: Model Predictive Controller Augmented Vision Language Model for
+Autonomous Driving
+
+Keke Long1, Haotian Shi1, Jiaxi Liu1, Chaowei Xiao1, Xiaopeng Li1*
+1
+ Department of Civil and Environmental Engineering, University of Wisconsin-Madison, Madison, WI,
+53706, USA
+Corresponding author: xli2485@wisc.edu
+
+
+ABSTRACT
+         Motivated by the emergent reasoning capabilities of Vision Language Models (VLMs) and their
+potential to improve the comprehensibility of autonomous driving systems, this paper introduces a closed-
+loop autonomous driving controller called VLM-MPC, which combines the Model Predictive Controller
+(MPC) with VLM to evaluate how model-based control could enhance VLM decision-making. The
+proposed VLM-MPC is structured into two asynchronous components: The upper layer VLM generates
+driving parameters (e.g., desired speed, desired headway) for lower-level control based on front camera
+images, ego vehicle state, traffic environment conditions, and reference memory; The lower-level MPC
+controls the vehicle in real-time using these parameters, considering engine lag and providing state feedback
+to the entire system. Experiments based on the nuScenes dataset validated the effectiveness of the proposed
+VLM-MPC across various environments (e.g., night, rain, and intersections). The results demonstrate that
+the VLM-MPC consistently maintains Post Encroachment Time (PET) above safe thresholds, in contrast
+to some scenarios where the VLM-based control posed collision risks. Additionally, the VLM-MPC
+enhances smoothness compared to the real-world trajectories and VLM-based control. By comparing
+behaviors under different environmental settings, we highlight the VLM-MPC’s capability to understand
+the environment and make reasoned inferences. Moreover, we validate the contributions of two key
+components, the reference memory and the environment encoder, to the stability of responses through
+ablation tests.
+Keywords: Autonomous Vehicle, Foundation Model, Large Language Model, Vehicle Safety
+1    INTRODUCTION
+        The comprehensibility of autonomous driving systems is of paramount importance. Existing
+autonomous driving systems, whether model-based (Gao et al., 2022; Shang et al., 2022) or learning-based
+(Shi et al., 2021), typically require complex rules or reward function designs to understand the traffic
+environment and driving preferences. However, this reliance on predefined rule sets often limits their
+adaptability to various traffic scenarios (Tian et al., 2024). Furthermore, learning-based autonomous driving
+systems face the challenge of out-of-distribution (OOD) data (Filos et al., 2020), where limited datasets fail
+to ensure reliable decision-making in rare real-world driving situations.
+          Given these challenges, foundation models (FMs) show potential as a promising solution (Brown
+et al., 2020; Valmeekam et al., 2023). Leveraging extensive datasets of text and images, FMs have endowed
+them with reasoning capabilities (Brown et al., 2020; Ma et al., 2023), enhancing the interpretability and
+performance of autonomous driving systems in complex environments. Recent studies have begun utilizing
+Vision Language Models (VLMs) and Large Language Models (LLMs) to process driving environmental
+inputs, such as images and the positions of traffic participants. This information is encoded as language
+representations and input into FMs, enabling them to perform driving tasks effectively.
+         The application of FMs in autonomous driving tasks encompasses various roles. Depending on the
+control mode output by the FM, current FM-based vehicle controllers can be classified into two categories,
+as outlined in TABLE 1. The first category of approach, "FM to action" (Sha et al., 2023), directly uses
+FMs to generate autonomous vehicle (AV) actions, such as waypoints, throttle, and pedal commands. This
+is an 'end-to-end' autonomous driving mode. However, these studies often fail to account for vehicle
+kinematics and dynamics in FM models (Mao et al., 2023), raising concerns about the real-world
+applicability of the generated actions. Additionally, this approach poses challenges to the response speed
+of FMs. In autonomous driving, particularly in near-collision scenarios, a control frequency of
+approximately 10Hz is required (Campolo et al., 2017). However, current FMs are incapable of achieving
+such high response speeds, further limiting their practicality in real-world applications. Some studies have
+sacrificed model accuracy by selecting smaller models for faster response times.
+         To leverage FMs' reasoning capabilities while mitigating the issue of slow response speeds, some
+AV control studies have adopted the second category of approach: "FM to commands/codes." In this
+approach, FMs serve as upper-level decision-makers, providing instructions or commands to the lower
+control system. This method decouples upper-level FM from lower-level vehicle control, allowing the
+upper-level FM to focus on long-term planning at a slower frequency. Meanwhile, the lower level inherits
+mature control schemes to perform high-frequency control. This asynchronous control approach offers two
+key benefits. First, it reduces the necessity for high response speeds from the FM, making it more
+compatible with the current capabilities of FMs (Chen et al., 2024). Second, it allows the lower-level control
+to leverage well-established vehicle control schemes, such as model predictive control (MPC)-based
+trajectory tracking (Wang et al., 2021), which are widely adopted in the industry.
+        However, a fundamental question remains unanswered: does incorporating a model-based
+approach like MPC into an FM benefit the FM's performance in autonomous driving? To tackle this
+unsolved question, we propose an autonomous driving controller with a two-level structure: VLMs,
+representing FM, serve as the upper-level vehicle control, while MPC functions as the lower-level controller.
+The upper-level VLM processes inputs such as the vehicle's front camera images, textual environment
+descriptions, and reference memory to generate control parameters for the lower-level MPC. The MPC then
+uses these parameters, accounting for vehicle dynamics with engine lag, to achieve realistic vehicle
+behavior and provide state feedback to the VLM. This asynchronous two-layer structure effectively
+mitigates the challenge of slow VLM response speeds. We compare this controller with the VLM-to-action
+approach to evaluate the impact of integrating MPC within a VLM framework.
+
+
+
+
+                                                        2
+                                    TABLE 1 Related Research
+         Research           Foundation model Input Foundation model Open/            Data/
+                                                       Output             Closed     Platform
+                                                                          loop
+FM to    OmniDrive (S.      3d vision/traffic          Planned waypoint Open         nuScenes
+action   Wang et al., 2024) info/trajectory
+                            memory/instruction
+         3D-Tokenized       3d vision/traffic          Planned waypoint Open         nuScenes
+         LLM (Bai et al.,   info/trajectory
+         2024)              memory/instruction
+         GPT-Driver (Mao Text scene description        Description of the Open       nuScenes
+         et al., 2023)      (status of ego vehicle and action; trajectory
+                            surrounding vehicle)
+         Language Agent     Text scene description     Description of the Open       nuScenes
+         (Mao et al., 2024) (status of ego vehicle and action; trajectory
+                            surrounding vehicle)
+         DriveGPT (Xu et Videos, text instructions     Control (speed,    Open       CC3M;
+         al., 2024)                                    turning angle)                WebVid-
+                                                                                     2M; BDD-X
+         BEVGPT (P. Wang Bird’s-eye-view (BEV)          Trajectory           Open    Lyft
+         et al., 2024)       images
+         Driving with LLMs Text scene description       Steering/pedal       Open    Self-made
+         (Chen et al., 2023) (route, vehicle,                                        open dataset
+                             pedestrian, ego state)
+         SurrealDriver (Jin Text memory, safety         Action (speed        Close   Carla
+         et al., 2023)       criteria, text scenario    up/stop)
+                             description
+         ADriver-I (Jia et   Historical frames, text    speed, Steer Angle   Close   nuScenes
+         al., 2023)          scenario description
+         LMDrive (Shao et Traffic info, vision,         Waypoints            Close   Carla
+         al., 2023)          instruction
+         DriveVLM (Tian et Traffic info/vision/         Waypoints;           Close   nuScenes,
+         al., 2024)          instruction                reference trajectory         SUP-AD
+                                                        for tracking                 dataset
+FM to    DiLu (Wen et al., Text Text scene               Five operational    Open    Highway-
+comm-    2023)                description                actions                     env, CitySim
+ands/c   Personalized         Text scene description,    Language model      Open    Self-made
+odes     autonomous           instructions, API docs     program                     open dataset
+         driving (Cui et al.,
+         2024b)
+         languageMPC (Sha Text scene description        MPC parameters       Open    IdSim
+         et al., 2023)
+         LLM-Assist           Driving parameters        Trajectory planner   Close   nuPlan
+         (Sharan et al.,                                parameter
+         2023)
+         PlanAgent (Zheng BEV map, text scene            Planning            Close   nuPlan
+         et al., 2024)        description                parameters
+         Co-driver (Guo et Front camera image, text     Control type,        Close   Carla
+         al., 2024)           scene description         control parameter
+
+
+                                                   3
+           Asynchronous llm      Feature for trajectory        Driving parameters Close           nuPlan
+           (Chen et al., 2024)   planner
+           DriVLMe (Huang        Perception video, text        Eight operational      Close       Carla
+           et al., 2024)         history action, planned       actions
+                                 route, human instruction
+           Drive as You Say      Text scene description        Five operational       Close       HighwayEnv
+           (Cui et al., 2024a)                                 actions
+           LaMPilot (Ma et       Text scene description,       Code                   Close       Self-made
+           al., n.d.)            instructions, API docs                                           open dataset
+
+          Another critical problem for FMs is the occurrence of hallucinations in their outputs (Farquhar et
+al., 2024). Hallucinations are often defined as LLMs generating ‘nonsensical or unfaithful content to the
+provided source content’ (Ji et al., 2023). These can arise for various reasons, including biases in the training
+data, lack of context awareness, and inherent limitations in the model's architecture. These hallucinations
+hinder the application of FMs across various fields, including autonomous driving, where they may fail to
+accurately comprehend the driving environment, leading to inconsistent responses or the generation of
+misleading information. Currently, a systematic evaluation to verify solutions that could enhance the
+reliability of FM responses in autonomous driving tasks is relatively rare.
+        In summary, current studies in FM research for autonomous driving control have not discussed the
+contribution of model-based controllers like MPC to FM-based control and lack a discussion about the
+methods for improving the reliability of FM responses in autonomous driving. To fill this gap, we propose
+a VLM-MPC framework for autonomous driving. The proposed VLM-MPC is structured into two
+asynchronous layers: The upper layer VLM generates driving parameters for lower-level control, and The
+lower-level MPC controls the vehicle in real-time using these parameters.
+         To evaluate the performance of VLM-MPC against the FM-to-action approach, a real-world driving
+scenarios dataset is adopted for testing. The results demonstrate that VLM-MPC ensures safety and
+improves smoothness across all tested scenarios, whereas the baseline FM-to-action method poses safety
+risks. To further validate the proposed VLM-MPC, we extend the analysis to a different variation: the LLM-
+MPC framework, which also demonstrates safety and improved smoothness across tested scenarios.
+Furthermore, we emphasize environmental understanding by VLM by examining its performance in
+different scenarios and the visualization of VLM attention to the image input. Results show that the VLM
+exhibited appropriate variations in behavior under different environmental conditions.
+        To avoid hallucination and improve the response stability of VLM, the VLM-MPC framework
+incorporates two key components: the reference memory and the environment encoder. The reference
+memory compiles average parameters applicable to current scenes based on their characteristics. The
+environment encoder extracts vital environmental factors such as weather, lighting, and road conditions
+from images captured by the vehicle’s front camera. These two components provide additional context to
+the VLM, thus mitigating the risk of incorrect or nonsensical responses. Ablation tests validate that both
+components significantly enhance the response stability of VLM, thereby improving the overall
+performance and reliability of VLM-MPC.
+         The structure of this paper is as follows. Section 2 describes the proposed VLM-MPC method.
+Section 3 shows the experiment settings and results. Section 4 concludes the paper and discusses the
+limitations of the proposed method and future research. Our code and data will be made available upon
+acceptance of this paper.
+
+
+
+
+                                                           4
+2     METHODOLOGY
+        This section presents VLM-MPC, a VLM-based controller for autonomous driving. We first
+introduce the overall architecture of VLM-MPC in Section 2.1. Then, we introduce the two levels of our
+method: upper-layer VLM (Section 2.2) and lower-layer MPC controller (Section 2.3)
+2.1   Overall Architecture
+         The overall pipeline of the proposed closed-loop VLM-MPC is shown in Figure 1. The VLM-MPC
+is structurally divided into two levels: an upper-level VLM part serves as an upper-level planner, and a
+lower-level MPC part for autonomous vehicle control.
+         Upper-level VLM: The upper level relies on VLM as the core reasoning and decision-making
+component, consisting of four subcomponents: 1) Environment encoder (Section 2.2.1): Generates
+environment descriptions from the vehicle's front camera. 2) Scene Encoder (Section 2.2.2): Extracts
+information about the ego vehicle and preceding vehicles from the dataset. 3) Reference memory (Section
+2.2.3): This component stores aggregated driving parameters from the history driving dataset, providing the
+VLM with historical context and average parameters for varied driving scenarios. 4) Prompt Generator:
+Constructs prompts for input and guides the VLM to perform chain-of-thought (CoT) analysis. The first
+three components collect information to construct the prompt for the fourth component. Once the prompt
+is input into the VLM, it produces the upper-level results, specifically the key driving parameters.
+         Lower level MPC: The lower level is a rule-based MPC. This part considers the vehicle's
+underlying dynamics. It relies on the key driving parameters set by the upper level to determine specific
+actions, which are then transmitted to the vehicle for execution (Section 2.3.1).
+         The upper and lower levels of the VLM-MPC are decoupled and operate at different frequencies.
+This setup enables controlled asynchronous inference. Thus, the upper-level VLM is not required to process
+at a high frequency as the lower-level MPC. During asynchronous intervals, the previously derived upper-
+level instruction and driving parameters continue to guide the lower-level MPC.
+
+
+
+
+                                  Figure 1 Architecture of VLM-MPC.
+
+
+                                                       5
+2.2     Upper-layer: VLM
+       This section introduces how the upper-layer: VLM, collects scene information and constructs
+prompts for the VLM to generate key driving parameters. This section introduces each component in
+sequence: reference memory dataset, environment encoder, scene encoder, and prompt generator.
+2.2.1   Environment Encoder
+        Driving environment characteristics, such as weather, light, and road conditions, significantly
+influence driving performance. Let 𝒯 ≔ {𝑡1 , 𝑡2 , … , 𝑡𝑛 }, where n represents the total number of time points
+required to complete a driving task within one scene. To enhance the environmental understanding of VLM,
+this model outputs a linguistic description E𝑡 of the driving environment at time 𝑡 ∈ 𝒯 . E𝑡 includes 6
+detailed scene descriptions at time 𝑡:
+                                                  Lig
+                                 E𝑡 ≔ {E𝑡Wea , E𝑡 , E𝑡RT , E𝑡RC , E𝑡Obs } , 𝑡 ∈ 𝒯                          (1)
+
+        The Contrastive Language-Image Pre-training (CLIP) model (Fang et al., 2024; Radford et al.,
+2021) is adopted to extract E𝑡 from the vehicle front camera imagesA pre-trained 'ViT-B/32' configuration
+is loaded. Several categories of descriptive texts were defined, including weather conditions, lighting, road
+types, road conditions, and static obstacles. The process begins by preprocessing and encoding an input
+image using the CLIP model to obtain image features. These features are then compared with pre-defined
+descriptive texts through cosine similarity calculations between the image and text features encoded by the
+CLIP model, as shown in Figure 2.
+                                                                                    Lig
+         In this setup, descriptions of weather conditions E𝑡Wea , lighting E𝑡 , and road types E𝑡RT are
+outputted regardless of the confidence score, ensuring these essential scene attributes are consistently
+provided. For road conditions E𝑡RC and obstacles E𝑡Obs , the descriptions are only outputted if their
+confidence scores exceed specific thresholds (0.3 and 0.2, respectively). This conditional output prevents
+the inclusion of less specific information, maintaining the accuracy and relevance of the extracted features.
+
+
+
+
+                          Figure 2 CLIP model structure in environment encoder
+
+
+2.2.2    Scene Encoder
+         To enhance the VLM's understanding of the driving task, the prompt includes the historical state
+information of the ego vehicle and the states of significant surrounding vehicles and other obstacles.
+Significant surrounding vehicles refer to the preceding vehicle that the MPC algorithm needs to consider
+for safe and efficient car-following behavior. Other obstacles include any objects that obstruct the ego
+vehicle's path, such as pedestrians, and elements that need to be considered due to traffic rules, such as stop
+lines at red lights or stop signs at intersections.
+
+                                                           6
+                                                                                                            ego
+        The scene encoder extracts the scene status S𝑡 at time 𝑡, including the ego vehicle state 𝑠𝑡              , the
+                         pre
+preceding vehicle state 𝑠𝑡 (if applicable), and the position of the stop line 𝑠𝑡SL (if applicable):
+                                                        ego       pre
+                                             S𝑡 ≔ {𝑠𝑡         , 𝑠𝑡       , 𝑠𝑡SL }, 𝑡 ∈ 𝒯                           (2)
+                           ego         ego        ego         ego
+                          𝑠𝑡     ≔ [𝑥𝑡 ′ ∈𝒯 , 𝑣𝑡 ′ ∈𝒯 , 𝑎𝑡 ′ ∈𝒯 ]                                , 𝑡′ ∈ 𝒯         (3)
+                                             𝑡          𝑡            𝑡   𝒯𝑡 ={𝑡−𝛾∆𝑡,⋯,𝑡−∆𝑡,𝑡}
+                                         pre                pre      pre        pre
+                                        𝑠𝑡       ≔ [∆𝑥𝑡 , 𝑣𝑡                 , 𝑎𝑡     ], 𝑡 ∈ 𝒯                    (4)
+                                                  𝑠𝑡SL ≔ [∆𝑥𝑡SL ], 𝑡 ∈ 𝒯                                          (5)
+       ego
+where 𝑠𝑡 are the 𝛾 steps of historical states of the ego vehicle containing vehicle position, vehicle speed,
+and vehicle acceleration at the previous time set 𝒯𝑡 = {𝑡 − 𝛾∆𝑡, ⋯ , 𝑡 − ∆𝑡, 𝑡}, ∆𝑡 is the historical state
+                                                        pre
+sample interval. In this research, 𝛾 = 5, ∆𝑡 = 0.5s. 𝑠𝑡 is the status information of the preceding vehicle
+at time 𝑡. ∆𝑥𝑡SL is the vehicle position in Frenet coordinates (Reiter and Diehl, 2021), with the ego vehicle
+as the origin. 𝑠𝑡SL is the status information of the stop line, 𝑠𝑡SL exists when the lane of the ego vehicle is
+blocked by a traffic signal or stop sign.
+         The preceding vehicle's information is determined based on vehicle positions, road information,
+and other vehicle positions from the nuScenes dataset (Caesar et al., 2020). Similarly, stop line positions
+are derived from the map information provided in the nuScenes dataset. This study does not account for
+errors in the perception phase of traffic participants.
+2.2.3    Reference Memory
+         Reference memory is constructed based on real vehicle trajectories from the nuScenes dataset. It
+serves as a reference for generating the key driving parameters by aggregating data from various driving
+scenes. Although the trajectories from nuScenes are not exclusively from autonomous driving or human
+driving, they generally exhibit safe driving behaviors, as supported by the safety analysis in the experiment
+section. Thus, we consider these trajectories valuable references for determining key driving parameters.
+        The key driving parameters include six parameters: [𝑁, 𝑄, 𝑅, 𝑄 ℎ , 𝑣 𝑑 , ℎ𝑑 ]:
+    1. Prediction horizon 𝑁: The number of time steps the controller looks ahead.
+    2. Speed maintenance weight Q: Weight for maintaining the desired speed. Considering there are
+       three weights in the system, Q is fixed at 1.
+    3. Control effort weight 𝑅: Weight for minimizing control effort.
+    4. Headway maintenance weight 𝑄 ℎ : Weight for maintaining the desired headway (distance) to the
+       front vehicle.
+    5. Desired speed 𝑣 𝑑 : The target speed (m/s) for the ego vehicle.
+    6. Desired headway ℎ𝑑 : The desired headway (s) between the ego vehicle and the front vehicle.
+          The six parameters are selected to optimize autonomous vehicle control. The prediction horizon 𝑁
+anticipates future changes, enabling proactive adjustments. Speed maintenance weight Q and control effort
+weight 𝑅 balance desired speed with minimal control effort for efficient driving. Headway maintenance
+weight 𝑄 ℎ ensures a safe distance from the vehicle ahead, which is crucial for collision avoidance and
+traffic flow. Desired speed 𝑣 𝑑 and desired headway ℎ𝑑 set specific performance targets. Together, these
+parameters harmonize safety, efficiency, and comfort, enhancing the driving experience.
+      The reference memory dataset encapsulates these parameters using the notation 𝑀(Et ), the function
+𝑀 maps each scenario to a tuple of averaged MPC parameters specific to that scenario:
+                                ̅(Et ), 𝑄̅ (Et ), 𝑅̅ (Et ), 𝑄̅ ℎ (Et ), 𝑣̅ 𝑑 (Et ), ℎ̅𝑑 (Et )], 𝑡 ∈ 𝒯
+                      𝑀(Et ) = [𝑁
+
+
+
+
+                                                                         7
+        Here 𝑁̅(Et ) denote the average values of the prediction horizon for all scenarios that share the same
+environment characteristics of Et , Similarly, 𝑄̅ (Et ), 𝑅̅ (Et ), 𝑄̅ ℎ (Et ), 𝑣̅ 𝑑 (Et ) and ℎ̅𝑑 (Et ) represent the
+average values of the speed maintenance weight, control effort weight, headway maintenance weight,
+desired speed, and desired headway, respectively, for those scenarios.
+         To build the reference memory dataset, we calibrated the MPC parameters for each scene in the
+nuScenes dataset by extracting specific characteristics such as intersection, rain, and night. Each scene was
+categorized based on a combination of these characteristics, resulting in eight distinct scenarios (e.g., rain
+at an intersection at night). We then performed statistical analyses to determine whether these scenario pairs
+had significant differences in driving behaviors. If significant differences were found, different average
+driving parameters were adopted for each scenario; if not, the scenarios were combined, and the same
+average driving parameters were used. This approach ensures that the reference memory provides
+appropriately tailored parameters for various driving conditions.
+2.2.4   Prompt Generator
+        The prompt generator collects all relevant information from the various modules and generates the
+input prompts for the VLM. This process ensures the VLM can effectively generate the six necessary
+parameters at time 𝑡:
+                                             𝜃𝑡 = [𝑁, 𝑄, 𝑅, 𝑄 ℎ , 𝑣 𝑑 , ℎ𝑑 ]                                     (6)
+         To generate these parameters, there is a slight difference in how the prompt is constructed during
+the initial call to the VLM for each scene and subsequent updates. For each scene, the first call at time 𝑡 =
+0 to the VLM for upper-level decision-making includes the following inputs: memory 𝑀, the front camera
+frame 𝑖𝑚𝑔𝑡=0 , environment description E𝑡=0 , and the state of the ego vehicle and preceding vehicles 𝑠𝑡=0 .
+The initial driving parameters 𝜃𝑡=0 are calculated as:
+                                  𝜃𝑡=0 = 𝑓 VLM (𝑀(E𝑡=0 ), 𝑖𝑚𝑔𝑡=0 , E𝑡=0 , S𝑡=0 )                                 (7)
+                                                              u
+        Subsequent calls to the VLM at intervals of ∆𝑡 for updating decisions, including the front camera
+frame 𝑖𝑚𝑔𝑡 , environment description E𝑡 , the state of the ego vehicle and preceding vehicles 𝑠𝑡 , and the
+previous driving parameters 𝜃𝑡−∆𝑡 u . The updated driving parameters 𝜃𝑡 are calculated as:
+                              𝜃𝑡 = 𝑓 VLM (𝑖𝑚𝑔𝑡 , E𝑡 , S𝑡 , 𝜃𝑡−∆𝑡 ), 𝑡 ∈ {∆𝑡 u , 2∆𝑡 u , ⋯ }                      (8)
+         At the end of the prompt, we utilize chain-of-thought (CoT) prompting—presenting a series of
+logical and interconnected steps or directives—to help the VLM better navigate the complexities of real-
+world driving tasks and conduct human-like reasoning. The CoT guidance is shown in Figure 3. This
+method enhances the VLM's ability to handle complex scenarios by breaking the decision-making process
+into manageable, logical steps, improving overall performance in dynamic environments.
+
+
+
+
+                    Figure 3 General prompt structure and the CoT guidance in prompts.
+
+
+                                                              8
+2.3     Lower-layer: MPC
+         In the lower layer, we account for the vehicle dynamics, including engine lag. Building on the key
+parameters 𝜃𝑡 generated by the VLM, the MPC component optimizes the trajectory of the controlled vehicle
+in real time. The MPC model's primary objective is to improve traffic efficiency and safety by adjusting
+the vehicle's speed and position in a predictive manner. Additionally, it considers the dynamic constraints
+of the traffic environment and the vehicle's operational limitations, aiming to minimize the impact of traffic
+oscillations on the ego vehicle and, by extension, the surrounding traffic flow. The MPC continuously
+updates using the latest vehicle state, and together with the upper-layer VLM, this method helps achieve
+closed-loop state feedback.
+2.3.1    CAV Dynamic Model
+          This study focuses on the longitudinal kinematics of vehicles along the driving direction. The key
+parameters 𝜃𝑡 , 𝑡 ∈ {∆𝑡 u , 2∆𝑡 u , ⋯ } obtained from the upper-layer VLM are updated with a time interval of
+∆𝑡 u . The lower-layer autonomous driving requires controlling the vehicle at a finer time interval ∆𝑡 l , which
+is usually around 0.1 second, ∆𝑡 l ≪ ∆𝑡 u . The lower-layer MPC predicts the system’s behavior over a finite
+horizon 𝑁 and plans the action over this horizon. The output of the MPC at time 𝑡
+is{𝑢𝑡 } 𝑡∈{𝑡0 ,𝑡0 +∆𝑡 l ,⋯,𝑡0 +𝑁∙∆𝑡 l } . The detailed MPC algorithm is as follows.
+
+         The nonlinear longitudinal dynamic model of a single vehicle is described as:
+                                                 𝑑𝑥𝑡
+                                                     = 𝑣𝑡
+                                                 𝑑𝑡
+                                                 𝑑𝑣𝑡
+                                                     = 𝑎𝑡          ,𝑡 ∈ 𝒯                                     (9)
+                                                 𝑑𝑡
+                                      𝑑𝑎𝑡
+                                                     )       )𝜂
+                                     { 𝑑𝑡 = 𝑓(𝑣𝑡 , 𝑎𝑡 + 𝑔(𝑣𝑡
+where 𝑥𝑛 , 𝑣𝑛 , 𝑎𝑛 are position, speed, and acceleration of the vehicle 𝑛 respectively, and 𝜂 is the engine
+input. Functions 𝑓 and 𝑔 are given by
+                                               2𝐾𝑑         1       𝐾𝑑 2 𝑑𝑚
+                             𝑓(𝑣𝑡 , 𝑎𝑡 ) = −       𝑣𝑡 𝑎𝑡 − 𝐴 [𝑎𝑡 +   𝑣 +   ]                              (10)
+                                                𝑚         𝜏        𝑚 𝑡   𝑚
+                                                            1
+                                                 𝑔(𝑣𝑡 ) =                                                 (11)
+                                                          𝑚𝜏 𝐴
+where 𝐾𝑑 represents the aerodynamic drag coefficient, 𝑚 the vehicle mass, 𝜏 𝐴 is the engine time lag, and
+𝑑𝑚 is the mechanical drag. In this paper, we focus on the longitudinal kinematics of vehicles. Assuming
+the parameters in (4) (5) are priori known, we adopt the following control law structure to implement
+feedback linearization:
+                                   𝜂 = 𝑚𝑢𝑡 + 𝐾𝑑 𝑣𝑡2 + 𝑑𝑚 + 2𝜏 𝐴 𝐾𝑑 𝑣𝑡 𝑎𝑡                                  (12)
+where 𝑢𝑡 is the desired acceleration, determined by the upper controller. Thus, the differential equation of
+acceleration can be rewritten as:
+                                                      𝑢𝑡 − 𝑎𝑡
+                                               𝑎𝑡̇ =                                                    (13)
+                                                        𝜏𝐴
+          The objectives of CAV planning are following its preceding vehicle with a desired spacing distance
+and ensuring safety. Therefore, a constant time headway (CTH) spacing strategy was applied. The desired
+spacing distance of vehicle 𝑛 is 𝑑𝑡d = ℎd 𝑣𝑡 + 𝑑0 , ℎd and 𝑑0 are the desired constant headway and space at
+a standstill. Based on the CTH rule, the position error ∆𝑥𝑡 with respect to a desired distance from the
+preceding vehicle ∆𝑥𝑡 = 𝑥𝑡−1 − 𝑥𝑡 − 𝑑𝑡d , where 𝑥𝑡−1 is the position of the preceding vehicle/stop line, and
+𝑙 −1 is the length of the preceding vehicle.
+
+                                                         9
+                                                    pre                             pre
+                                       min(𝑥𝑡 − 𝑙 −1 , 𝑥𝑡SL ) , 𝑖𝑓 𝑏𝑜𝑡ℎ 𝑥𝑡 , 𝑥𝑡SL 𝑒𝑥𝑖𝑡
+                                            pre                         pre
+                               𝑥𝑡−1 = {    𝑥𝑡 − 𝑙 −1 ,       𝑖𝑓 𝑜𝑛𝑙𝑦 𝑥𝑡 𝑒𝑥𝑖𝑡𝑠                             (14)
+                                                        𝑥𝑡SL ,      𝑖𝑓 𝑜𝑛𝑙𝑦 𝑥𝑡SL 𝑒𝑥𝑖𝑡𝑠
+        If the information about a preceding vehicle or stop line is available, the cost function also includes
+a term to maintain a safe headway distance:
+                              𝑁−1                          𝑁−1                      𝑁−1
+                                                    2                           2             2
+              min         𝐽 = ∑ ‖∆𝑣𝑡0 +𝑘∙∆𝑡 l ‖ + ∑ ‖𝑢𝑡0 +𝑘∙∆𝑡 l ‖ + ∑ ‖∆𝑥𝑡0 +𝑘∙∆𝑡 l ‖ ℎ + 𝜀 𝑇 𝜌𝜀         (15)
+           𝑢[𝑡0 ,𝑡0 +𝑁]                             𝑄                           𝑅             𝑄
+                              𝑘=0                             𝑘=0                   𝑘=0
+
+where 𝑁 the predictive horizon length. 𝑄, 𝑅 and 𝑄 ℎ are the weight matrix of error and input, respectively.
+𝜀 is the slack vector, and 𝜌 its weight.
+         When the preceding vehicle or stop line is unavailable, the objective of the MPC is to minimize a
+cost function 𝐽 that accounts for the desired speed and control effort over a prediction horizon 𝑁. The speed
+error is the gap between vehicle speed and the desired speed ∆𝑣𝑡 ≔ 𝑣𝑡 − 𝑣 𝑑 . The cost function is defined
+as:
+                                              𝑁−1                         𝑁−1
+                                                                    2                     2
+                              min         𝐽 = ∑ ‖∆𝑣𝑡0 +𝑘∙∆𝑡 l ‖ + ∑ ‖𝑢𝑡0 +𝑘∙∆𝑡 l ‖ + 𝜀 𝑇 𝜌𝜀               (16)
+                           𝑢[𝑡0 ,𝑡0 +𝑁]                             𝑄                     𝑅
+                                              𝑘=0                         𝑘=0
+
+         The optimization objective is subjected to the following constraints:
+                                                          𝑦                         𝑦
+                                            𝑣min − 𝜀𝜎min ≤ 𝑣𝑡 ≤ 𝑣max + 𝜀𝜎max                              (17)
+                                                     𝑢                   𝑢
+                                            𝑢min − 𝜀𝜎min ≤ 𝑢𝑡 ≤ 𝑢max + 𝜀𝜎max                              (18)
+3     EXPERIMENT
+3.1     Experiment settings
+         The experiment settings are given in this section. The proposed methodology is validated using a
+series of experiments. First, a real-world driving environment dataset is adopted to evaluate the proposed
+method and baseline methods. We utilize Llava 1.6 (Liu et al., 2024) as the foundation VLM for various
+components in our system. Additionally, in the sensitivity analysis, we tested the performance of GPT-4-o
+and GPT-4-mini. Llava 1.6 model was run on a Linux (Ubuntu) system equipped with 32GB of DDR5
+RAM and an NVIDIA GeForce RTX 4090 GPU (24GB GDDR6X). The model was configured with a
+temperature of 0, while all other parameters were left at their default values. The GPT series models were
+utilized via API calls.
+3.1.1   Dataset
+        The nuScenes dataset is a large-scale, real-world autonomous driving dataset containing various
+locations and weather conditions (Caesar et al., 2020). This dataset includes data from Boston and the US,
+which follow right-hand traffic rules, and Singapore, which follow left-hand traffic rules. Our proposed
+algorithm is designed for right-hand traffic. To ensure broader applicability across various environments,
+we have included some nighttime scenes from Singapore in our evaluation, covering a total of 303 scenes.
+          The heatmap in Figure 4 visualizes the p-values obtained from analyzing the differences in driving
+parameters across various scenarios from the nuScenes. The parameter 𝑄 does not have results because 𝑄
+is fixed at 1. Significant differences are indicated with asterisks, suggesting that different parameters should
+be used when the corresponding features: rain, intersection, and night. Based on these findings, TABLE 2
+lists the aggregated parameters selected for eight grouped scenarios. Each scenario is characterized by the
+presence or absence of rain, intersection, and night conditions. The table provides the final parameters for
+each of these grouped scenarios.
+
+                                                                     10
+   Figure 4 P-values matrix obtained from analyzing the differences in MPC parameters across various
+                                               scenarios.
+
+                      TABLE 2 Aggregated parameter of eight grouped scenarios.
+         No. rain intersection night           𝑵       𝑸        𝑹        𝑸𝒉       𝒗𝒅       𝒉𝒅
+          1   0        0         0             9       1       1.68     2.75     6.44     2.60
+          2   0        0         1             9       1       1.68     1.99     5.09     2.55
+          3   0        1         0             9       1       1.68     2.75     6.44     2.60
+          4   0        1         1             9       1       1.15     1.99     5.09     2.55
+          5   1        0         0             9       1       1.15     1.99     5.09     2.55
+          6   1        0         1             9       1       1.68     2.75     6.44     2.60
+          7   1        1         0             9       1       1.68     2.75     6.44     2.60
+          8   1        1         1             9       1       1.68     1.99     5.09     2.55
+
+3.1.2  Closed-loop Evaluation Metrics
+       We measure three key metrics for closed-loop evaluation from three perspectives: safety, driving
+comfort, and stability as follows.
+    1. Safety: post encroachment time (PET). PET is a safety metric that measures the time interval
+       between the ego vehicle and another object or vehicle encroaching into the same space (Peesapati
+       et al., 2018). A higher PET value indicates safer driving behavior, reflecting a longer time gap
+       between potential conflicts.
+    2. Smoothness: root mean square of acceleration (𝐑𝐌𝐒 𝒂). RMS 𝑎 reflects the smoothness of the
+       trajectory. It is calculated as:
+
+                                                  1  𝑇
+                                        RMS 𝑎 = √ ∑ 𝑎𝑡2                                             (19)
+                                                 |𝑇| 𝑡=0
+
+    3. Stability: completion rate. This metric measures the overall completion rate of scenes, focusing
+       specifically on the ability of the VLM/LLM to generate reasonable and effective outputs
+       consistently. Given that the MPC component is designed with a robust algorithm to avoid infeasible
+       solutions, no MPC failures were observed during the experiments. Therefore, this metric primarily
+       reflects the capability of the VLM/LLM to produce valid and reasonable parameters that enable
+       successful task completion.
+
+
+                                                     11
+3.1.3   Baseline Models
+        To validate the effectiveness of our proposed method, we set up three baseline models. Below are
+detailed explanations of each baseline model.
+        MPC: This baseline uses the average parameters for the given scenario derived from historical data.
+The parameters are fixed and do not adapt to the real-time environment. This model does not use any visual
+information from the vehicle's front camera. Instead, it relies on pre-calculated average parameters without
+leveraging dynamic memory aggregation. Although it operates in a closed-loop control manner, the control
+parameters remain static and do not update in real time based on feedback.
+         LLM to Action: This model is based on the approach proposed in (Mao et al., 2024), representing
+the "FM to Action" methodology in autonomous driving. The method leverages LLMs as cognitive agents
+to integrate human-like reasoning and decision-making into autonomous driving systems. This enables the
+LLM to directly generate driving actions.
+        LLM-MPC: This baseline integrates the LLM but does not use the advanced features of our
+proposed method. It serves as a comparison to assess the basic capabilities of the LLM. Unlike the proposed
+model, this baseline does not utilize front-camera images for decision-making. Additionally, it does not
+aggregate parameters from memory based on environmental characteristics, resulting in less adaptive
+behavior. Like the Baseline MPC Controller, it operates in a closed-loop control manner without real-time
+parameter updates, as the parameters are initially set and remain unchanged throughout the scenario.
+         The differences between the proposed VLM-MPC and the two baseline models are outlined in
+TABLE 3. By comparing these models, we aim to demonstrate that our proposed LLM Controller, which
+utilizes image inputs and reference memory, offers significant advantages in navigating complex driving
+scenarios and making more informed and adaptive decisions. In the future, we will conduct additional
+ablation studies to validate the importance of image input, memory, and reflection independently.
+
+
+                 TABLE 3 Comparison of Proposed VLM-MPC and two baseline models
+           Controllers           Image input            Memory                    Reflection
+             MPC                    No                   No                      Closed-loop
+          LLM to Action             No                   Yes                     Open-loop
+           LLM-MPC                  No                   Yes                     Closed-loop
+           VLM-MPC                  Yes                  Yes                     Closed-loop
+
+3.2     Experiment Results
+        Based on the experiment design, this section comprehensively evaluates the proposed VLM-MPC,
+focusing on safety, smoothness, and completion rate across various driving scenarios.
+3.2.1    Safety
+         The safety evaluation results using PET as metrics are shown in TABLE 4. The proposed VLM-
+MPC demonstrates superior performance compared to the baseline MPC controller, baseline LLM
+controller, and real-world trajectory regarding minimum PET values across various traffic conditions.
+Notably, the VLM-MPC consistently maintains PET values above the critical safety threshold of 1 second
+in all scenarios, which signifies better safety margins. When comparing the results, it is evident that the
+proposed VLM-MPC exhibits greater stability and adaptability in both dry and rainy conditions and at
+intersections and parking lots. For instance, in the absence of rain and at non-intersections, the VLM-MPC
+achieves PET values of 1.31 and 1.97, respectively, which are higher than those of the real-world trajectory
+(1.65 and 1.33), baseline MPC controller (1.73 and 1.74), and baseline LLM controller (0.37 and 0.05). In
+more challenging conditions such as rainy intersections, the VLM-MPC still performs robustly with PET
+values of 1.36 and 1.92, outperforming the real-world trajectory (4.83), baseline MPC controller (5.21), and
+
+                                                       12
+baseline LLM controller (0.64). The consistent performance across all tested conditions underscores the
+VLM-MPC's ability to enhance vehicle safety by maintaining PET values above the critical threshold,
+thereby substantially improving existing methods.
+
+   TABLE 4 Minimum PET (s) for the grouped situation of proposed VLM-MPC and baseline models.
+             Scenario Number                   1        2      3       4       5        6      7       8
+     Scenario              Rain                0        0      0       0       1        1      1       1
+     property             Night                0        0      1       1       0        0      1       1
+                       Intersection            0        1      0       1       0        1      0       1
+    Minimum            Real-world             1.65    1.53    1.33    4.61    3.15     2.6    2.85    3.56
+    PET (s) of            MPC                 1.12     1.1    1.33    1.26    1.91    1.62    1.65    1.2
+     different        LLM to Action           0.45    1.59    1.26    1.36    1.36    2.65    0.75    1.84
+    controller         LLM-MPC                1.11    1.21    1.34    1.07    2.13    1.19    3.13    1.10
+                       VLM-MPC                1.31    1.18    1.97    1.03    2.68    1.36    3.53    1.92
+
+        Figure 5 demonstrates the application of the proposed VLM-MPC in a rainy intersection scenario
+in Boston. The Figure highlights the dynamic and adaptive nature of the VLM-MPC as it navigates the
+vehicle through the environment.
+        At 𝑡 = 0𝑠, the VLM agent receives the initial scene input, including basic instruction, reference
+memory, vehicle front camera image, environment description, and ego/preceding vehicle state. Based on
+this input, the VLM agent generates the initial key driving parameters [10,1.0,2.0,3.5,6.5,2.8]. These
+parameters are optimized to maintain safety and efficiency, considering the foggy weather and the presence
+of parked vehicles.
+         At 𝑡 = 5𝑠, the updated scenario shows the vehicle approaching an intersection with the preceding
+vehicle no longer detected. The ego vehicle's position and speed have changed, indicating it is getting closer
+to the intersection. The VLM agent recognizes this proximity to the intersection and updates the key driving
+parameters to [12,1,1.0,0.5,2.0]. The critical adjustment here is the reduction in the desired speed (from 6.5
+m/s to 2.0 m/s). This change is crucial as it ensures the vehicle gradually slows down while approaching
+the intersection, enhancing safety by allowing it to stop smoothly if necessary.
+        By 𝑡 = 10𝑠, the vehicle is even closer to the intersection, and the VLM agent continuously updates
+the parameters to ensure the vehicle decelerates appropriately. The model's ability to adjust the desired
+speed based on real-time feedback demonstrates its effectiveness in handling complex driving scenarios.
+This adaptive behavior is essential for navigating intersections safely, especially under challenging weather
+conditions like rain. Due to space limitations, the vehicle's procedures at t=10 and t=15 are not shown in
+Figure 3.
+         The example case in Figure 5 illustrates the VLM-MPC system's capability to dynamically adjust
+key driving parameters in response to changing environmental and situational contexts, ensuring safe and
+efficient vehicle control. The system's proactive reduction in desired speed as the vehicle approaches the
+intersection at 𝑡 = 5𝑠 exemplifies its intelligent and adaptive control strategy. If the vehicle keeps applying
+the driving parameters given by GPT at 𝑡 = 5𝑠, the large desired speed, it will not stop safely and smoothly
+before the stop line.
+
+
+
+
+                                                        13
+Figure 5 Illustration of the proposed VLM-MPC at one rainy intersection scenario in Boston.
+
+                                              14
+         Figure 6 illustrates two unsafe scenarios generated by the Baseline LLM to Action Controller. The
+trajectory shows snapshots from the final 3 seconds before a collision. In Figure 6 (a), during the daytime,
+the ego vehicle is approaching a situation where two vehicles are moving in the left lane ahead, while on
+the right, there are two parked vehicles and a work zone. In this case, the Baseline LLM to Action Controller
+plans a trajectory that advances forward, which is clearly unreasonable as it risks a collision with the parked
+cars. In contrast, the proposed VLM-MPC slows down to avoid potential collision. In Figure 6 (b), during
+nighttime, a similar issue arises: the LLM to Action Controller fails to account for a vehicle stopped at an
+intersection and instead accelerates towards it, resulting in a PET of 0.75 seconds, which is below the safety
+threshold. The proposed VLM-MPC, on the other hand, appropriately reduces speed to avoid collision.
+
+
+
+
+                                             (a) Daytime scene
+
+
+
+
+                                         (b) Nightime scene
+         Figure 6 Comparison of the vehicle trajectory using proposed VLM-MPC and baseline LLM to
+                                           Action controller
+
+
+3.2.2   Smoothness
+        TABLE 5 illustrates the driving comfort of the proposed VLM-MPC system compared to baseline
+models by showing the RMS 𝑎 across various scenarios. The proposed VLM-MPC system consistently
+achieves the average lowest RMS 𝑎 values across most scenarios compared to the baseline models. This
+indicates that the VLM-MPC system provides smoother and more comfortable driving experiences. The
+reduction in RMS 𝑎 suggests that the VLM-MPC effectively minimizes abrupt changes in acceleration,
+leading to a more stable and pleasant ride for passengers.
+        The Baseline LLM to Action Controller exhibits significantly highest RMS 𝑎 comparing to real-
+world trajectory and other models, due to the generated trajectories not aligning with vehicle dynamics.
+Figure 7 shows the distribution of speed and acceleration across different methods. It is evident that all the
+
+
+                                                        15
+proposed VLM-MPC, the baseline MPC, and the baseline LLM-MPC, maintain vehicle acceleration within
+the range of -3.5 to 3 m/s², which is achieved through lower-level MPC optimization, and their speed and
+acceleration distributions closely match the real-world trajectory. The real-world trajectory includes an
+extreme deceleration of -10.53 m/s²due to vehicle positioning errors. The Baseline LLM to Action
+Controller generates a trajectory with an extreme deceleration of -23.2 m/s².This highlights the inability of
+the LLM to directly plan a trajectory that adheres to vehicle kinematics and dynamics, making it difficult
+for the vehicle to execute the planned actions effectively.
+
+
+  TABLE 5 Smoothness RMS 𝑎 for the grouped situation of proposed VLM-MPC and baseline models.
+               Scenario Number                  1        2      3       4       5      6      7        8
+    Scenarios                Rain               0        0      0       0       1      1      1        1
+                            Night               0        0      1       1       0      0      1        1
+                         Intersection           0        1      0       1       0      1      0        1
+   Smoothness            Real-world            0.61    0.54    0.63   0.56    0.56   0.51    0.68    0.58
+    RMS 𝑎 of                MPC                0.41    0.44    0.47   0.51     0.4   0.42    0.35    0.46
+    different          LLM to Action           0.43    0.93    0.94   1.41    2.14   2.18    3.13    1.66
+    controller           LLM-MPC               0.35     0.4    0.48    0.5    0.38    0.4    0.33    0.48
+                         VLM-MPC               0.33     0.4    0.42   0.43    0.38   0.39    0.34     0.4
+
+
+
+
+                                              (a) Real-world
+
+
+
+
+                      (b) MPC                                           (c) LLM to Action
+
+
+
+
+                  (d) LLM-MPC                                        (e) VLM-MPC
+      Figure 7 Distribution of speed and acceleration of proposed VLM-MPC and baseline models.
+
+
+
+
+                                                       16
+3.2.3     Completion Rate
+          VLM typically suffers from arbitrary predictions, which can produce invalid outputs (e.g.,
+hallucinations or invalid formats) that are detrimental to driving systems. TABLE 6 listed the completion
+rate of proposed VLM-MPC using various FM Models and baseline models. The completion rate for Llava
+1.6 across all scenarios was 99.7%, while the GPT series models (GPT-3.5-turbo, GPT-4-o, GPT-4-mini)
+achieved a 100% completion rate. This difference can be attributed to the significantly larger number of
+parameters in the GPT series models compared to Llava 1.6. Llava 1.6 uses a 7B parameter model, whereas
+GPT-3.5-turbo has 175B parameters. The GPT-4-o model is estimated to have between 100B and 1T
+parameters, and GPT-4-mini is estimated to have between 10B and 30B parameters. The larger parameter
+size in the GPT models enables them to handle a wider range of scenarios and produce more reliable outputs,
+reducing the likelihood of errors such as hallucinations or invalid format outputs. This robustness in
+handling diverse tasks contributes to the 100% completion rate observed in the GPT series models.
+                            TABLE 6 Completion rate of different FM models
+          Models              FM Model             FM Model Parameter Size        Completion rate (%)
+         LLM-MPC               Llama-3.1                    7B                          99.7
+                             GPT-3.5-turbo                 175B                          100
+        LLM to Action        GPT-3.5-turbo                 175B                          100
+         VLM-MPC               Llava-1.6                    7B                          99.7
+                               GPT-4-o                   100B~1T                         100
+                              GPT-4-mini                10B~30B                          100
+
+
+3.2.4   Response Time
+        Figure 8 illustrates the response speeds of the proposed VLM-MPC with different models. The
+Llava model has an average response time of 3.42 seconds, meeting the system's requirement of a 0.2Hz
+response speed. In contrast, the GPT-4-o and GPT-4-mini models have average response times of around
+10 seconds, primarily because their parameter sizes are several orders of magnitude larger than Llava model.
+         Figure 9 shows the response speeds of the baseline LLM-MPC with different models. Llama 3.1
+and GPT-3.5-turbo models were tested. These models do not require image input, so the average response
+time is shorter than that of vision input models. The Llama 3.1 model has an average response time of 1.5
+seconds, which is significantly faster than GPT-3.5-turbo's average response time of 3.9 seconds. This
+difference is also due to the smaller parameter size of Llama 3.1. The smaller parameter size allows for
+quicker processing and response times, making Llama 3.1 more suitable for applications where rapid
+decision-making is crucial. Conversely, while GPT-3.5-turbo has a larger parameter size that can handle
+more complex scenarios, it requires more computational resources, resulting in longer response times.
+         Overall, the response speed of the two locally running models (Llava and Llama) is faster than that
+of the cloud-based GPT models. This is primarily due to the difference in model parameter sizes, and also
+because the GPT models are affected by network latency and account token limits. In the future, we plan
+to fine-tune smaller parameter models to prepare for their application in vehicles.
+
+
+
+
+              Llava-1.6                           GPT-4-o                      GPT-4-mini
+                      Figure 8 Distribution of response times of proposed VLM-MPC
+
+
+                                                       17
+                                Llama3.1                          GPT-3-turbo
+                       Figure 9 Distribution of response times of baseline LLM-MPC
+
+3.3     Sensitivity analysis
+      To validate the effectiveness of the proposed model, this section examines the impact of its key
+components on performance. And the sensitivity analysis on response time.
+3.3.1    Impact of Reference Memory
+         The ablation model from the proposed VLM-MPC, which excludes the reference memory as VLM
+input (VLM-MPC without M), achieves a completion rate of 99.3%. This model experienced two instances
+of invalid responses, as detailed in TABLE 7. The response time remains around 1.5 seconds. In each scene,
+safety was maintained, as shown in TABLE 8. However, the parameters generated by the VLM generally
+favored higher speeds and larger headways. While the planned trajectories led to improved smoothness
+under clear weather conditions, the smoothness deteriorated in rainy and nighttime scenarios.
+
+
+                               TABLE 7 Completion rate when using Llava-1.6.
+                                                           Completion rate (%)
+                               VLM-MPC without E                 87.5
+                               VLM-MPC without M                 99.3
+                                  VLM-MPC                        99.7
+
+   TABLE 8 Smoothness RMS 𝑎 for the grouped situation of proposed VLM-MPC and baseline models
+              Scenario Number                       1       2      3      4      5      6     7    8
+     Scenarios                Rain                  0       0      0      0      1      1     1    1
+                             Night                  0       0      1      1      0      0     1    1
+                          Intersection              0       1      0      1      0      1     0    1
+  Minimum PET (s) VLM-MPC without M                2.53    1.36   1.86   1.39   2.14   2.32 14.95 1.20
+    of different      VLM-MPC without E            1.66    1.13   1.58   3.70   2.28   1.91 1.65 1.20
+     controller           VLM-MPC                  1.31    1.18   1.97   1.03   2.68   1.36 3.53 1.92
+  Smoothness RMS 𝑎 VLM-MPC without M               0.35    0.40   0.41   0.46   0.35   0.30 0.74 0.95
+    of different      VLM-MPC without E            0.37    0.40   0.47   0.35   0.36   0.36 0.77 0.91
+     controller           VLM-MPC                  0.33    0.4    0.42   0.43   0.38   0.39 0.33 0.4
+
+3.3.2  Impact of Environment Description
+       The ablation model from the proposed VLM-MPC, which excludes the environment encoder as
+VLM input, is called ‘VLM-MPC without E’. When environmental information is excluded from the
+prompt to VLM, the completion rate drops significantly to 87.5%, much lower than the proposed VLM-
+MPC method, shown in TABLE 7. The observed failures primarily occur because without road information,
+
+                                                      18
+the VLM fails to comprehend the current environment and driving task, resulting in instances where no
+parameters are output, or the output parameters do not match the specified format. This suggests that road
+information plays a critical role in completing the description of the driving task, providing the VLM with
+comprehensive context needed to understand and accurately respond to the driving task.
+       In terms of response time, excluding environment information noticeably slows down Llama's
+response speed, with some instances exceeding 200 seconds. This excessively long response time further
+underscores the importance of environment descriptions in helping the VLM understand scene contexts.
+         In the scenarios where responses were successful, each scene could maintain safety, and compared
+to real-world trajectories and end-to-end methods, the response time was still significantly shorter.
+3.3.3   Interpretability analysis
+        To facilitate a more intuitive and comprehensible interpretation of the VLM-MPC, aiding in the
+analysis of the causal relationships between the environment and VLM outputs. We demonstrate this with
+two selected scenarios.
+         First, we extracted the model's attention allocation to the image input while generating each token.
+A higher sum of attention weights indicates a greater focus on the image content when generating that
+particular token (zjysteven, 2024). Figure 10 presents the sum of attention the model assigns to the image
+input during the generation of each token, with the horizontal axis representing the tokens in sequence. The
+results reveal a consistent pattern across the two scenarios: during the first 50-60 tokens, approximately 14%
+of the attention is directed towards the vision tokens, significantly higher than in subsequent tokens. This
+is aligned with our implementation of CoT, where the initial step is ‘Understand the current environment’.
+Consequently, the model’s initial 50-60 tokens are dedicated to describing the environment, naturally
+leading to a stronger correlation with the image input. The subsequent tokens correspond to steps two
+through five of the CoT: ‘Evaluate the prediction horizon’, ‘Set cost weights’, ‘Define desired speed’, and
+‘Determine desired headway’. These steps are more inference-focused and rely less on the image input,
+drawing more from textual information.
+        Subsequently, we further integrated the vision encoder to visualize the attention map over the input
+image. The vision encoder in the model processes the image input and generates attention weights across
+different layers. By averaging the attention weights across all layers, we obtained a comprehensive attention
+matrix. For each key phrase generated, we combined the model’s attention weights with the vision
+encoder’s attention matrix to compute the model’s focus on different regions of the image during the
+generation of that phrase. The computed attention values were then mapped onto the input image (vehicle
+front camera image), highlighting the specific regions the model attended to in the image.
+         Figure 10 illustrates the results for two representative scenarios, where we selected the first few
+tokens generated by the model and the corresponding short phrases, along with the attention allocated to
+the image during their generation. In the first scenario, when the model outputs “… with vehicles driving
+on a road…”, the attention is concentrated on the road ahead. When the model generates “…there are parked
+vehicles…”, more attention is directed towards the parked vehicles on the side of the road. When it outputs
+“…The road appears to be wet…”, the attention becomes more dispersed, with less focus on the vehicles.
+In the second scenario, when the model generates “…a traffic light is visible…”, the traffic light in the
+image clearly receives the highest attention. This demonstrates that the model indeed focuses on relevant
+parts of the image when generating these descriptions, highlighting the importance of the visual input.
+
+
+
+
+                                                       19
+                                      (a) Scene 1
+
+
+
+
+                                      (b) Scene 2
+Figure 10 Sum of attention the model pays to the image input when generating each token.
+
+                                             20
+4   CONCLUSION AND FUTURE RESEARCH
+        This paper introduced a closed-loop autonomous driving controller, VLM-MPC, that leverages
+VLMs for upper-level decisions and MPC for low-level vehicle control. This design enables the upper-level
+model to provide adaptive decision-making based on scenario changes, while the lower level controls the
+vehicle in real-time based on the current state of the ego vehicle and surrounding vehicles.
+         In experiments based on the nuScenes dataset, we compared this structure with the method of using
+an LLM to control the vehicle independently. The results validate that a model-based approach like MPC
+significantly enhances the performance of LLM-based controllers. The integration of MPC allows the
+system to make more accurate and reliable decisions, especially in dynamic and complex driving
+environments, demonstrating the advantages of combining model-based methods with LLMs for
+autonomous driving.
+        Experiment results demonstrate that the VLM-MPC consistently maintains PET above safe
+thresholds, in contrast to some scenarios where the VLM-based control posed collision risks. Additionally,
+the VLM-MPC enhances smoothness compared to the real-world trajectories and VLM-based control. By
+comparing behaviors under different environmental settings, we highlight the VLM-MPC’s capability to
+understand the environment and make reasoned inferences. VLM-MPC with Llava could reach the response
+time requirements of the proposed method. Moreover, we validate the significant contributions of two key
+components, the reference memory and the environment encoder, to the stability of responses through
+ablation tests.
+        Future research will focus on two main directions. The first direction is to refine the proposed
+approach with more ablation studies to validate the effectiveness of each component and further optimize
+the system. This includes investigating the relationship between the VLM's image input understanding
+capabilities and the subsequent driving behavior choices, assessing the impact of memory on the stability
+of the VLM-generated results, and evaluating how the frequency of the asynchronous operation between
+the upper and lower layers affects overall vehicle performance. The second direction is to conduct real-
+world vehicle experiments. These experiments will help collect data on specific roads under various driving
+conditions. While datasets like nuScenes and Waymo provide extensive information on real-world
+scenarios, they often lack data on the same scene under different driving conditions. Collecting our own
+data will enable us to better analyze the impact of driving environments on decision-making. This will also
+help identify out-of-distribution (ODD) scenarios involving adverse weather conditions or low-light
+environments. Additionally, real-world experiments offer the most rigorous closed-loop testing,
+considering the cumulative uncertainties from perception, decision-making, and low-level vehicle control
+systems.
+5   ACKNOWLEDGMENT
+       This work was supported by the National Science Foundation Cyber-Physical Systems (CPS)
+program. Award Number: 2343167.
+6   REFERENCES
+Bai, Y., Wu, D., Liu, Y., Jia, F., Mao, W., Zhang, Z., Zhao, Y., Shen, J., Wei, X., Wang, T., Zhang, X.,
+        2024. Is a 3D-Tokenized LLM the Key to Reliable Autonomous Driving?
+Brown, T.B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., Neelakantan, A., Shyam, P.,
+        Sastry, G., Askell, A., Agarwal, S., Herbert-Voss, A., Krueger, G., Henighan, T., Child, R.,
+        Ramesh, A., Ziegler, D.M., Wu, J., Winter, C., Hesse, C., Chen, M., Sigler, E., Litwin, M., Gray,
+        S., Chess, B., Clark, J., Berner, C., McCandlish, S., Radford, A., Sutskever, I., Amodei, D., 2020.
+        Language Models are Few-Shot Learners. https://doi.org/10.48550/arXiv.2005.14165
+Caesar, H., Bankiti, V., Lang, A.H., Vora, S., Liong, V.E., Xu, Q., Krishnan, A., Pan, Y., Baldan, G.,
+        Beijbom, O., 2020. nuScenes: A Multimodal Dataset for Autonomous Driving. Presented at the
+
+                                                      21
+         Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp.
+         11621–11631.
+Campolo, C., Molinaro, A., Araniti, G., Berthet, A.O., 2017. Better Platooning Control Toward
+         Autonomous Driving : An LTE Device-to-Device Communications Strategy That Meets Ultralow
+         Latency      Requirements.     IEEE         Vehicular      Technology      Magazine       12,    30–38.
+         https://doi.org/10.1109/MVT.2016.2632418
+Chen, L., Sinavski, O., Hünermann, J., Karnsund, A., Willmott, A.J., Birch, D., Maund, D., Shotton, J.,
+         2023. Driving with LLMs: Fusing Object-Level Vector Modality for Explainable Autonomous
+         Driving.
+Chen, Y., Ding, Z., Wang, Z., Wang, Y., Zhang, L., Liu, S., 2024. Asynchronous Large Language Model
+         Enhanced Planner for Autonomous Driving.
+Cui, C., Ma, Y., Cao, X., Ye, W., Wang, Z., 2024a. Receive, Reason, and React: Drive as You Say, With
+         Large Language Models in Autonomous Vehicles. IEEE Intelligent Transportation Systems
+         Magazine 16, 81–94. https://doi.org/10.1109/MITS.2024.3381793
+Cui, C., Yang, Z., Zhou, Y., Ma, Y., Lu, J., Li, L., Chen, Y., Panchal, J., Wang, Z., 2024b. Personalized
+         Autonomous        Driving     with       Large        Language      Models:      Field     Experiments.
+         https://doi.org/10.48550/arXiv.2312.09397
+Fang J., Li L., Zhou J., Xiao J., Yu H., Lv C., Xue J., Chua T.-S., 2024. Abductive Ego-View Accident
+         Video Understanding for Safe Driving Perception. Presented at the Proceedings of the IEEE/CVF
+         Conference on Computer Vision and Pattern Recognition, pp. 22030–22040.
+Farquhar, S., Kossen, J., Kuhn, L., Gal, Y., 2024. Detecting hallucinations in large language models using
+         semantic entropy. Nature 630, 625–630. https://doi.org/10.1038/s41586-024-07421-0
+Filos, A., Tigkas, P., Mcallister, R., Rhinehart, N., Levine, S., Gal, Y., 2020. Can Autonomous Vehicles
+         Identify, Recover From, and Adapt to Distribution Shifts?, in: Proceedings of the 37th International
+         Conference on Machine Learning. Presented at the International Conference on Machine Learning,
+         PMLR, pp. 3145–3153.
+Gao, Z., Wu, Z., Hao, W., Long, Keke, Byon, Y.-J., Long, Kejun, 2022. Optimal Trajectory Planning of
+         Connected and Automated Vehicles at On-Ramp Merging Area. IEEE Transactions on Intelligent
+         Transportation Systems 23, 12675–12687. https://doi.org/10.1109/TITS.2021.3116666
+Guo, Z., Lykov, A., Yagudin, Z., Konenkov, M., Tsetserukou, D., 2024. Co-driver: VLM-based
+         Autonomous Driving Assistant with Human-like Behavior and Understanding for Complex Road
+         Scenes.
+Huang, Y., Sansom, J., Ma, Z., Gervits, F., Chai, J., 2024. DriVLMe: Enhancing LLM-based Autonomous
+         Driving Agents with Embodied and Social Experiences.
+Ji, Z., Lee, N., Frieske, R., Yu, T., Su, D., Xu, Y., Ishii, E., Bang, Y., Chen, D., Dai, W., Chan, H.S.,
+         Madotto, A., Fung, P., 2023. Survey of Hallucination in Natural Language Generation. ACM
+         Comput. Surv. 55, 1–38. https://doi.org/10.1145/3571730
+Jia, F., Mao, W., Liu, Y., Zhao, Y., Wen, Y., Zhang, C., Zhang, X., Wang, T., 2023. ADriver-I: A General
+         World Model for Autonomous Driving. https://doi.org/10.48550/arXiv.2311.13549
+Jin, Y., Shen, X., Peng, H., Liu, X., Qin, J., Li, J., Xie, J., Gao, P., Zhou, G., Gong, J., 2023. SurrealDriver:
+         Designing Generative Driver Agent Simulation Framework in Urban Contexts based on Large
+         Language Model.
+Liu, H., Li, C., Li, Y., Li, B., Zhang, Y., Shen, S., Lee, Y.J., 2024. LLaVA-NeXT: Improved reasoning,
+         OCR, and world knowledge.
+Ma, Y., Cao, Y., Sun, J., Pavone, M., Xiao, C., 2023. Dolphins: Multimodal Language Model for Driving.
+         https://doi.org/10.48550/arXiv.2312.00438
+Ma, Y., Cui, C., Cao, X., Ye, W., Liu, P., Lu, J., Abdelraouf, A., Gupta, R., Han, K., Bera, A., Rehg, J.M.,
+         Wang, Z., n.d. LaMPilot: An Open Benchmark Dataset for Autonomous Driving with Language
+         Model Programs.
+Mao, J., Qian, Y., Ye, J., Zhao, H., Wang, Y., 2023. GPT-Driver: Learning to Drive with GPT.
+         https://doi.org/10.48550/arXiv.2310.01415
+
+                                                         22
+Mao, J., Ye, J., Qian, Y., Pavone, M., Wang, Y., 2024. A Language Agent for Autonomous Driving.
+        https://doi.org/10.48550/arXiv.2311.10813
+Peesapati, L.N., Hunter, M.P., Rodgers, M.O., 2018. Can post encroachment time substitute intersection
+        characteristics in crash prediction models? Journal of Safety Research 66, 205–211.
+        https://doi.org/10.1016/j.jsr.2018.05.002
+Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P.,
+        Clark, J., Krueger, G., Sutskever, I., 2021. Learning Transferable Visual Models From Natural
+        Language Supervision. https://doi.org/10.48550/arXiv.2103.00020
+Reiter, R., Diehl, M., 2021. Parameterization Approach of the Frenet Transformation for Model Predictive
+        Control of Autonomous Vehicles, in: 2021 European Control Conference (ECC). Presented at the
+        2021          European         Control         Conference          (ECC),        pp.        2414–2419.
+        https://doi.org/10.23919/ECC54610.2021.9655053
+Sha, H., Mu, Y., Jiang, Y., Chen, L., Xu, C., Luo, P., Li, S.E., Tomizuka, M., Zhan, W., Ding, M., 2023.
+        LanguageMPC: Large Language Models as Decision Makers for Autonomous Driving.
+        https://doi.org/10.48550/arXiv.2310.03026
+Shang, M., Rosenblad, B., Stern, R., 2022. A Novel Asymmetric Car Following Model for Driver-Assist
+        Enabled Vehicle Dynamics. IEEE Transactions on Intelligent Transportation Systems 23, 15696–
+        15706. https://doi.org/10.1109/TITS.2022.3145292
+Shao, H., Hu, Y., Wang, L., Waslander, S.L., Liu, Y., Li, H., 2023. LMDrive: Closed-Loop End-to-End
+        Driving with Large Language Models. https://doi.org/10.48550/arXiv.2312.07488
+Sharan, S.P., Pittaluga, F., G, V.K.B., Chandraker, M., 2023. LLM-Assist: Enhancing Closed-Loop
+        Planning with Language-Based Reasoning. https://doi.org/10.48550/arXiv.2401.00125
+Shi, H., Zhou, Y., Wu, K., Wang, X., Lin, Y., Ran, B., 2021. Connected automated vehicle cooperative
+        control with a deep reinforcement learning approach in a mixed traffic environment. Transportation
+        Research Part C: Emerging Technologies 133, 103421. https://doi.org/10.1016/j.trc.2021.103421
+Tian, X., Gu, J., Li, B., Liu, Y., Wang, Y., Zhao, Z., Zhan, K., Jia, P., Lang, X., Zhao, H., 2024. DriveVLM:
+        The Convergence of Autonomous Driving and Large Vision-Language Models.
+Valmeekam, K., Marquez, M., Kambhampati, S., 2023. Can Large Language Models Really Improve by
+        Self-critiquing Their Own Plans? https://doi.org/10.48550/arXiv.2310.08118
+Wang, P., Zhu, M., Zheng, X., Lu, H., Zhong, H., Chen, X., Shen, S., Wang, X., Wang, Y., Wang, F.-Y.,
+        2024. BEVGPT: Generative Pre-trained Foundation Model for Autonomous Driving Prediction,
+        Decision-Making, and Planning. IEEE Transactions on Intelligent Vehicles 1–13.
+        https://doi.org/10.1109/TIV.2024.3449278
+Wang, S., Yu, Z., Jiang, X., Lan, S., Shi, M., Chang, N., Kautz, J., Li, Y., Alvarez, J.M., 2024. OmniDrive:
+        A Holistic LLM-Agent Framework for Autonomous Driving with 3D Perception, Reasoning and
+        Planning.
+Wang, Z., Zhao, X., Xu, Z., Li, X., Qu, X., 2021. Modeling and field experiments on autonomous vehicle
+        lane changing with surrounding human-driven vehicles. Computer-Aided Civil and Infrastructure
+        Engineering 36, 877–889. https://doi.org/10.1111/mice.12540
+Wen, L., Fu, D., Li, X., Cai, X., Ma, T., Cai, P., Dou, M., Shi, B., He, L., Qiao, Y., 2023. DiLu: A
+        Knowledge-Driven Approach to Autonomous Driving with Large Language Models. Presented at
+        the The Twelfth International Conference on Learning Representations.
+Xu, Z., Zhang, Y., Xie, E., Zhao, Z., Guo, Y., Wong, K.-Y.K., Li, Z., Zhao, H., 2024. DriveGPT4:
+        Interpretable End-to-end Autonomous Driving via Large Language Model.
+Zheng, Yupeng, Xing, Z., Zhang, Q., Jin, B., Li, P., Zheng, Yuhang, Xia, Z., Zhan, K., Lang, X., Chen, Y.,
+        Zhao, D., 2024. PlanAgent: A Multi-modal Large Language Agent for Closed-loop Vehicle Motion
+        Planning. https://doi.org/10.48550/arXiv.2406.01587
+zjysteven, 2024. zjysteven/VLM-Visualizer: Visualizing the attention of vision-language models [WWW
+        Document]. URL https://github.com/zjysteven/VLM-Visualizer (accessed 8.26.24).
+
+
+
+                                                        23
+

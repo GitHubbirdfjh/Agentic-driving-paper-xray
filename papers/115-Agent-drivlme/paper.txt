@@ -1,0 +1,789 @@
+                                                      DriVLMe: Enhancing LLM-based Autonomous Driving Agents
+                                                                with Embodied and Social Experiences
+
+                                                        Yidong Huang1      Jacob Sansom1 Ziqiao Ma1 * Felix Gervits2 Joyce Chai1
+                                                                          1
+                                                                         University of Michigan 2 Army Research Lab
+                                                                      https://sled-group.github.io/driVLMe/
+arXiv:2406.03008v2 [cs.CV] 15 Oct 2024
+
+
+
+
+                                                                 Abstract                                    covering from unexpected situations, gaining trustworthi-
+                                                                                                             ness, and enhancing the overall driving experience [27, 62].
+                                             Recent advancements in foundation models (FMs) have             In traditional autonomous driving systems and in-vehicle
+                                         unlocked new prospects in autonomous driving, yet the ex-           dialogue systems, rule-based approaches [2, 37, 43] have
+                                         perimental settings of these studies are preliminary, over-         been employed to interpret human instructions and gener-
+                                         simplified, and fail to capture the complexity of real-world        ate appropriate responses. However, these systems often
+                                         driving scenarios in human environments. It remains under-          struggle to handle the complexity and variability of natural
+                                         explored whether FM agents can handle long-horizon nav-             language, leading to limited functionality and sub-optimal
+                                         igation tasks with free-from dialogue and deal with un-             performance. Recently, the paradigm has shifted to data-
+                                         expected situations caused by environmental dynamics or             driven learning-based approaches [6, 15, 18, 20], which of-
+                                         task changes. To explore the capabilities and boundaries            fer language-based interpretability and promising results in
+                                         of FMs faced with the challenges above, we introduce                short-horizon tasks.
+                                         DriVLMe, a video-language-model-based agent to facili-                  Advances in foundation models (FMs) like Large Lan-
+                                         tate natural and effective communication between humans             guage Models (LLMs) have opened up new opportunities,
+                                         and autonomous vehicles that perceive the environment and           as they demonstrate the ability to perform step-by-step rea-
+                                         navigate. We develop DriVLMe from both embodied ex-                 soning [60], to understand multimodal data [68, 71], to learn
+                                         periences in a simulated environment and social experi-             from embodied experiences [33, 63], and to use external
+                                         ences from real human dialogue. While DriVLMe demon-                tools [42]. An increasing number of efforts [19, 26, 45, 47,
+                                         strates competitive performance in both open-loop bench-            52, 61, 64] have demonstrated the potential of FMs in the
+                                         marks and closed-loop human studies, we reveal several              field of autonomous driving. However, the experimental se-
+                                         limitations and challenges, including unacceptable infer-           tups of these works are preliminary and simplified, com-
+                                         ence time, imbalanced training data, limited visual under-          pared to the real driving scenarios in human environments.
+                                         standing, challenges with multi-turn interactions, simplified       One common limitation is the lack of an ability to handle
+                                         language generation from robotic experiences, and difficul-         long-horizon navigation tasks. Trained on simple action-
+                                         ties in handling on-the-fly unexpected situations like envi-        level natural language instructions, these models perform
+                                         ronmental dynamics and task changes.                                well on short-horizon tasks like turn or overtake but fail to
+                                                                                                             understand goal-level instructions that require route plan-
+                                                                                                             ning and map knowledge. Also, these systems only focus
+                                         1. Introduction                                                     on following individual instructions in a single turn of inter-
+                                                                                                             action. Realistic interactions with human passengers often
+                                         Autonomous driving (AD) has made remarkable progress
+                                                                                                             involve free-form dialogue, especially for collaboratively
+                                         in recent years, bringing us closer to a future where vehi-
+                                                                                                             handling unexpected situations, e.g., those caused by sen-
+                                         cles can function as our social robot partners that navigate
+                                                                                                             sor limitations, environmental dynamics, or task changes.
+                                         roads safely and efficiently with minimal human interven-
+                                                                                                             Without modeling the interaction context, these models may
+                                         tion [44, 58]. As these AD agents start to enter our every-
+                                                                                                             fall short of understanding nuanced dialogue and providing
+                                         day lives, techniques to enable effective human-agent dia-
+                                                                                                             appropriate responses in human-vehicle interactions.
+                                         logue and collaboration become important. The ability to
+                                                                                                                 To explore the capabilities and boundaries of FMs faced
+                                         communicate with humans through natural language dia-
+                                                                                                             with the challenges above, we introduce DriVLMe, a novel
+                                         logue plays a crucial role in ensuring passenger safety, re-
+                                                                                                             video-language-model-based AD agent to facilitate natu-
+                                           * Correspondence, contact: marstin@umich.edu                      ral and effective communication between humans and au-
+
+
+                                                                                                         1
+tonomous vehicles that perceive the environment and navi-          alogue and higher-fidelity navigation goals. Furthermore,
+gate. Motivated by Hu and Shu [16], our goal is to enhance         these prior models only focus on using LLMs to predict
+a language model backend as world and agent models. We             physical actions and give explanations, ignoring their po-
+develop DriVLMe by learning from both embodied expe-               tential to initiate dialogue and generate language responses
+riences in a simulated environment and social experiences          from robotic experiences. Finally, none of these setups con-
+from real human dialogue. Unlike previous works that               sider unexpected situations caused by sensor limitations,
+only focus on open-loop benchmark evaluation using non-            environmental dynamics, or plan changes.
+interactive datasets such as nuScenes [4] and BDD [67],
+we present both open-loop and closed-loop experiments in
+                                                                   2.2. Language-guided Autonomous Driving and
+a simulated environment (i.e., CARLA [10]). For open-
+                                                                        Outdoor Vision-Language Navigation
+loop evaluations, we leverage the Situated Dialogue Nav-           Situated human-vehicle communication has been exten-
+igation (SDN) [27] and the BDD-X [21] benchmarks to                sively studied in the form of spoken language, and this line
+assess DriVLMe’s performance in generating dialogue re-            of work dates back to early resources including several mul-
+sponses and physical actions. Our experimental results             tilingual [54] and multimodal [9, 22] speech corpora. Re-
+have shown that DriVLMe significantly outperforms previ-           cently, vision-and-language navigation (VLN) tasks require
+ous baselines on SDN by a large margin and competes with           an agent to navigate in a 3D environment based on natural-
+baselines trained with LLM-augmented data. We further              language instructions and egocentric camera observations,
+conduct closed-loop pilot studies in the CARLA simulation          with some efforts in the outdoor scenarios [23, 55]. They
+environment. DriVLMe is engaged in dialogue to follow              consider the world as a discrete graph while agents navigate
+language instructions from human subjects in the CARLA             toward the goal by moving among nodes. Thanks to open-
+environment. Our preliminary findings have demonstrated            world autonomous driving simulators [10, 57, 72], recent
+some promising abilities of DriVLMe in navigation and re-          work bridges the gap between discrete model prediction and
+planning, and on the other hand also revealed several lim-         continuous closed-loop control. Various language-guided
+itations including unacceptable inference time, imbalanced         autonomous driving experiments and datasets [27, 41, 50]
+training data, and low image input resolution. It remains          have been developed based on these simulators.
+a challenge to support multi-turn interactions and language
+generation from robotic experiences. We hope this paper of-        2.3. Dialogue-guided Robotic Agents
+fers a comprehensive perspective view of the strengths and         Dialogue-guided agents for improving human-robot inter-
+weaknesses of foundation models as AD agents, highlight-           action have gained significant attention [31, 32]. Efforts in
+ing areas that need future enhancement.                            this field have ranged from enabling robots to adjust their
+                                                                   plans in real-time based on human dialogue [8, 48], to seek-
+2. Related Work                                                    ing additional hints [36, 51], or to ask for direct human
+                                                                   collaboration [34] for task completion. The advances of
+2.1. Foundation Models for Autonomous Driving                      LLMs have infused new potential into these studies [13, 66].
+                                                                   For instance, InnerMonologue [17] investigates the use of
+Recent research has explored the potential of LLMs in au-
+                                                                   LLMs for generating internal dialogue to assist in complet-
+tonomous driving, e.g., by prompt engineering on off-the-
+                                                                   ing human-oriented tasks, while PromptCraft [40] explores
+shelf LLMs to obtain the driving decisions from textual de-
+                                                                   precise prompt engineering to enhance the communication
+scriptions of the surrounding environment [45, 46, 61], or
+                                                                   skills of robots. These developments underscore the pivotal
+by fine-tuning LLMs to predict the next action or plan fu-
+                                                                   role of foundation models as building blocks of agents to
+ture trajectories [5, 30]. To develop multimodal systems,
+                                                                   foster more effective human-robot collaboration.
+both real and simulated driving videos have been utilized
+for instruction tuning [49]. For example, DriveGPT4 [64]           3. Dorothie & Situated Dialogue Navigation
+and RAG-Driver [69] fine-tuned multimodal LLMs on real-
+world driving videos to predict future throttle and steering       We set up our experiment in CARLA [10], a driving sim-
+angles. DriveMLM [59] and LMDrive [47] adopted cam-                ulator for autonomous vehicles, and use the DOROTHIE
+era data and ego-vehicle states from the CARLA simulator.          framework [27] built upon it, which supports human-agent
+We refer to recent surveys and position papers for detailed        dialogue and various forms of unexpected situations. In this
+reviews [7, 12, 24, 65]. We note that the experimental se-         work, we adopt the problem definition and data from the
+tups in these efforts are preliminary and simplified, com-         Situated Dialogue Navigation (SDN) benchmark in [27].
+pared to the real driving scenarios in human environments.
+                                                                   3.1. Overview
+First, these prior approaches were restricted to single hu-
+man instructions (or even no language input), limiting per-        The SDN benchmark is designed to assess the agent’s capa-
+formance on longer-horizon tasks with back-and-forth di-           bility in generating dialogue responses and physical navi-
+
+
+                                                               2
+  Graph Shortest Path                                                                                                         SDN Dialogue Example
+                                      Route Planner
+                                                                   Dialogue       Physical                                  I think i have already arrived
+                                                                                                                                                           🚙
+                               API      Planned Route:                                                                      at the IKEA.
+                              Calls     [turn left], [turn right], …
+                                                                     Response      Action                                   Where shall we go next?         🚙
+                                                                                                                             Can you take me to annabel’s
+                                                                                                                           👤 place next?
+
+   Linear Projection
+                               Large Language Model (Vicuna-7B + LoRA)
+                             Video Tokenizer         Text Tokenizer
+                                                                                                                 👤          Where is annabel’s place?       🚙
+
+                                                                                                Simulator Human
+                                                                                                                              Let’s just go straight on
+                                                                                                                              duffield and then turn right
+     CLIP Encoder                                                                                                          👤 onto upland.
+                                 Perception           Current   Dialogue          Action                                   Okay.                         🚙
+                                  (Video)           Instruction History           History                                    And once you turn right to
+                                                                                                                             upland, continue straight
+                                                                                                                           👤 until fuller and turn right.
+
+
+Figure 1. Overview of the DriVLMe model architecture. DriVLMe is a multimodal Large Language Model that consists of (1) A video
+tokenizer that tokenize the input visual history from the CARLA [10] simulator using a frozen CLIP encoder and a linear projection layer,
+(2) A route planner, a tool designed to assist the LLM in finding the shortest path from the agent’s current location to another landmark
+specified by the LLM. (3) The base large language model, which receives input in the form of video representations, situated dialogue
+instructions, history of physical actions, and the output planned route from the route planner. It predicts dialogue responses to human
+inputs and physical actions that interact with the simulator.
+                                                                            Physical Actions Args                  Descriptions
+gation actions according to the perceptual and dialogue his-                LaneFollow       -                    Default behaviour, follow the current lane.
+tory. SDN is collected from human-human interactions in                     LaneSwitch       Direction            Switch to a neighboring lane.
+Wizard-of-Oz (WoZ) studies, consisting of over 8,000 utter-                 JTurn            Direction            Turn to a connecting road at a junction.
+                                                                            UTurn            -                    Make a U-turn to the opposite direction.
+ances and 18.7 hours of control streams. In the WoZ study,                  Stop             -                    Brake the vehicle manually.
+a human participant engages with what they believe to be                    Start            -                    Start the vehicle manually.
+                                                                            SpeedChange      Speed (±5)           Change the desired cruise speed by 5 km/h.
+an autonomous driving agent to accomplish various navi-                     LightChange      Light State (On/Off) Change the front light state.
+gation tasks. Behind the scenes, the actions of this agent
+                                                                                Table 1. The high-levels action space in the SDN benchmark.
+are operated by a human wizard. This setup ensures that
+the participant’s interactions with the agent are natural and              lection, the model is always presented with the actual ac-
+synchronized. During the interaction, there is also an adver-              tion history At , rather than model-predicted actions during
+sarial wizard who creates unexpected situations on the fly.                inference. The model is evaluated against the action and
+This adversarial wizard changes environmental dynamics as                  dialogue decisions of the human wizard. We particularly
+well as current goals and plans by using language instruc-                 consider two sub-problems.
+tions and manipulating road conditions.
+                                                                           The Dialogue Response for Navigation (RfN) task. The
+3.2. Problem Definitions                                                   RfN task evaluates the agent’s performance in generating
+                                                                           an adequate response in driving-related communication. At
+At time t, the agent is provided with a perceptual observa-                time stamp τ , when the wizard makes an utterance, the
+tion and a human language input, aggregated into the fol-                  agent is required to predict the dialogue response d. Instead
+lowing model input:                                                        of predicting only the dialogue move, we task the agent to
+• Map knowledge. A graph-structured topology M with a                      generate the natural language.
+   list of street names {stri } and landmarks {lmi }.                      The Navigation from Dialogue (NfD) task. The NfD
+• Perceptual history. A sequence of RGB images V =
+                                                                           task evaluates the agent’s performance in following human
+   {V0 , V1 , · · · , Vt−1 } captured by the first-person camera.
+                                                                           instructions from dialogue. At time stamp τ , when the wiz-
+   The video sampling rate is 10Hz
+                                                                           ard makes a decision on a physical action ⟨p, α⟩, the agent
+• Dialogue history. The dialogue utterances from the hu-
+                                                                           is required to predict this physical action.
+   man (Ut,HUM ) and the agent (Ut,BOT ).
+• Action history. The action history includes a sequence
+   of previous actions At = {a0 , a1 , · · · , at−1 }, where each
+                                                                           4. Method
+   action at is a tuple ⟨p, α⟩ representing a physical action              4.1. Model Architecture
+   and its argument executed at time t. More details about
+   physical action definitions are in Table 1.                             Our DriVLMe agent is a large video-language model con-
+                                                                           sisting of three parts: a video tokenizer, a route plan-
+    The goal of the agent is to navigate to a sequence of land-
+                                                                           ning module, and a large language model backbone. The
+marks on the map following the dialogue instructions from
+                                                                           overview architecture of DriVLMe is visualized in Figure 1.
+the human partner. To guarantee coherence in future di-
+alogues and unforeseen events, the tasks are defined in a                  Video Tokenizer. At time t, we can get a visual observa-
+teacher-forcing manner. This means that during data col-                   tion history {V0 , V1 , · · · , Vt−1 }. Given the long-range na-
+
+
+                                                                       3
+ture of the SDN benchmark, we assign a window size of
+                                                                        (Video)
+Tmax = 40 with step ∆t = 2 to sample the vision his-
+                                                                        (System Message): You are DriVLMe. You are
+tory and form a video V ∈ RT ×H×W ×C , where H, W ,                     responsible for safely piloting a car according to the
+and C are the height, width, and channel, respectively. For             instructions of a passenger. You must communicate with
+each video frame Vi , we adopt a pre-trained CLIP ViT-L/14              the passenger and make high-level decisions regarding
+encoder [38] to extract the feature map f ∈ RT ×h×w×D ,                 the current navigational goals.
+where h = H/p, w = W/p, p is the patch size of vi-                      (Prompt): Describe what you see.
+sion transformer, and D is the feature dimension of the                 (LLM, Description): I can see a car in front of me. I can
+CLIP encoder. We apply average-pooling to the feature                   only switch left lane...
+map along the temporal dimension to get a representation                (Dialogue & Action History)
+vs ∈ R(h×w)×D and along the spatial dimensions to get                   (Route Planning Instruction): You have a planning tool
+                                                                        that you can plan your path to the destination. You can
+a representation vt ∈ RT ×D . By concatenating these
+                                                                        call it by plan(destination), and it will return you
+two embeddings, we get the following video representation
+                                                                        a plan to get to your destination. If you don’t have a
+v = Concat(vt , vs ) ∈ R(T +h×w)×D . We then use a linear               destination in your mind, you can return plan(None).
+projection layer g to project the embedding into the lan-               (LLM, Planning): plan(ikea)
+guage decoder’s embedding space with a dimension of K,                  (Route Planner): [left, straight, ...]
+resulting in the final embedding g(v) = R(T +h×w)×K .                   (Prompt): You can select a new navigational action and
+LLM Backbone. The LLM decoder is the core module                        reply to the passenger.
+that processes the input video and translates the dialogue              (LLM, Action): SwitchLane
+instructions into lower-level decisions. Motivated by Video-            (LLM, Dialogue): “Ok, I will go to IKEA.”
+ChatGPT [29], we adopt Vicuna-7B (v1.1) [53] as the LLM
+decoder. Motivated by the tool-using capability of LLMs,            Figure 2. Example of system message and interaction between
+we introduce a planning framework for environmental un-             user and DriVLMe system. The system message is an overview
+                                                                    of the task the agent is required to accomplish. Given the video
+derstanding with the detailed prompts shown in Figure 2.
+                                                                    and the observation history, the agent is required to first describe
+Route Planning Module. To enable symbolic planning                  the surrounding environment, then call the planner API to plan a
+for long-horizon goals, we introduce a route planner to             route to the predicted goal, and make a decision at last. The output
+incorporate the graph knowledge in the map M into                   of the LLM is highlighted.
+DriVLMe. The planner takes as input a given target land-
+mark on the map lm ∈ {lmi } and the current location                v1.1) [25]. We adopt 50k video-text pairs from the BDD-X
+of the agent l. It then outputs a route from the agent to           dataset [21] for the driving domain tuning. The pre-training
+the target landmark following the shortest path. To call            images are collected from real driving videos and textual
+the planner, the agent can simply output Plan(lm). The              annotations of the environmental description and action ex-
+planner returns a list of turning directions, one per inter-        planations. We freeze the CLIP encoder and the LLM de-
+section in the route, expressed in natural language. The            coder, and train the projection layer only.
+final output delivered to the DriVLMe agent is a list of
+                                                                    4.2.2   Social Instruction Tuning
+directional action {p} = [dir1 , dir2 , · · · ], where diri ∈
+{left, right, straight, uturn}.                                     At this stage, we used LoRA [14] to fine-tune the LLM
+4.2. Instruction Tuning                                             in addition to the projector. We train the model on the
+                                                                    whole training set of the SDN dataset, which has 13k
+Motivated by Hu and Shu [16], our goal is to enhance a              video-dialogue pairs, including human-vehicle dialogues
+language model’s competence as a world model and agent              and long-term goals for planners. At each datapoint τ , the
+model by learning from embodied experiences and social              original SDN benchmark provides the dialogue d generated
+interactions. The training process of DriVLMe consists of           by human players, or physical action ⟨p, α⟩, where p is an
+two stages: (1) the general video instruction tuning stage,         action (e.g., Stop) and α is an argument (e.g., left). We
+focused on aligning the LLM and the video tokenizer using           aim for the agent to learn how to plan in alignment with hu-
+large-scale driving videos, and (2) the social and embodied         man intentions, which involves creating a sequence of prim-
+instruction tuning stage, focused on training the LLM on the        itive actions based on the goal and dialogue history, particu-
+conversational data collected from real human-human dia-            larly when there’s a change in the goal or plan. We manually
+logue and episodes of embodied experiences in a simulator.          annotate plan changes based on the car’s trajectory and the
+                                                                    current dialogue. While there could be several valid paths
+4.2.1   Domain Video Instruction Tuning
+                                                                    from the current location to the goal, we manually selected
+Following the practice of Video-ChatGPT [29], we initial-           the routes that the vehicle took during the recording. These
+ize the projection layer directly from LLaVA-7B (lightening         annotated plans serve as a part of the video-instruction data
+
+
+                                                                4
+pairs for training, facilitating more effective learning of the                                  NfD             RfN
+                                                                      Model                   Act↑ Arg↑ Move↑ CIDEr↑ BERT↑ M↑
+planner as a tool.
+                                                                      Seen Environments
+4.2.3   Embodied Instruction Tuning                                   TOTO                41.2      36.0    40.9      -       -      -
+                                                                      GPT-4               53.0      44.2    11.0    0.06    0.48   0.09
+Besides the original dialogue data, we developed a data gen-
+                                                                      GPT-4V              52.0      29.4     6.5    0.07    0.54   0.11
+eration pipeline to obtain paired data of embodied percep-            DriveVLM            70.4      71.3    61.4    0.43    0.76   0.37
+tion and descriptions from the simulator. We replay the               DriVLMe (-social)   68.7      69.0    19.1    0.17    0.60   0.13
+training sessions in the SDN benchmark to obtain the ego-             DriVLMe (-embodied) 68.4      67.7    62.7    0.45    0.76   0.37
+centric perception, record the environmental factors such as          DriVLMe (-domain)   62.4      70.7    60.9    0.35    0.75   0.18
+weather and nearby objects, and then fill these details into          DriVLMe (-video)    60.3      72.5    42.7    0.33    0.69   0.26
+language descriptions using templates.                                DriVLMe (-planner)  57.6      52.0    21.3    0.19    0.61   0.12
+• Distance to Road End: We compute the distance to the                Unseen Environment
+   road’s end by subtracting the current waypoint’s s value           TOTO                45.8      41.1    31.0      -       -      -
+   from the s value at the road’s end. The s value is defined         GPT-4               67.5      61.3    14.5    0.05    0.47   0.08
+                                                                      GPT-4V              63.5      51.6     7.5    0.07    0.53   0.13
+   according to the OpenDrive 1.4 standard [11].
+                                                                      DriveVLM            70.8      71.3    68.5    0.55    0.81   0.43
+• Lane Information: We note the lane number the car was               DriVLMe (-social)   69.8      66.8    26.9    0.25    0.64   0.16
+   in, counting from the left, and record whether the car             DriVLMe (-embodied) 72.9      68.0    66.7    0.52    0.79   0.42
+   could switch to the adjacent left or right lanes.                  DriVLMe (-domain)   65.9      70.8    65.3    0.48    0.78   0.38
+• Object in Front: We identify the object directly in front           DriVLMe (-video)    62.6      68.6    46.5    0.41    0.73   0.31
+   of the vehicle from the ground truth obtained from the             DriVLMe (-planner)  58.2      59.1    23.7    0.22    0.63   0.13
+   simulation, and compute the distance to it.                        Table 2. Results of open-loop evaluation on the SDN test set.
+• Traffic Sign Visibility: We record all visible traffic signs        The seen sessions are from CARLA map Town01, Town03, and
+   (e.g., traffic lights, stop signs, speed limit signs), along       Town05, while unseen sessions are from CARLA map Town02.
+   with the information they displayed (red/green for lights,         The NfD task measures the agent’s ability to navigate according to
+   posted speed limits), and their distances from the vehicle.        human instruction and the RfN task measures the agent’s ability to
+                                                                      respond to humans in a situated dialogue, M stands for METEOR.
+• Weather Conditions: We record the current weather
+   conditions that could impact the vehicle’s control.
+The text templates used to verbalize the embodied experi-             action ⟨p, α⟩, where p represents the chosen physical action
+ences are available in Appendix 8.1.                                  and α is its argument. For evaluating both the physical ac-
+                                                                      tion and its argument, we employ accuracy metrics. In the
+4.2.4   Hyper-parameters.                                             RfN task, the agent is required to predict the dialogue output
+                                                                      d. The model is tasked with predicting the dialogue move
+The input resolution of the video is set as 224 × 224. We
+                                                                      m as defined in SDN. To evaluate the natural language di-
+use a single linear layer for projection. For the pre-training
+                                                                      alogue output, we consider additional language generation
+stage of the model, we trained the model for 3 epochs with a
+                                                                      metrics: CIDEr [56], BERTScore [70], and METEOR [3].
+learning rate of 2e−5 and a batch size of 4. We fine-tune the
+LLM with LoRA [14] and ZeRO [39]. The training epoch                  5.3. Baselines
+is 2 and the batch size is 1. For the LoRA configuration, we
+set rank to 128 and alpha to 256.                                     Expert Baseline. We compared our model with
+                                                                      TOTO [27], a baseline model implemented with an
+5. Open-loop Evaluation                                               episodic transformer. Since the TOTO model does not have
+                                                                      a text decoder and thus cannot generate dialogue, we only
+5.1. SDN Benchmark                                                    recorded the dialogue move prediction accuracy of TOTO.
+For the open-loop evaluation, we tested the model on the
+test split of the SDN benchmark. The test set has two sub-            Generalist Baselines. The GPT-4 [1] and GPT-4V [35]
+sets, seen and unseen, where seen data points adopt either            models are generalist LLMs we consider.1 Due to com-
+CARLA map Town01, Town03, or Town05 as the environ-                   putational constraints, rather than test both models on the
+ment (which appeared in the training set). The unseen data            entirety of the SDN test set, we chose to randomly sample
+points are from Town02, which is a relatively simple town             data points from four strata: seen RfN, unseen RfN, seen
+map that was held out from training.                                  NfD, and unseen NfD. To evaluate each model on one of
+                                                                      these strata, we randomly sampled 200 data points and fed
+5.2. Evaluation Metrics                                               them into a custom prompting infrastructure similar to the
+We evaluate our model on two tasks, RfN and NfD. The                    1 We use the OpenAI gpt-4-0125-preview and gpt-4-vision-preview
+
+NfD task necessitates the agent’s prediction of the physical          models, respectively.
+
+
+                                                                  5
+structure in Table 2. For the vision-enabled model (GPT-            Model
+                                                                                  Description        Justification          Full
+                                                                                  C↑ B4↑      R↑     C↑ B4↑ R↑         C↑    B4↑   R↑
+4V), we prepended an image Vt−1 as the current visual in-
+                                                                    ADAPT     219.35 33.42 61.83 94.62 9.95 32.01 93.66 17.76 44.32
+put. To help the LLMs better understand the output format,          DriveGPT4 254.62 35.99 63.97 101.55 10.84 31.91 102.71 19.00 45.10
+we explain each option in the decision-making prompt. The           DriVLMe 227.05 33.39 61.02 132.17 13.39 33.18 114.16 19.59 44.83
+prompt engineering details are in Appendix 8.2.                     Model
+                                                                                           Speed                    Turning Angle
+                                                                                  E↓ A0.1↑ A0.5↑    A1↑ A5↑     E↓ A0.1↑ A0.5↑ A1↑ A5↑
+5.4. Main Results                                                   ADAPT       3.02 9.56 24.77 37.07 90.39 11.98 27.93 66.83 75.13 89.45
+                                                                    DriveGPT4   1.30 30.09 60.88 79.92 98.44 8.98 59.23 72.89 79.59 95.32
+As shown in Table 2, our DriveVLMe model significantly              DriVLMe     1.59 22.76 50.55 70.80 99.20 33.54 61.38 70.70 76.21 91.55
+
+outperforms the baseline models across most metrics, ex-            Table 3. Results of open-loop evaluation on the BDD-X test set.
+cept for the physical action accuracy in the NfD task for the       We provide evaluation results on action description, action justifi-
+unseen map. This discrepancy may be attributed to the un-           cation, full-text generation and control signal prediction. C stands
+familiarity with the unseen Town02, though it is topograph-         for CIDEr; B4 stands for BLEU4; R stands for ROUGE; E stands
+ically simpler. Overall, DriVLMe can predict more precise           for Root Mean Square Error (RMSE).
+decisions and give better responses in the situated dialogue.       fers video clips recorded by vehicle-mounted cameras along
+                                                                    with language interpretations and control signals. We fine-
+5.5. Ablation Studies
+                                                                    tune the DriVLMe model with LoRA for another 9 epochs
+To assess the effectiveness of various data and components          on the BDD-X training set, using a learning rate of 5e−5
+in developing DriVLMe, we conducted an ablation study.              with both LoRA rank and alpha set to 256. As indicated
+We evaluated the model performance by systematically re-            in Table 3, DriVLMe successfully adapts to real-world
+moving specific training data and components to observe             driving scenarios beyond merely navigating in a simulated
+their impact on the model’s ability to generate dialogue re-        environment. It outperforms the ADAPT [18] baseline
+sponses and predict physical actions.                               and achieves comparable performance to the state-of-the-
+• Social Data (-social): We removed the human-vehicle di-           art DriveGPT4 [64] baseline, surpassing several metrics,
+   alogue data used for social instruction tuning.                  without relying on ChatGPT-augmented data as adopted in
+• Embodied Data (-embodied): We removed the simu-                   DriveGPT4.
+   lated data used for embodied instruction tuning.
+• Domain Data (-domain): We removed the BDD-X data
+                                                                    6. Closed-loop Evaluation
+   used for domain-general instruction tuning.                      For the closed-loop evaluation, we developed a human-in-
+• Video Input (-video): We removed the video processing             the-loop simulation protocol in CARLA based on the simu-
+   component from DriVLMe and evaluated its performance             lator developed in DOROTHIE for human studies.
+   without visual information.
+• Planner Module (-planner): We removed the planner                 6.1. Experimental Design
+   module responsible for route planning in DriVLMe. This           We designed our closed-loop experiment to assess the
+   experiment aimed to assess the impact of proactive route         adaptability and robustness of our autonomous driving sys-
+   planning on the model’s navigation capabilities.                 tem under various dynamic scenarios. The experiment was
+As shown in Table 2, removing the video input and the plan-         conducted in Town01 and Town02, including both seen and
+ner module both decrease the performance of the model on            unseen maps. A human subject instructed the DriVLMe
+the RfN tasks on all metrics, indicating the contribution of        agent to navigate to a preset goal by giving natural lan-
+both models on response generation. A similar decrease              guage instructions following the storyboard, and the agent
+in NfD performance is observed, while the impact of re-             attempted to follow these instructions, autonomously navi-
+moving the planner is significant, suggesting that the route        gate in the environment, and communicate with the human
+planner module greatly contributes to the next action predic-       subject. To comprehensively evaluate the system’s perfor-
+tion. Data ablation studies show that social experiences sig-       mance, we test the model with different settings as specific
+nificantly enhance response generation. We observed that            in the storyboards below:
+embodied experiences mainly aid the model in predicting             • Long-horizon v.s. Short-horizon Instructions: Users
+actions unrelated to route planning, such as lane switch-             instruct the agent with either long-horizon instructions,
+ing. Consequently, this was less beneficial in the unseen             involving higher-level navigational goals (e.g., “go to the
+Town02, where lane switching is not necessary.                        KFC”), or short-horizon instructions (e.g., “turn right at
+                                                                      the next intersection”) asking for immediate maneuvers.
+5.6. Evaluation on Realworld Benchmark
+                                                                    • Weather Change: A sudden weather change (e.g., rain)
+We also explore whether DriVLMe can transition from sim-              is triggered during driving.
+ulated evaluations to benchmarks involving real driving sce-        • Goal Change: The human user asks for a change of goal
+narios. We utilize the BDD-X [21] benchmark, which of-                to let the agent replan the route. The human user first
+
+
+                                                                6
+[Human] Turn left.                                                                                 [Human] Switch to the left lane.
+       Figure 3. Examples of closed-loop evaluation of DriVLMe in CARLA, following action-level natural language instructions.
+                                                   Timestamp 1                     Timestamp 2                   Timestamp 3                   Timestamp 4
+
+
+
+
+ Fail to                                     [Human] Please take me to                                      [Human] Where do you plan to
+  Turn                                  8    shell.                                                         turn?
+                                                Action & Dialogue                 Action & Dialogue            Action & Dialogue             Action & Dialogue
+                                                                                                                                           [Goal]
+                                  Goal    7 [Goal]      Shell                [Goal]     Shell               [Goal]     Shell                          Shell
+           1                             5,6
+                                             [Dialogue] Okay                 [Dialogue]                     [Dialogue] I’ll turn left.     [Dialogue]
+                                 Changed     [Physical] Start                [Physical] TurnLeft            [Physical] LaneKeep            [Physical] Turn left
+           2                              4
+                                      3
+                                                 Timestamp 5                       Timestamp 6                   Timestamp 7                   Timestamp 8
+
+
+
+
+                                             [Human] Don’t go to Shell, Go   [Human] Where do you plan to
+                                             to KFC instead.                 turn?
+                                                 Action & Dialogue                Action & Dialogue            Action & Dialogue             Action & Dialogue
+Storyboard                                   [Goal]     KFC                  [Goal]     KFC                 [Goal]     KFC           [Goal]     KFC
+  ●   Go to Shell                            [Dialogue] Ok                   [Dialogue] I’ll turn left      [Dialogue]               [Dialogue]
+  ●   (Change goal) Go to KFC instead        [Physical] LaneKeep             [Physical] LaneKeep            [Physical] Stop (Failed) [Physical]   Turn left
+
+Figure 4. Example of a closed-loop evaluation session: The initial goal of the session is set to Shell, which is later changed to KFC
+during the course of the evaluation. The yellow solid line represents the path taken by the agent and the yellow dotted line represents the
+route planned by the planner. We took eight checkpoints in the whole evaluation session and recorded the input dialogue, goal prediction,
+dialogue response and the physical action taken for each checkpoint.
+
+  instructs the agent to navigate to an initial goal and then                       bilities. The model is also robust under weather changes
+  updates it.                                                                       during the session. Still, these successful sessions are lim-
+• Obstacle Addition: An obstacle is placed in front of the                          ited to cases when there is one single long-horizon goal
+  agent to force a stop or lane change.                                             or only one change of goal. We observe challenges with
+                                                                                    multi-turn interactions with multiple short-horizon instruc-
+6.2. Connecting DriVLMe to Simulation                                               tions. DriVLMe also faces difficulties in handling unex-
+Throughout 20 pilot studies with real human subjects,                               pected situations and changes to environmental dynamics.
+agents’ interactions with the simulator formed a closed-                            Lastly, the simplified language generation from robotic ex-
+loop control mechanism. We used a local motion planner to                           periences has triggered concerns about trustworthiness as
+translate the physical actions back into throttle and steering                      raised by human subjects. Figure 4 shows an example of
+control. Due to the LLM inference rate, we limited the LLM                          our session with a goal change instruction. We find that the
+to interact with the environment at a frequency of 2 Hz, and                        agent can react to goal changes and plan turns according to
+provided the model with the whole interaction history Ht                            the plan given by the route planner tool. However, we en-
+to prompt the model. For the evaluation, we used whether                            countered two failure cases during the experiment. First, the
+the final goal was achieved as the metric and recorded the                          agent failed to stop when the car in front suddenly stopped
+failure cases for analysis.                                                         (timestamp 7). Second, the agent failed to predict a turn
+                                                                                    at the last intersection, causing the agent to stall at the in-
+6.3. Main Results                                                                   tersection (as marked on the map). We present the video
+The outcomes of our experimental investigations provide                             demonstration for additional details and discuss the limita-
+compelling evidence regarding the efficacy and robustness                           tions of foundation model agents in the following section.
+of our proposed DriVLMe model in autonomous driving di-
+alogue tasks, with 6 successful sessions out of 20 tests. As
+                                                                                    7. Limitations and Future Work
+can be seen in Figure 3, we find that the DriVLMe model                             Our pilot studies revealed several failure cases and technical
+is capable of following simple human instructions and per-                          challenges for LLM-based AD agents, outlined as follows.
+forming the physical actions as requested, in line with pre-
+vious studies on foundation model agents for autonomous                             Imbalanced Embodied Experiences. An inherent chal-
+driving. Surprisingly, we find that DriVLMe can effec-                              lenge in autonomous driving tasks lies in the imbalance of
+tively call the route planner API for reliable graph plan-                          training data, where the majority of data points are routine
+ning and re-planning, demonstrating LLMs’ tool use capa-                            actions like lane following or maintaining a safe distance
+
+
+                                                                              7
+from the preceding vehicle. This imbalance can lead to               in the autonomous driving agent framework could signifi-
+model biases, particularly towards predicting more frequent          cantly enhance the agent’s ability to follow complex instruc-
+actions while failing to predict actions like stop. Address-         tions in a complex environment that needs lots of human-
+ing this issue requires introducing robust data augmentation         agent collaboration.
+in embodied experiences, sampling strategies, or domain-
+specific knowledge into the training process to ensure com-
+prehensive model training across diverse driving scenarios.          Limited Theory of Mind and Trust-worthiness. An-
+                                                                     other critical limitation observed in our study is the absence
+Limited World Modeling and Visual Understanding.                     of a situated Theory of Mind (ToM) [28] in the autonomous
+Our experiment revealed instances where the visual encoder           agent. At times, the agent misinterprets the instructor’s
+failed to capture critical world states due to low image in-         intentions, mistakenly perceiving low-level instructions as
+put resolution, such as the color of traffic lights or the in-       cues to abandon the previously provided long-horizon in-
+terpretation of traffic signs. The absence of optical charac-        struction and predict the goal incorrectly. The agent fails
+ter recognition (OCR) capabilities further exacerbates the           to recognize that the instruction may simply be specifying
+risk of misinterpreting traffic signs and thus breaking traf-        details within the ongoing long-horizon instructions. This
+fic rules. Future efforts could explore techniques to enhance        highlights the need for autonomous driving agents with a
+image resolution, integrate OCR functionalities, or incorpo-         nuanced understanding of the instructor’s intentions and
+rate complementary sensor modalities to enrich perception            context, enabling better agent modeling for their interaction
+and improve overall world modeling performance.                      partners, thus, gaining trust from humans.
+Unexpected Situations and World Dynamics. Our
+closed-loop experiment results on unexpected situations              Unacceptable Inference Time. Our model’s single in-
+like encountering an obstacle have revealed limitations              ference time takes approximately 5 seconds, which signif-
+in the LLM agent’s ability to effectively address out-of-            icantly exceeds the interval between two decision points,
+distribution corner cases. Such cases are common in real-            posing a substantial challenge in real-world scenarios where
+world driving scenarios, highlighting the need for enhanced          rapid decision-making is imperative. While this delay is
+capabilities in LLM-based autonomous driving agents to               avoidable in a simulated environment through step-by-step
+handle unforeseen circumstances. One potential direction             simulation, addressing this inference time disparity is cru-
+for the future is to enable agents to learn from in-the-wild         cial for practical deployment. Future research directions
+driving video/data and develop a better world model. Alter-          may focus on distilling the model, leveraging hardware ac-
+natively, allowing large language models to proactively seek         celeration, or implementing efficient inference strategies to
+human help in unforeseen circumstances could also help.              mitigate this bottleneck. This also raises a research problem
+                                                                     of balancing the length of the Chain-of-Thought reasoning
+Language Generation from Embodied Experiences.
+                                                                     to reduce the inference time while keeping a comparable
+Furthermore, our investigation revealed that the language
+                                                                     performance in task accomplishment.
+generated by our model tends to be oversimplified, primar-
+ily consisting of straightforward responses to human in-
+structions or simplistic yes/no replies. Additionally, the           8. Conclusion
+model cannot initiate a dialogue with a human instructor,
+e.g., requesting additional advice or low-level instructions.        In this work, we presented DriVLMe, an LLM-based au-
+Future work should focus on enhancing the model’s conver-            tonomous driving agent that leverages both embodied expe-
+sational initiative, enabling self-motivated dialogue.               riences in a simulated environment and social experiences
+                                                                     in real human dialogue. The egocentric perception and
+Multi-turn Interactions and Instruction Following.                   conversational interaction empower DriVLMe to engage in
+Our closed-loop experiments also suggest the challenges of           meaningful dialogues with human passengers while navi-
+multi-turn interactions and instruction following. As the            gating complex driving environments. Through empirical
+conversation goes on, the agent occasionally fails to re-            evaluations, we demonstrated the effectiveness and versa-
+tain previous long-horizon instructions, leading to wrong            tility of DriVLMe in autonomous driving dialogue tasks,
+goal predictions and subsequent disruptions to the plan-             showcasing significant improvements in both physical ac-
+ning route. This issue underscores the critical importance           tion prediction and dialogue response generation metrics.
+of memory retention and context awareness in maintaining             Our findings have demonstrated the potential of DriVLMe
+an agent model, particularly in situations where extensive           in enabling human-agent communication and autonomous
+dialogue exchange happens. Addressing these challenges               driving, and on the other hand, reveal ed several key limita-
+through the implementation of memory-based mechanisms                tions and challenges. of foundation models as AD agents,
+within LLM architectures or adding some memory modules               highlighting areas that need future enhancement.
+
+
+                                                                 8
+Acknowledgment                                                                In Proceedings of the Driving Simulation Conference, pages
+                                                                              25–36, 2006. 5
+This work was supported by the Automotive Research                       [12] Haoxiang Gao, Yaqian Li, Kaiwen Long, Ming Yang, and
+Center (ARC) at the University of Michigan and NSF                            Yiqing Shen. A survey for foundation models in autonomous
+IIS1949634. The authors would like to thank the review-                       driving. arXiv preprint arXiv:2402.01105, 2024. 2
+ers for their valuable feedback.                                         [13] Qiao Gu, Alihusein Kuwajerwala, Sacha Morin, Kr-
+                                                                              ishna Murthy Jatavallabhula, Bipasha Sen, Aditya Agarwal,
+References                                                                    Corban Rivera, William Paul, Kirsty Ellis, Rama Chellappa,
+ [1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ah-                    et al. Conceptgraphs: Open-vocabulary 3d scene graphs for
+     mad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida,                 perception and planning. arXiv preprint arXiv:2309.16650,
+     Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al.                  2023. 2
+     Gpt-4 technical report. arXiv preprint arXiv:2303.08774,            [14] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-
+     2023. 5                                                                  Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen.
+ [2] Julie Baca, Feng Zheng, Hualin Gao, and Joseph Picone.                   Lora: Low-rank adaptation of large language models. arXiv
+     Dialog systems for automotive environments. In INTER-                    preprint arXiv:2106.09685, 2021. 4, 5
+     SPEECH, pages 1929–1932, 2003. 1                                    [15] Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima,
+ [3] Satanjeev Banerjee and Alon Lavie. Meteor: An automatic                  Xizhou Zhu, Siqi Chai, Senyao Du, Tianwei Lin, Wenhai
+     metric for mt evaluation with improved correlation with hu-              Wang, et al. Planning-oriented autonomous driving. In Pro-
+     man judgments. In Proceedings of the acl workshop on in-                 ceedings of the IEEE/CVF Conference on Computer Vision
+     trinsic and extrinsic evaluation measures for machine trans-             and Pattern Recognition, pages 17853–17862, 2023. 1
+     lation and/or summarization, pages 65–72, 2005. 5                   [16] Zhiting Hu and Tianmin Shu. Language models, agent mod-
+ [4] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora,                 els, and world models: The law for machine reasoning and
+     Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan, Gi-                 planning. arXiv preprint arXiv:2312.05230, 2023. 2, 4
+     ancarlo Baldan, and Oscar Beijbom. nuscenes: A multi-               [17] Wenlong Huang, Fei Xia, Ted Xiao, Harris Chan, Jacky
+     modal dataset for autonomous driving. In Proceedings of                  Liang, Pete Florence, Andy Zeng, Jonathan James Richard
+     the IEEE/CVF conference on computer vision and pattern                   Tompson, Igor Mordatch, Yevgen Chebotar, Pierre Ser-
+     recognition, pages 11621–11631, 2020. 2                                  manet, Noah Brown, Tomas Jackson, Linda Luu, Sergey
+ [5] Long Chen, Oleg Sinavski, Jan Hünermann, Alice Karnsund,                Levine, Karol Hausman, and Brian Andrew Ichter. Inner-
+     Andrew James Willmott, Danny Birch, Daniel Maund, and                    monologue: Embodied reasoning through planning with lan-
+     Jamie Shotton. Driving with llms: Fusing object-level vector             guage models. 2022. CoRL 2022 (to appear). 2
+     modality for explainable autonomous driving. arXiv preprint         [18] Bu Jin, Xinyu Liu, Yupeng Zheng, Pengfei Li, Hao Zhao,
+     arXiv:2310.01957, 2023. 2                                                Tong Zhang, Yuhang Zheng, Guyue Zhou, and Jingjing Liu.
+ [6] Li Chen, Penghao Wu, Kashyap Chitta, Bernhard Jaeger,                    Adapt: Action-aware driving caption transformer. In 2023
+     Andreas Geiger, and Hongyang Li.             End-to-end au-              IEEE International Conference on Robotics and Automation
+     tonomous driving: Challenges and frontiers. arXiv preprint               (ICRA), pages 7554–7561. IEEE, 2023. 1, 6
+     arXiv:2306.16927, 2023. 1                                           [19] Ye Jin, Xiaoxi Shen, Huiling Peng, Xiaoan Liu, Jingli Qin,
+ [7] Can Cui, Yunsheng Ma, Xu Cao, Wenqian Ye, Yang Zhou,                     Jiayang Li, Jintao Xie, Peizhong Gao, Guyue Zhou, and
+     Kaizhao Liang, Jintai Chen, Juanwu Lu, Zichong Yang,                     Jiangtao Gong. Surrealdriver: Designing generative driver
+     Kuei-Da Liao, et al. A survey on multimodal large lan-                   agent simulation framework in urban contexts based on large
+     guage models for autonomous driving. In Proceedings of the               language model. arXiv preprint arXiv:2309.13193, 2023. 1
+     IEEE/CVF Winter Conference on Applications of Computer              [20] Alex Kendall, Jeffrey Hawke, David Janz, Przemyslaw
+     Vision, pages 958–979, 2024. 2                                           Mazur, Daniele Reda, John-Mark Allen, Vinh-Dieu Lam,
+ [8] Yuchen Cui, Siddharth Karamcheti, Raj Palleti, Nidhya Shiv-              Alex Bewley, and Amar Shah. Learning to drive in a day.
+     akumar, Percy Liang, and Dorsa Sadigh. No, to the right:                 In 2019 international conference on robotics and automation
+     Online language corrections for robotic manipulation via                 (ICRA), pages 8248–8254. IEEE, 2019. 1
+     shared autonomy. In Proceedings of the 2023 ACM/IEEE In-            [21] Jinkyu Kim, Anna Rohrbach, Trevor Darrell, John Canny,
+     ternational Conference on Human-Robot Interaction, pages                 and Zeynep Akata. Textual explanations for self-driving ve-
+     93–101, 2023. 2                                                          hicles. Proceedings of the European Conference on Com-
+ [9] Thierry Deruyttere, Simon Vandenhende, Dusan Grujicic,                   puter Vision (ECCV), 2018. 2, 4, 6
+     Luc Van Gool, and Marie-Francine Moens. Talk2car:                   [22] Bowon Lee, Mark Hasegawa-Johnson, Camille Goudeseune,
+     Taking control of your self-driving car. arXiv preprint                  Suketu Kamdar, Sarah Borys, Ming Liu, and Thomas Huang.
+     arXiv:1909.10838, 2019. 2                                                Avicar: Audio-visual speech corpus in a car environment. In
+[10] Alexey Dosovitskiy, German Ros, Felipe Codevilla, Anto-                  Eighth International Conference on Spoken Language Pro-
+     nio Lopez, and Vladlen Koltun. Carla: An open urban driv-                cessing, 2004. 2
+     ing simulator. In Conference on robot learning, pages 1–16.         [23] Jialu Li, Aishwarya Padmakumar, Gaurav Sukhatme, and
+     PMLR, 2017. 2, 3                                                         Mohit Bansal. Vln-video: Utilizing driving videos for out-
+[11] Marius Dupuis and Han Grezlikowski. Opendrive®-an open                   door vision-and-language navigation. In Proceedings of the
+     standard for the description of roads in driving simulations.            AAAI Conference on Artificial Intelligence, 2024. 2
+
+
+                                                                     9
+[24] Xin Li, Yeqi Bai, Pinlong Cai, Licheng Wen, Daocheng Fu,                   Pradhan. University of colorado dialogue systems for travel
+     Bo Zhang, Xuemeng Yang, Xinyu Cai, Tao Ma, Jianfei Guo,                    and navigation. In Proceedings of the first international con-
+     et al. Towards knowledge-driven autonomous driving. arXiv                  ference on Human language technology research, 2001. 1
+     preprint arXiv:2312.04316, 2023. 2                                    [38] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+[25] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee.                   Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+     Visual instruction tuning. 2023. 4                                         Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning
+[26] Yingzi Ma, Yulong Cao, Jiachen Sun, Marco Pavone, and                      transferable visual models from natural language supervi-
+     Chaowei Xiao. Dolphins: Multimodal language model for                      sion. In International conference on machine learning, pages
+     driving. arXiv preprint arXiv:2312.00438, 2023. 1                          8748–8763. PMLR, 2021. 4
+[27] Ziqiao Ma, Benjamin VanDerPloeg, Cristian-Paul Bara, Yi-              [39] Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and
+     dong Huang, Eui-In Kim, Felix Gervits, Matthew Marge,                      Yuxiong He. Zero: Memory optimizations toward training
+     and Joyce Chai. DOROTHIE: Spoken dialogue for han-                         trillion parameter models. In SC20: International Confer-
+     dling unexpected situations in interactive autonomous driv-                ence for High Performance Computing, Networking, Storage
+     ing agents. In Findings of the Association for Computational               and Analysis, pages 1–16. IEEE, 2020. 5
+     Linguistics: EMNLP 2022, pages 4800–4822, Abu Dhabi,                  [40] Allen Z Ren, Anushri Dixit, Alexandra Bodrova, Sumeet
+     United Arab Emirates, 2022. 1, 2, 5                                        Singh, Stephen Tu, Noah Brown, Peng Xu, Leila Takayama,
+[28] Ziqiao Ma, Jacob Sansom, Run Peng, and Joyce Chai. To-                     Fei Xia, Jake Varley, et al. Robots that ask for help: Uncer-
+     wards a holistic landscape of situated theory of mind in large             tainty alignment for large language model planners. In Con-
+     language models. In Findings of the Association for Compu-                 ference on Robot Learning, pages 661–682. PMLR, 2023.
+     tational Linguistics: EMNLP 2023, pages 1011–1031, 2023.                   2
+     8                                                                     [41] Junha Roh, Chris Paxton, Andrzej Pronobis, Ali Farhadi,
+[29] Muhammad Maaz, Hanoona Rasheed, Salman Khan, and Fa-                       and Dieter Fox. Conditional driving from natural language
+     had Shahbaz Khan. Video-chatgpt: Towards detailed video                    instructions. In Proceedings of the Conference on Robot
+     understanding via large vision and language models. In Pro-                Learning, pages 540–551, 2020. 2
+     ceedings of the IEEE/CVF conference on computer vision                [42] Timo Schick, Jane Dwivedi-Yu, Roberto Dessı̀, Roberta
+     and pattern recognition, 2024. 4                                           Raileanu, Maria Lomeli, Eric Hambro, Luke Zettlemoyer,
+[30] Jiageng Mao, Yuxi Qian, Junjie Ye, Hang Zhao, and Yue                      Nicola Cancedda, and Thomas Scialom. Toolformer: Lan-
+     Wang. Gpt-driver: Learning to drive with gpt. In NeurIPS                   guage models can teach themselves to use tools. In Advances
+     2023 Foundation Models for Decision Making Workshop,                       in Neural Information Processing Systems, 2023. 1
+     2023. 2                                                               [43] Wilko Schwarting, Javier Alonso-Mora, and Daniela Rus.
+[31] Matthew Marge, Carol Espy-Wilson, Nigel G Ward, Abeer                      Planning and decision-making for autonomous vehicles. An-
+     Alwan, Yoav Artzi, Mohit Bansal, Gil Blankenship, Joyce                    nual Review of Control, Robotics, and Autonomous Systems,
+     Chai, Hal Daumé III, et al. Spoken language interaction                   1:187–210, 2018. 1
+     with robots: Recommendations for future research. Com-                [44] Wilko Schwarting, Alyssa Pierson, Javier Alonso-Mora, Ser-
+     puter Speech & Language, 71:101255, 2022. 2                                tac Karaman, and Daniela Rus. Social behavior for au-
+[32] Takashi Minato, Ryuichiro Higashinaka, Kurima Sakai,                       tonomous vehicles. Proceedings of the National Academy
+     Tomo Funayama, Hiromitsu Nishizaki, and Takayuki Na-                       of Sciences, 116(50):24972–24978, 2019. 1
+     gai. Design of a competition specifically for spoken dia-             [45] Hao Sha, Yao Mu, Yuxuan Jiang, Li Chen, Chenfeng Xu,
+     logue with a humanoid robot. Advanced Robotics, 37(21):                    Ping Luo, Shengbo Eben Li, Masayoshi Tomizuka, Wei
+     1349–1363, 2023. 2                                                         Zhan, and Mingyu Ding. Languagempc: Large language
+[33] Yao Mu, Qinglong Zhang, Mengkang Hu, Wenhai Wang,                          models as decision makers for autonomous driving. arXiv
+     Mingyu Ding, Jun Jin, Bin Wang, Jifeng Dai, Yu Qiao, and                   preprint arXiv:2310.03026, 2023. 1, 2
+     Ping Luo. Embodiedgpt: Vision-language pre-training via               [46] Dhruv Shah, Błażej Osiński, Sergey Levine, et al. Lm-
+     embodied chain of thought. In Advances in Neural Informa-                  nav: Robotic navigation with large pre-trained models of lan-
+     tion Processing Systems, 2023. 1                                           guage, vision, and action. In Conference on robot learning,
+[34] Khanh X Nguyen, Yonatan Bisk, and Hal Daumé Iii. A                        pages 492–504. PMLR, 2023. 2
+     framework for learning to request rich and contextually use-          [47] Hao Shao, Yuxuan Hu, Letian Wang, Steven L Waslander,
+     ful information from humans. In International Conference                   Yu Liu, and Hongsheng Li. Lmdrive: Closed-loop end-
+     on Machine Learning, pages 16553–16568. PMLR, 2022. 2                      to-end driving with large language models. arXiv preprint
+[35] OpenAI. Gpt-4v(ision) system card, 2023. 5                                 arXiv:2312.07488, 2023. 1, 2
+[36] Aishwarya Padmakumar, Jesse Thomason, Ayush Shrivas-                  [48] Pratyusha Sharma, Balakumar Sundaralingam, Valts Blukis,
+     tava, Patrick Lange, Anjali Narayan-Chen, Spandana Gella,                  Chris Paxton, Tucker Hermans, Antonio Torralba, Jacob An-
+     Robinson Piramuthu, Gokhan Tur, and Dilek Hakkani-Tur.                     dreas, and Dieter Fox. Correcting robot plans with natural
+     Teach: Task-driven embodied agents that chat. In AAAI,                     language feedback. arXiv preprint arXiv:2204.05186, 2022.
+     2022. 2                                                                    2
+[37] Bryan Pellom, Wayne Ward, John Hansen, Ronald Cole,                   [49] Chonghao Sima, Katrin Renz, Kashyap Chitta, Li Chen,
+     Kadri Hacioglu, Jianping Zhang, Xiuyang Yu, and Sameer                     Hanxue Zhang, Chengen Xie, Ping Luo, Andreas Geiger,
+
+
+                                                                      10
+     and Hongyang Li. Drivelm: Driving with graph visual ques-          [62] Fuliang Weng, Pongtep Angkititrakul, Elizabeth E Shriberg,
+     tion answering. arXiv preprint arXiv:2312.14150, 2023. 2                Larry Heck, Stanley Peters, and John HL Hansen. Conver-
+[50] NN Sriram, Tirth Maniar, Jayaganesh Kalyanasundaram, Vi-                sational in-vehicle dialog systems: The past, present, and fu-
+     neet Gandhi, Brojeshwar Bhowmick, and K Madhava Kr-                     ture. IEEE Signal Processing Magazine, 33(6):49–60, 2016.
+     ishna. Talk to the vehicle: Language conditioned au-                    1
+     tonomous navigation of self driving cars. In 2019 IEEE/RSJ         [63] Jiannan Xiang, Tianhua Tao, Yi Gu, Tianmin Shu, Zirui
+     International Conference on Intelligent Robots and Systems              Wang, Zichao Yang, and Zhiting Hu. Language models
+     (IROS), pages 5284–5290. IEEE, 2019. 2                                  meet world models: Embodied experiences enhance lan-
+[51] Jesse Thomason, Michael Murray, Maya Cakmak, and Luke                   guage models. Advances in neural information processing
+     Zettlemoyer. Vision-and-dialog navigation. In Conference                systems, 36, 2023. 1
+     on Robot Learning, pages 394–406. PMLR, 2020. 2                    [64] Zhenhua Xu, Yujia Zhang, Enze Xie, Zhen Zhao, Yong Guo,
+[52] Xiaoyu Tian, Junru Gu, Bailin Li, Yicheng Liu, Chenxu                   Kenneth KY Wong, Zhenguo Li, and Hengshuang Zhao.
+     Hu, Yang Wang, Kun Zhan, Peng Jia, Xianpeng Lang, and                   Drivegpt4: Interpretable end-to-end autonomous driving via
+     Hang Zhao. Drivevlm: The convergence of autonomous                      large language model. arXiv preprint arXiv:2310.01412,
+     driving and large vision-language models. arXiv preprint                2023. 1, 2, 6
+     arXiv:2402.12289, 2024. 1                                          [65] Xu Yan, Haiming Zhang, Yingjie Cai, Jingming Guo, We-
+[53] Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier                   ichao Qiu, Bin Gao, Kaiqiang Zhou, Yue Zhao, Huan Jin,
+     Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste               Jiantao Gao, et al. Forging vision foundation models for au-
+     Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, et al.                tonomous driving: Challenges, methodologies, and opportu-
+     Llama: Open and efficient foundation language models.                   nities. arXiv preprint arXiv:2401.08045, 2024. 2
+     arXiv preprint arXiv:2302.13971, 2023. 4                           [66] Jianing Yang, Xuweiyi Chen, Shengyi Qian, Nikhil Madaan,
+[54] Henk van den Heuvel, Jérôme Boudy, Robrecht Comeyne,                  Madhavan Iyengar, David F Fouhey, and Joyce Chai.
+     Stephan Euler, Asunción Moreno, and Gaël Richard. The                 Llm-grounder: Open-vocabulary 3d visual grounding with
+     speechdat-car multilingual speech databases for in-car ap-              large language model as an agent.             arXiv preprint
+     plications: some first validation results. In EUROSPEECH,               arXiv:2309.12311, 2023. 2
+     1999. 2                                                            [67] Fisher Yu, Haofeng Chen, Xin Wang, Wenqi Xian, Yingying
+[55] Arun Balajee Vasudevan, Dengxin Dai, and Luc Van Gool.                  Chen, Fangchen Liu, Vashisht Madhavan, and Trevor Dar-
+     Talk2nav: Long-range vision-and-language navigation with                rell. Bdd100k: A diverse driving dataset for heterogeneous
+     dual attention and spatial memory. International Journal of             multitask learning. In Proceedings of the IEEE/CVF con-
+     Computer Vision, 129(1):246–266, 2021. 2                                ference on computer vision and pattern recognition, pages
+[56] Ramakrishna Vedantam, C Lawrence Zitnick, and Devi                      2636–2645, 2020. 2
+     Parikh. Cider: Consensus-based image description evalua-           [68] Shoubin Yu, Jaehong Yoon, and Mohit Bansal. Crema: Mul-
+     tion. In Proceedings of the IEEE conference on computer                 timodal compositional video reasoning via efficient modu-
+     vision and pattern recognition, pages 4566–4575, 2015. 5                lar adaptation and fusion. arXiv preprint arXiv:2402.05889,
+[57] Eugene Vinitsky, Nathan Lichtlé, Xiaomeng Yang, Brandon                2024. 1
+     Amos, and Jakob Foerster. Nocturne: a scalable driving             [69] Jianhao Yuan, Shuyang Sun, Daniel Omeiza, Bo Zhao, Paul
+     benchmark for bringing multi-agent learning one step closer             Newman, Lars Kunze, and Matthew Gadd. Rag-driver: Gen-
+     to the real world. Advances in Neural Information Process-              eralisable driving explanations with retrieval-augmented in-
+     ing Systems, 35:3962–3974, 2022. 2                                      context learning in multi-modal large language model. arXiv
+[58] Wenshuo Wang, Letian Wang, Chengyuan Zhang, Changliu                    preprint arXiv:2402.10828, 2024. 2
+     Liu, Lijun Sun, et al. Social interactions for autonomous
+                                                                        [70] Tianyi Zhang, Varsha Kishore, Felix Wu, Kilian Q Wein-
+     driving: A review and perspectives. Foundations and
+                                                                             berger, and Yoav Artzi. Bertscore: Evaluating text gener-
+     Trends® in Robotics, 10(3-4):198–376, 2022. 1
+                                                                             ation with bert. In International Conference on Learning
+[59] Wenhai Wang, Jiangwei Xie, ChuanYang Hu, Haoming Zou,                   Representations, 2019. 5
+     Jianan Fan, Wenwen Tong, Yang Wen, Silei Wu, Hanming
+                                                                        [71] Yichi Zhang, Ziqiao Ma, Xiaofeng Gao, Suhaila Shakiah,
+     Deng, et al. Drivemlm: Aligning multi-modal large language
+                                                                             Qiaozi Gao, and Joyce Chai. Groundhog: Grounding large
+     models with behavioral planning states for autonomous driv-
+                                                                             language models to holistic segmentation. In Proceedings
+     ing. arXiv preprint arXiv:2312.09245, 2023. 2
+                                                                             of the IEEE/CVF conference on computer vision and pattern
+[60] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten
+                                                                             recognition, 2024. 1
+     Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al.
+                                                                        [72] Ming Zhou, Jun Luo, Julian Villella, Yaodong Yang, David
+     Chain-of-thought prompting elicits reasoning in large lan-
+                                                                             Rusu, Jiayu Miao, Weinan Zhang, Montgomery Alban, Iman
+     guage models. Advances in neural information processing
+                                                                             Fadakar, Zheng Chen, et al. Smarts: Scalable multi-agent
+     systems, 35:24824–24837, 2022. 1
+                                                                             reinforcement learning training school for autonomous driv-
+[61] Licheng Wen, Daocheng Fu, Xin Li, Xinyu Cai, Tao
+                                                                             ing. arXiv preprint arXiv:2010.09776, 2020. 2
+     Ma, Pinlong Cai, Min Dou, Botian Shi, Liang He, and
+     Yu Qiao. Dilu: A knowledge-driven approach to au-
+     tonomous driving with large language models.         arXiv
+     preprint arXiv:2309.16292, 2023. 1, 2
+
+
+                                                                   11
+Appendix                                                                hicle location
+                                                                     5. Physical Action History: Turn-by-turn record of the
+8.1. Language Templates for Verbalizing the Em-                         previous physical actions taken by the driver.
+      bodied Experiences.                                            6. Planner: Asks GPT to call a planning module using the
+With the data about the surrounding environment, we use                 form plan(landmark). If GPT both uses this API
+templates to generate synthetic data as the caption of the              correctly and selects the correct landmark, the planning
+input video:                                                            module provides the plan (a sequence of turns at each
+• Distance and Turning Decisions: For the distance to the               intersection).
+  road end, we generated different outputs based on the dis-         7. Question 1: For NfD, this segment asks GPT a multiple-
+  tance recorded. When the distance is larger than 10, we               choice navigational question. For RfN, it asks GPT what
+  used the prompt “I am far from the end of the road. I don’t           type of dialogue it would like to output.
+  need to make a decision for turning now.” When the dis-            8. Question 2: For NfD, if the correct action takes an ar-
+  tance is larger than 5 while smaller than 10, we used the             gument (e.g., for turning, the argument is a direction),
+  prompt “I am near the end of the road. I don’t need to                this segment asks for the argument in a multiple-choice
+  make a decision for turning now.” When the distance is                format. For RfN, this segment asks for the natural lan-
+  smaller than 5, we used the prompt: “I am at the end of               guage dialogue. For question 2, we utilize teacher forc-
+  the road, I need to stop if there is a red light, or make a           ing, providing the GPT model with the correct answer to
+  decision to turn left, turn right, or go straight now.”               question 1 even if it is answered incorrectly.
+• Lane and Lane Switching Decisions:                  For the
+                                                                     8.3. Ethics Statement
+  lane information, we used the prompt “I’m on the
+  {lane number} lane from the left of the road”, and                 The institution’s Institutional Review Board (IRB) consid-
+  based on whether a lane change is affordable, we chose             ered this project exempt from ongoing review, registered
+  from the 4 prompts: “I’m not able to change lane”, “I’m            under eResearch ID HUM00205133. The SDN and BDD-X
+  only able to change to the right lane”, “I’m only able to          datasets contain human-generated contents. Our use of both
+  change to the left lane”, “I’m able to change to both right        datasets is in compliance with their licenses and exclusively
+  and left lane.”                                                    for research purposes.
+• Object and Stop Decisions: For each object in front, we
+  used the template “There is a obstacle {object type}
+  in front of me, the distance is {distance}.” For the
+  object type, we used the object class in CARLA (e.g. ve-
+  hicle, pedestrian, traffic sign).
+• Signs and Stop Decisions: For each traffic sign in front,
+  we used the template “There is a {sign name} that is
+  {distance} meters from me, showing {state}.” The
+  sign name is the name of the sign while the state is the
+  information the sign displayed (e.g., red/green for lights,
+  posted speed limits).
+• Weather: For the weather, we straightly described that
+  using the template “It’s {weather}.”
+
+8.2. Prompt Engineering for GPT-4 Baseline
+Each prompt template we used for the GPT-4 baseline con-
+sists of the following components in order:
+1. Image: For the vision-enabled model only (GPT-4V,
+    not GPT-4), we prepended an image of the third-person
+    driver view.
+2. Header: Informs GPT that it must act as a Chauffeur,
+    piloting a car while talking with its passenger.
+3. Dialogue History: Turn-by-turn record of the conver-
+    sation between passenger and driver prior to the time of
+    prompting.
+4. Current Map: A text-based representation displaying
+    the map along with landmarks, street names, and the ve-
+
+
+                                                                12
+

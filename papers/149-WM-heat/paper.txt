@@ -1,0 +1,1693 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+1
+
+HEAT: Heterogeneous End-to-End Autonomous Driving via
+Trajectory-Guided World Models
+
+arXiv:2605.19631v1 [cs.RO] 19 May 2026
+
+Hoonhee Cho∗1 , Giwon Lee∗1 , Jae-Young Kang∗1 , Hyemin Yang∗1 , Heejun Park∗1 , and Kuk-Jin Yoon†1
+
+Abstract—End-to-end autonomous driving has emerged as
+a compelling alternative to traditional modular pipelines by
+directly mapping raw sensor data to driving actions. While
+recent approaches achieve strong performance on single-domain
+datasets, their performance degrades significantly when trained
+jointly across multiple heterogeneous domains. In practice, however, autonomous systems must operate across diverse environments with heterogeneous distributions, including different
+cities, sensor configurations, and traffic patterns, without domainspecific retraining. This gap highlights a key challenge in multidomain learning: domain-specific variations across heterogeneous
+domains introduce conflicting learning signals, driving models
+toward compromised solutions that are suboptimal across domains. To address this, we propose a trajectory-driven learning
+paradigm that organizes training around planning trajectories,
+enabling the model to capture domain-invariant representations of driving intent. Furthermore, we incorporate a world
+model that predicts future latent features conditioned on ego
+actions, improving feature consistency and mitigating domaininduced biases. We evaluate our approach on three benchmarks,
+nuScenes, NAVSIM, and the Waymo end-to-end dataset, and
+show substantial improvements over existing methods across all
+domains. Our results demonstrate that a single unified model can
+be trained on heterogeneous datasets while maintaining strong
+performance within each domain, highlighting a step toward
+scalable real-world deployment. We will make our code publicly
+available.
+Index Terms—Autonomous Vehicle Navigation, Vision-Based
+Navigation, Representation Learning
+
+I. I NTRODUCTION
+
+E
+
+ND-TO-END autonomous driving (E2E-AD) [1] is a
+strong alternative to modular pipelines. In contrast to
+conventional planners [2] that rely on pre-processed perception
+outputs (e.g., 3D bounding boxes), E2E-AD [3] uses raw
+sensor data to learn scene-level features. This reduces information loss, simplifies the pipeline, and improves robustness
+by tightly coupling sensor information and decision-making.
+Although promising empirical results have been reported, the
+effectiveness of E2E-AD under heterogeneous multi-domain
+settings remains underexplored, as most studies still evaluate
+on single-domain datasets. In practice, autonomous vehicles
+must scale without bespoke retraining for every car model or
+city, requiring models to operate across heterogeneous distributions spanning different road layouts, hardware (e.g., camera
+setups [4]), and traffic patterns. However, as shown on the
+left in Fig. 1, simply training on a mixture of datasets from
+diverse distributions already poses significant challenges, as
+∗ Equal contribution. † Corresponding author.
+1 All authors are with KAIST, Daejeon, Republic of Korea.
+
+current end-to-end models often exhibit performance degradation when exposed to heterogeneous data. This highlights
+fundamental limitations in scalability and robustness under
+multi-domain training settings. In this context, generalization
+to entirely unseen domains remains out of focus, as achieving
+stable performance across known heterogeneous domains is
+itself a non-trivial problem. Motivated by this gap, we investigate E2E-AD under multi-domain training settings, where data
+originate from diverse distributions, and ask whether a single
+model can be trained jointly across multiple domains while
+maintaining strong performance within each domain.
+However, such a formulation often drives the model to rely
+on domain-specific signals, leading to compromised representations that are suboptimal across domains. To this end,
+we turn our attention to the underlying structure of driving
+behaviors rather than domain-specific appearances. Instead
+of treating each dataset as fundamentally different due to
+variations in city layouts, camera setups, or visual contexts,
+we cluster data according to their planning trajectories. This
+perspective is motivated by a simple intuition: visually different scenes may correspond to the same driving situation
+when the required behavior (e.g., turning left or go straight) is
+similar. By learning from planning trajectories, E2E-AD model
+can capture domain-invariant representations of driving intent,
+focusing on the underlying behavior rather than superficial
+visual differences.
+As illustrated on the right in Fig. 1, we further strengthen
+this process by employing a world model [5], [6], inspired
+by the human ability to imagine and reason about possible
+futures while driving. We find that the world model not only
+improves the quality of the visual feature space and facilitates
+multi-domain fusion, but also conditions on actions, tightly
+coupling visual representations with action signals to enable
+more coherent learning of both visual representations control
+policies. By combining the proposed planning-based learning
+paradigm with the use of a world model, the proposed novel
+heterogeneous framework, named HEAT, can treat datasets
+with different distributions as a single unified dataset. This
+synergy allows the model to focus on the shared behavioral
+structure of driving rather than domain-specific variations,
+effectively narrowing the gap between heterogeneous sources.
+To validate this idea, we conduct extensive experiments
+on three representative real-world benchmarks: nuScenes [7],
+NAVSIM [8] (built on nuPlan [9]), and the Waymo end-to-end
+dataset [10]. We jointly employ them as a heterogeneous training and evaluation suite, reflecting the variety of conditions
+encountered in real-world driving. The results highlight the
+potential of designing a unified E2E-AD model that performs
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+2
+
+Heterogeneous-domain Joint Training (A+B+C)
+Domain A
+
+Domain B
+
+Domain C
+
+6 Cams | Boston
+
+8 Cams | Las Vegas
+
+8 Cams | Confidential
+
+nuScenes
+
+Waymo
+
+NAVSIM
+
+Cluster 1
+
+Memory 1
+
+Cluster 2
+
+Memory 2
+
+World
+Model
+
+∙∙∙
+
+Existing E2E Model
+
+Visual Prototype
++ Action Memory
+
+∙∙∙
+
+Joint Training → Unified E2E Model
+Heterogeneous-domain Inference (A+B+C)
+
+Domain A
++
+Domain B
++
+Domain C
+
+Driving Experiences
+
+Our HEAT Model
+
+Performance
+
+Cluster 𝑀
+
+10%
+20%
+Train A
+Eval A
+
+Train A+B+C
+Eval B
+
+Eval C
+
+Train A
+Eval A
+
+Train A+B+C
+Eval B
+
+Eval C
+
+(a) Research Motivation
+
+70%
+Observation
+
+Human Driver
+
+Mem. Affinity
+
+Retrieval
+
+Prediction
+
+(b) Trajectory-Driven Learning across Heterogeneous Domains
+
+Fig. 1: In real-world deployments, E2E-AD inevitably encounters heterogeneous domains with diverse data distributions. Our
+objective is to develop a model that generalizes robustly across such variability. Motivated by the way human drivers recall
+and adapt prior experiences to new situations, we introduce a trajectory-driven world model designed to transfer behavioral
+knowledge across domains.
+robustly across diverse domains and paves the way toward
+practical deployment. Our main contributions are summarized
+as follows:
+Trajectory-driven representation learning. We propose
+a novel learning paradigm that organizes training around
+planning trajectories. By clustering data based on behavioral similarity and constructing prototypes and action
+memory, our framework encourages representations that
+capture driving behavior beyond domain-specific appearances.
+• Heterogeneous-domain benchmark with superior performance. We establish a standardized benchmark setting
+for an end-to-end autonomous driving under heterogeneous domains, enabling fair and reproducible evaluation across diverse datasets. Under this benchmark, our
+framework achieves strong multi-domain generalization
+and robustness, substantially surpassing other methods
+and setting a solid reference point for future research.
+
+•
+
+II. R ELATED W ORKS
+End-to-End Autonomous Driving (E2E-AD). E2E-AD maps
+raw sensor inputs directly to driving decisions. Early works
+improved planning by optimizing submodules [11], [12] and
+learning spatiotemporal features [13]. Parallel planners enhance efficiency [14], while structured planning vectorizes
+lanes and agents [15], [16]. A complementary direction [6],
+[17]–[21] removes explicit perception supervision by learning latent or self-supervised representations. Despite recent
+progress in E2E-AD, most methods are evaluated on single domains, leaving robustness across heterogeneous environments underexplored. In practice, autonomous systems
+must operate across diverse environments without retraining.
+However, learning a unified model for heterogeneous data is
+challenging, as domain variations introduce conflicting signals
+that degrade joint training. We therefore study multi-domain
+
+E2E-AD and examine whether a single model can maintain
+strong performance across heterogeneous distributions.
+World Model in Autonomous Driving. World models predict future scene states under candidate controls. Imagecentric variants [22] learn latent visual dynamics and generate
+controllable long-horizon videos. Occupancy-based methods
+model 3D world states for forecasting and planning [23].
+Recent work integrates prediction with planning, including
+BEV forecasting for trajectory selection [24] and navigationguided tokens for efficient control [25]. Latent world models
+instead predict future latents for downstream querying without
+heavy geometric supervision [6], [17]. Despite these advances,
+most work remains single-domain, leaving multi-domain planning underexplored. We address this via world modeling for
+heterogeneous-domain generalization.
+III. M ETHODOLOGY
+A. Task Formulation
+In vision-based E2E-AD, the objective is to plan the egovehicle’s future trajectory as a sequence of waypoints. Let
+It = {It1 , It2 , . . . , ItK } denote K synchronized surround-view
+images captured at time t. Conditioned on It , the model
+predicts T waypoints in the BEV plane. Specifically, the
+output is Wt = {wt1 , wt2 , . . . , wtT }, where each waypoint
+wti = (xti , yti , ϕti ) ∈ R3 represents the predicted BEV
+position and heading angle of the ego vehicle at time t + i.
+In compact form, we model this mapping as Wt = fθ (It ).
+Following recent advances [6], [17], we adopt a perceptionfree formulation that directly maps raw sensor inputs to driving
+actions without relying on explicit perception supervision.
+This design avoids dependence on costly annotations and
+provides greater flexibility when learning from heterogeneous
+data, making it well-suited for multi-domain training settings.
+The encoder produces a set of visual feature tokens Vt =
+{vt1 , vt2 , . . . , vtL }, where each token vtl ∈ RD encodes local
+scene information and L denotes the number of feature tokens.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+These visual tokens are then processed by a transformer
+module to predict the future trajectory Wt .
+To account for domain heterogeneity, we consider multiple datasets D = {D1 , D2 , . . . , DN } drawn from different
+distributions. Our objective is to learn a single mapping
+function fθ that generalizes across heterogeneous domains
+and achieves consistently high performance. Formally, given a
+(d)
+sample It ∼ Dd from domain d ∈ {1, . . . , N }, the E2E-AD
+(d)
+(d)
+model predicts waypoints Wt = fθ (It ). In our setup, we
+specifically consider N = 3 domains: nuScenes, NAVSIM,
+and Waymo, each representing a distinct distributional condition, and train the model jointly over all datasets.
+B. Overall Framework
+The proposed framework, HEAT, mitigates domain bias and
+reduces overfitting to specific environments through trajectorydriven representation learning. Inspired by how humans link
+observations to potential future actions, HEAT leverages a
+world model to learn a generalized representation where
+visual observations and actions are tightly coupled across
+heterogeneous domains. As illustrated in Fig. 2, the framework consists of three stages. In the first stage (Sec. III-C),
+we pretrain a trajectory-conditioned world model to learn a
+trajectory-aligned latent space where visual observations are
+coupled with future actions. This stage focuses on learning
+generalizable representations via trajectory-driven supervision,
+and the world model is used only during pretraining. In
+the second stage (Sec. III-D), we extract latents from the
+pretrained world model and organize them into structured
+domain-invariant priors. We perform trajectory-guided behavior clustering using ground-truth waypoints and summarize
+each cluster into (i) trajectory-guided visual prototypes and
+(ii) a visual-coupled action memory. These structures guide the
+transfer of trajectory-relevant knowledge across heterogeneous
+domains without relying on appearance cues. In the third stage
+(Sec. III-E), we train E2E-AD model from scratch using the
+structured priors from the second stage. The model is aligned
+with trajectory-guided prototypes via a contrastive objective
+and further refined with episodic action memory to encourage
+action-consistent predictions, enabling effective multi-domain
+learning.
+C. Stage1: World Model for Trajectory-Driven Learning
+To mitigate domain bias, in which models overfit to
+environment-specific cues (e.g., visual appearance), we learn
+representations through the more general concept of trajectories. We adopt a world model [5], [26]–[28] that captures
+the dynamics linking observations and future actions. Our
+world model conditions on ground-truth trajectories and infers
+future sensor inputs in the visual latent space, which tightly
+couples the visual and action latents and directly supports
+trajectory-driven learning. In our framework, the world model
+is used for pre-training to obtain trajectory-coupled, domainagnostic representations that are subsequently transferred to
+the E2E-AD model, thereby enhancing action-relevant feature
+extraction without reliance on domain-specific information.
+
+3
+
+World Model Training. To align the representation space with
+future trajectories, we design a latent world model [6] that
+integrates current visual features with ground-truth waypoints.
+Given the surround-view images It , the encoder produces a
+set of visual latent feature tokens Ht = {h1t , h2t , . . . , hL
+t },
+where each token hlt ∈ RD encodes local scene information
+and L denotes the number of latent tokens. For conditioning,
+the future ground-truth trajectory W̃t = {w̃t1 , w̃t2 , . . . , w̃tT } is
+flattened into a vector w̃t′ ∈ R3T . This vector is concatenated
+with each latent token hlt to construct visual-coupled action
+latents:
+
+ψtl = MLP [hlt , w̃t′ ] , l = 1, . . . , L,
+(1)
+where [·, ·] denotes channel-wise concatenation. The set of
+visual-coupled action latents Ψt = {ψtl }L
+l=1 is then processed
+by transformer blocks [29] to predict the representation of the
+next frame:
+Ĥt+1 = Transformer(Ψt ).
+(2)
+During training, the world model is self-supervised using
+visual latents of the subsequent frame extracted from images at time t + 1. To prevent representation collapse, we
+follow [6] and impose an additional supervision to predict
+future trajectories from visual latents. By minimizing the
+discrepancy between predicted and ground-truth latents with
+a mean squared error objective, the model learns a richer and
+more structured representation that captures future trajectories
+with higher fidelity. Moreover, instead of simply predicting
+future visual latents, it uses trajectory-guided learning to
+better align visual and action latents, resulting in a tighter
+perception–control coupling.
+D. Stage2: Trajectory-guided Behavior Clustering
+We aim to extract well-represented features from a pretrained world model and use them to construct domaininvariant representations, explicitly mitigating domain bias
+while promoting trajectory-based learning. Specifically, we
+define the behavior set by gathering the behavior triplets from
+all samples in the union of the training sets D, resulting:
+(d)
+(d)
+(d)
+B = {(Ht , Ψt , W̃t )}. We apply K-Means to the behavior set B based on their ground-truth trajectory waypoints
+W̃t , grouping them into M behavior-centric clusters:
+Cm =
+
+n
+
+Ht , Ψt , W̃t
+
+
+
+o
+W̃t ∈ cluster m , m = 1, . . . , M
+
+(3)
+
+Trajectory-guided Prototype from World Model. To achieve
+domain-invariant learning across heterogeneous datasets, it is
+necessary to abstract away domain-specific variations while
+retaining trajectory-relevant semantics. A natural solution is
+to summarize trajectory-aware features into representative prototypes, which serve as compact and transferable knowledge
+across domains. After forming the clusters, we aggregate the
+visual latents into such prototypes. For each cluster Cm , the
+corresponding visual latent Ht ∈ RL×D from all samples s
+in the cluster are averaged to compute a prototype:
+Pm =
+
+1 X (s)
+Ht ,
+|Cm |
+s∈Cm
+
+(4)
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+4
+
+nuScenes
+
+Shared
+
+Heterogeneous
+Full dataset
+
+Encoder
+
+Waymo
+
+⋯
+
+Input Image
+
+(b) Stage 2: Trajectory-guided Clustering
+
+Embedding Space
+Cluster 1
+Cluster 2
+
+Trajectory-based
+Clustering
+
+Cluster 1, … , 𝑀𝑀
+
+(c) Stage 3: E2E-AD Training
+
+Pretrained
+World Model
+Contrastive
+Learning
+
+Visual Latents
+
+Prototype Vector
+
+Cluster 𝑀𝑀
+
+Memory 2
+
+Memory 3
+
+Memory-based
+Action Refinement
+
+⋯
+
+Memory 𝑀𝑀
+
+⋯
+
+Visual-Coupled Action Memory
+
+Visual-Coupled
+Action Memory
+
+Waypoint
+Decoder
+
+Waypoint
+Decoder
+
+Init waypoint
+
+Memory 1
+
+Visual-coupled
+Action latents
+
+Cluster 3
+
+⋯
+Visual-Coupled
+Action Encoder
+
+Encoder
+
+Input Image(ℐ𝑡𝑡 )
+
+Repel
+Attract
+Anchor
+
+Pred Latents
+
+Future GT
+Trajectory
+
+Trajectory-guided Prototype
+
+Prototypes
+
+Visual
+Latents
+
+Visual Latents
+Visual-Coupled
+Action Encoder
+
+Navsim
+
+Self-Supervise
+Transformer
+
+Encoder
+
+(a) Stage 1: World Model Training
+
+Predicted Trajectory
+
+Fig. 2: Overview of HEAT. We first pretrains a trajectory-conditioned world model to learn trajectory-aligned representations
+that couple visual observations with future actions. The resulting latents are organized into domain-invariant priors via trajectoryguided behavior clustering, producing visual prototypes and an action memory. Finally, an E2E-AD model is trained using
+these priors through contrastive alignment and episodic memory refinement, enabling robust multi-domain driving.
+where the resulting prototype Pm ∈ RL×D preserves the
+latent token dimension L. This ensures that each cluster is
+represented not by a single vector, but by a rich token-level
+prototype set that captures trajectory-aligned structure while
+suppressing domain biases. These prototypes later guide the
+transfer to the end-to-end autonomous driving model.
+Visual-Coupled Action Memory from World Model. Inspired by how humans ground present decisions in past, visually similar experiences, we store action latents in a dedicated
+memory keyed by visual context, enabling efficient retrieval
+of action features for the current driving scenario.
+Specifically, for each cluster Cm , where m ∈ {1, . . . , M }
+and M denotes the number of behavior clusters, we build a
+cluster-level action memory by averaging the visual-coupled
+action latents Ψ produced by the world model. Concretely,
+(s)
+we aggregate Ψt ∈ RL×D from all samples s ∈ Cm and
+compute per-cluster memory Mm as:
+1 X (s)
+Mm =
+Ψt ∈ RL×D .
+(5)
+|Cm |
+s∈Cm
+
+Then, stacking all cluster slices yields the full memory tensor
+M as
+
+M = Stack M1 , . . . , MM ∈ RM ×L×D .
+(6)
+E. Stage3: E2E-AD Training in Heterogeneous Domains
+In the second stage, we utilize the pre-trained world-model
+to yield two complementary representations: (i) the trajectoryguided visual prototypes {Pm }M
+m=1 , where M denotes the
+
+number of behavior clusters, and (ii) the visual-coupled action
+memory M ∈ RM ×L×D . In the third stage, the world model
+itself is not used during training or inference. Instead, we
+leverage the representations learned from the second stage
+to guide the E2E-AD model. Specifically, we use {Pm } to
+drive contrastive learning for trajectory-based representation
+alignment, while M retrieves action features to refine the
+predicted trajectory and ensure tight alignment between visual
+information and actions in a domain-agnostic manner, without
+relying on domain-specific information. The E2E-AD model is
+trained from scratch and follows a perception-free design [6],
+[17], consisting of a visual encoder and a waypoint prediction
+module. By directly mapping raw sensor inputs to driving
+actions without explicit perception annotations, the model
+enables flexible learning across heterogeneous domains.
+Contrastive Learning with Trajectory-guided Prototype.
+When training across heterogeneous domains, models often
+focus on inter-domain differences instead of planning-critical
+cues, which can yield suboptimal performance even with
+multi-dataset training. In contrast, the world model’s visual
+prototypes {Pm } align with trajectories rather than incidental
+domain factors, making them largely insensitive to domain
+bias. We therefore transfer this prototype knowledge to the
+E2E-AD model to steer learning toward trajectory-relevant
+information rather than domain-driven variations.
+To transfer knowledge from the constructed prototypes into
+the E2E-AD model, we adopt a contrastive learning objective.
+Given an input image It , the E2E-AD encoder extracts visual
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+5
+
+TABLE I: Open-loop planning performance in nuScenes (S), NAVSIM (N), and Waymo (W) datasets. The symbol †
+denotes an end-to-end autonomous driving model that uses perception annotations in addition to ground truth for planning.
+nuScenes (S)
+
+Train
+Data
+
+Method
+
+L2 (m) ↓
+
+S N W
+
+1s
+
+2s
+
+Collision (%) ↓
+2s
+
+NAVSIM (N)
+
+Waymo (W)
+
+L2 (m) ↓
+
+L2 (m) ↓
+
+3s
+
+Avg.
+
+1s
+
+3s
+
+Avg.
+
+1s
+
+2s
+
+3s
+
+Avg.
+
+1s
+
+2s
+
+3s
+
+Avg.
+
+Avg.
+of
+L2
+Avg.
+
+ST-P3† [13]
+✓
+✓
+UniAD† [11]
+VAD-Tiny† [15]
+✓
+✓
+VAD-Base† [15]
+✓
+PARA-Drive† [14]
+SparseDrive† [30]
+✓
+DiffusionDrive† [31] ✓
+
+-
+
+-
+
+1.33 2.11 2.90
+0.48 0.74 1.07
+0.20 0.38 0.65
+0.17 0.34 0.60
+0.25 0.46 0.74
+0.29 0.58 0.96
+0.27 0.54 0.90
+
+2.11
+0.76
+0.41
+0.37
+0.48
+0.61
+0.57
+
+0.23 0.62 1.27
+0.12 0.13 0.28
+0.10 0.12 0.27
+0.07 0.10 0.24
+0.14 0.23 0.39
+0.01 0.05 0.18
+0.03 0.05 0.16
+
+0.71
+0.17
+0.16
+0.14
+0.25
+0.08
+0.08
+
+2.59 4.47 7.71
+2.04 5.44 12.80
+5.02 8.43 11.87
+4.25 7.15 10.09
+1.81 2.98 4.17
+1.95 3.15 4.30
+
+4.92
+6.76
+8.44
+7.16
+2.99
+3.13
+
+3.76 6.27 9.72
+2.97 5.87 11.55
+2.48 4.23 6.03
+3.48 6.10 8.91
+3.48 5.62 7.64
+3.31 5.36 7.35
+
+6.58
+6.80
+4.25
+6.16
+5.58
+5.34
+
+4.54
+4.77
+4.36
+4.57
+2.88
+2.85
+
+LTF [20]
+BEVPlaner [19]
+BEVPlaner++ [19]
+World4Drive [17]
+LAW [6]
+HEAT (Ours)
+
+✓
+✓
+✓
+✓
+✓
+✓
+
+-
+
+-
+
+0.45 0.66 0.99
+0.27 0.54 0.90
+0.16 0.32 0.57
+0.23 0.47 0.81
+0.26 0.57 1.01
+0.24 0.53 0.86
+
+0.70
+0.57
+0.35
+0.50
+0.61
+0.54
+
+0.08 0.08 0.23
+0.04 0.35 1.80
+0.00 0.29 0.73
+0.02 0.12 0.33
+0.14 0.21 0.54
+0.08 0.16 0.44
+
+0.13
+0.73
+0.34
+0.16
+0.30
+0.23
+
+0.49 1.04
+1.14 1.83
+0.42 1.01
+3.97 6.66
+3.24 5.84
+
+1.82
+2.52
+1.82
+9.40
+8.23
+
+1.12
+1.83
+1.08
+6.68
+5.77
+
+0.72 1.28
+2.25 3.76
+0.47 1.00
+4.02 6.67
+3.74 6.02
+
+1.99
+5.29
+1.67
+9.31
+8.76
+
+1.33
+3.77
+1.05
+6.67
+6.17
+
+1.05
+2.06
+0.83
+4.65
+4.16
+
+LTF [20]
+BEVPlaner [19]
+BEVPlaner++ [19]
+LAW [6]
+HEAT (Ours)
+
+✓ ✓
+✓ ✓
+✓ ✓
+✓ ✓
+✓ ✓
+
+✓
+✓
+✓
+✓
+✓
+
+1.05 2.89 4.95
+1.71 2.87 4.06
+0.17 0.34 0.62
+0.43 0.79 1.26
+0.15 0.32 0.58
+
+2.96
+2.88
+0.38
+0.83
+0.35
+
+0.31 0.64 2.36
+1.54 5.39 8.56
+0.00 0.33 1.00
+0.18 0.46 0.80
+0.10 0.13 0.28
+
+1.10
+5.16
+0.44
+0.48
+0.17
+
+0.80 1.99
+2.10 3.55
+0.10 0.32
+0.74 1.20
+0.07 0.20
+
+3.40
+5.05
+0.71
+1.69
+0.40
+
+2.06
+3.57
+0.38
+1.21
+0.22
+
+1.38 3.73
+2.05 3.48
+0.21 0.53
+1.42 2.44
+0.26 0.63
+
+6.23
+4.96
+0.99
+3.52
+1.16
+
+3.78
+3.50
+0.58
+2.46
+0.68
+
+2.93
+3.32
+0.45
+1.50
+0.42
+
+tokens Vt = {vt1 , . . . , vtL } in a manner consistent with the
+world model. Since each image is assigned to a trajectory
+cluster m, we retrieve its corresponding prototype Pm as the
+positive and treat the remaining prototypes {Pm′ | m′ ̸= m}
+as negatives. The training objective enforces the extracted
+tokens to align closely with their positive prototype while
+remaining well separated from negative ones. Formally, for
+each token vtl , we define a contrastive loss with respect to the
+prototypes:
+exp(sim(vtl , Plm )/τ )
+Llcon = − log PM
+,
+l
+l
+m′ =1 exp(sim(vt , Pm′ )/τ )
+
+(7)
+
+where sim(·, ·) denotes a cosine similarity function and τ is
+a temperature parameter. The overall contrastive objective is
+averaged across all tokens:
+L
+
+Lcon =
+
+1X l
+Lcon .
+L
+
+(8)
+
+l=1
+
+By aligning visual tokens with trajectory-guided prototypes,
+the E2E-AD model is encouraged to learn domain-invariant
+representations that capture behavioral intent rather than
+domain-specific appearance.
+Episodic Memory-based Action Refinement. To further enhance decision consistency, we introduce an episodic memory
+module that utilizes the visual-coupled action memory M to
+refine action predictions. By retrieving action features from
+previously stored episodes that share similar visual contexts,
+the model can correct or adjust its current trajectory prediction,
+leading to more stable and domain-robust behavior. Given
+surround-view visual tokens Vt = {vtl }L
+l=1 , we first predict
+
+an initial future waypoint. A randomly initialized waypoint
+query qinit
+attends over the spatial visual tokens Vt :
+w
+
+q⋆w = CrossAttn qinit
+(9)
+w , Vt ,
+and the initial waypoint is predicted by the head fwinit as:
+Ŵt = fwinit (q⋆w ) ,
+
+(10)
+
+where Ŵt = {ŵt1 , ŵt2 , . . . , ŵtT }. We then fuse the flattened
+initial waypoint with the spatial visual tokens by concatenation
+at token level, forming an action-visual-fused features:
+
+alt = MLP [vtl , ŵt′ ] , l = 1, . . . , L,
+(11)
+where [·, ·] denotes channel-wise concatenation and the resulting action-visual-fused feature at ∈ RL×D is used for
+subsequent memory retrieval.
+Given the visual-coupled action memory M ∈ RM ×L×D
+and the action-visual-fused features from the E2E-AD model
+at ∈ RL×D , we project and ℓ2 -normalize them to compute
+cosine attention between the features and the memory as:
+Q = Φ(at ) ∈ RL×H , K = Φ(M) ∈ RM ×L×H ,
+
+(12)
+
+where Φ is the projection layer with normalization. For memory attention, token-aligned similarities with a softmax over
+memory slots yield
+M
+X
+Ql ·Km,l 
+Al,m = softmax
+, Cl =
+Al,m Mm,l .
+τ
+m=1
+
+(13)
+
+We then fuse the retrieved context with the action-fused
+features via a residual update as a⋆t = at + C and obtain
+the final waypoint prediction as:
+
+⋆
+Wt = fw (CrossAttn qinit
+(14)
+w , at ).
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+6
+
+TABLE II: Closed-loop planning performance in NAVSIM dataset. NC: no at-fault collision. DAC: drivable area compliance.
+EP: ego progress. TTC: time-to-collision. Comf.: comfort. PDMS: the predictive driver model score. C: Camera. L: LiDAR.
+In the training datasets column, S, N, and W denote nuScenes, NAVSIM, and Waymo, respectively. Models trained under the
+heterogeneous setting with all three datasets share the checkpoints used in Table I. † denotes a model that additionally uses
+perception annotations alongside planning ground truth.
+Method
+
+Train Data
+
+Input
+S
+
+N
+
+W
+
+NC ↑
+
+DAC ↑
+
+EP ↑
+
+TTC ↑
+
+Comf. ↑
+
+PDMS ↑
+
+Human
+Constant Velocity
+
+-
+
+-
+
+-
+
+-
+
+100
+69.9
+
+100
+58.8
+
+87.5
+49.3
+
+100
+49.3
+
+99.9
+100.0
+
+94.8
+21.6
+
+VADv2† [16]
+UniAD† [11]
+PARA-Drive† [14]
+Hydra-MDP† [32]
+WoTE† [24]
+
+C
+C
+C
+C&L
+C&L
+
+-
+
+✓
+✓
+✓
+✓
+✓
+
+-
+
+97.9
+97.8
+97.9
+98.3
+98.5
+
+91.7
+91.9
+92.4
+96.0
+96.8
+
+77.6
+78.8
+79.3
+78.7
+81.9
+
+92.9
+92.9
+93.0
+94.6
+94.9
+
+100.0
+100.0
+99.8
+100.0
+99.9
+
+83.0
+83.4
+84.0
+86.5
+88.3
+
+TransFuser [20]
+LTF [20]
+BEVPlanner++ [19]
+World4Drive [17]
+LAW [6]
+
+C&L
+C
+C
+C
+C
+
+-
+
+✓
+✓
+✓
+✓
+✓
+
+-
+
+97.7
+97.4
+96.2
+97.4
+96.4
+
+92.8
+92.8
+89.1
+94.3
+95.4
+
+79.2
+79.0
+74.6
+79.9
+81.7
+
+92.8
+92.4
+90.0
+92.8
+88.7
+
+100.0
+100.0
+100.0
+100.0
+99.9
+
+84.0
+83.8
+79.0
+85.1
+84.6
+
+LTF [20]
+BEVPlanner++ [19]
+LAW [6]
+HEAT (Ours)
+
+C
+C
+C
+C
+
+✓
+✓
+✓
+✓
+
+✓
+✓
+✓
+✓
+
+✓
+✓
+✓
+✓
+
+92.4
+94.4
+93.7
+97.7
+
+83.8
+80.1
+83.9
+93.9
+
+36.4
+66.2
+69.7
+80.2
+
+87.6
+86.7
+86.4
+93.0
+
+81.3
+100.0
+98.4
+100.0
+
+55.6
+69.6
+72.3
+85.2
+
+Objective Function. Alongside the contrastive objective, the
+E2E-AD model is supervised by the ground-truth trajectories,
+W̃t . The predicted waypoints Ŵt , Wt are regressed to match
+W̃t with an L1 loss. To facilitate training of perception-free
+E2E-AD framework [6], [17], [28], a future latent reconstruction loss is adopted. The final loss combines all loss terms
+as:
+L = Lftrajinal + λ1 Linit
+traj + λ2 Lcon + λ3 Lrecon .
+
+(15)
+
+IV. E XPERIMENTS
+A. Datasets
+To train and evaluate within the heterogeneous dataset
+setting, we employed three real-world datasets.
+nuScenes [7]: The nuScenes dataset consists of 1,000 scenes.
+Following previous works [15], [31], we evaluate planning
+using L2 displacement error, measuring the distance between
+predicted and ground-truth trajectories, and collision rate,
+quantifying trajectory intersections with agents.
+NAVSIM [8]: The NAVSIM benchmark provides a challenging setting for planning evaluation by resampling data to
+reduce trivial cases, thereby increasing scenario diversity and
+complexity. NAVSIM also supports closed-loop evaluation,
+capturing long-horizon behaviors and the cumulative effects
+of planning decisions. Performance is measured using the
+predictive driver model score (PDMS), which integrates no atfault collisions (NC), drivable area compliance (DAC), timeto-collision (TTC), comfort, and ego progress (EP).
+Waymo [10]: The Waymo end-to-end (E2E) driving dataset
+comprises 4,021 driving segments with eight camera views and
+ego-vehicle trajectories, with a particular emphasis on challenging long-tail scenarios. Unlike conventional autonomous
+driving datasets, it provides only camera inputs without additional sensor modalities and offers trajectory annotations alone
+
+as ground truth, without separate perception or prediction
+labels. We sampled one-tenth of the Waymo E2E dataset to
+prevent its large size relative to the other two datasets from
+dominating the overall data distribution.
+B. Implementation Details
+We employed Swin-Transformer-Tiny (Swin-T) [33] as the
+backbone, with input images resized to 640×384. Training
+uses a cosine annealing learning rate schedule [34] initialized
+at 5e-5. The model is optimized with AdamW [35] using a
+weight decay of 0.01, a batch size of 8, and is trained for
+18 epochs on 8 RTX 3090 GPUs. The number of trajectory
+clusters M is empirically set to 18. To enable learning and
+evaluation across heterogeneous datasets, we trained our model
+using eight camera views for NAVSIM and Waymo, while for
+nuScenes (which provides six views), we appended two blank
+images to match the same input dimension. Both waypoints
+and raw data were uniformly sampled at 2 Hz, and the model
+was designed to predict 4-second horizons, aligned with the
+NAVSIM closed-loop evaluation setting.
+C. Benchmark across Heterogeneous Domains
+To encourage multi-domain learning and fair comparison,
+we establish a two-part benchmark. Table I reports open-loop
+results. Models trained on the nuScenes benchmark are evaluated on nuScenes, NAVSIM, and Waymo. For NAVSIM and
+Waymo, we report only L2 displacement error. For methods
+without released checkpoints, we reproduce nuScenes results
+using the official code and evaluate those checkpoints on
+NAVSIM and Waymo. We also train these methods (LTF [20],
+BEVPlanner [19], BEVPlanner++ [19], LAW [6]) under a
+heterogeneous setting that jointly uses all three datasets and
+evaluate them in all domains. Because Waymo lacks perception labels, only perception-free variants are applicable.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+7
+
+TABLE III: Ablation study of the proposed method. L2 and Collision Rates are reported as the average over 1s, 2s, and 3s.
+CLTP: Contrastive Learning with Trajectory-guided Prototype, EMAR: Episodic Memory-based Action Refinement.
+ID
+
+Ablation Setting Train Data
+
+NAVSIM
+
+nuScenes
+
+Waymo
+
+CLTP
+
+EMAR
+
+S
+
+N W NC ↑ DAC ↑ EP ↑ TTC ↑ Comf. ↑ PDMS ↑ L2 Avg. (m) ↓ Col. Avg. (%) ↓ L2 Avg. (m) ↓
+
+1
+
+✗
+
+✗
+
+-
+
+✓
+
+-
+
+97.4
+
+92.3
+
+77.6
+
+93.1
+
+100.0
+
+83.2
+
+5.98
+
+4.19
+
+6.43
+
+2
+3
+4
+5
+
+✗
+✓
+✗
+✓
+
+✗
+✗
+✓
+✓
+
+✓
+✓
+✓
+✓
+
+✓
+✓
+✓
+✓
+
+✓
+✓
+✓
+✓
+
+93.1
+94.5
+97.6
+97.7
+
+83.7
+89.5
+91.5
+93.9
+
+68.9
+74.9
+77.7
+80.2
+
+85.3
+88.0
+93.0
+93.0
+
+98.2
+98.6
+100.0
+100.0
+
+71.4
+78.0
+82.8
+85.2
+
+0.90
+0.79
+0.42
+0.35
+
+0.55
+0.44
+0.53
+0.17
+
+2.48
+2.18
+0.70
+0.68
+
+TABLE IV: Ablation study of the number of clusters. The
+experiments were conducted under heterogeneous settings.
+M
+
+NAVSIM
+
+nuScenes
+
+Waymo
+
+M
+
+PDMS ↑ L2 Avg. ↓ Col. Avg. ↓ L2 Avg. ↓
+1
+3
+6
+
+72.3
+78.8
+84.8
+
+0.74
+0.62
+0.38
+
+0.52
+0.29
+0.17
+
+1.40
+1.03
+0.72
+
+NAVSIM
+
+nuScenes
+
+Waymo
+
+PDMS ↑ L2 Avg. ↓ Col. Avg. ↓ L2 Avg. ↓
+12
+18
+24
+
+84.8
+85.2
+84.7
+
+0.37
+0.35
+0.36
+
+0.19
+0.17
+0.19
+
+0.72
+0.68
+0.70
+
+Table II reports closed-loop results. For models trained under
+the heterogeneous setting, we use the same checkpoints as in
+Table I to assess whether E2E-AD models execute interactionaware driving in closed-loop rollouts.
+As shown in Table I, models perform strongly on the indomain nuScenes dataset but suffer significant performance
+degradation under domain shifts, revealing substantial domain bias and highlighting the need for a unified model
+that can generalize across heterogeneous distributions. In the
+heterogeneous training setup using all three datasets, models
+such as LTF fail to adapt effectively, even showing degraded
+performance compared to single-domain training. BEVPlanner++ and LAW exhibit substantial gains on NAVSIM and
+Waymo, but with trade-offs on nuScenes. Our proposed HEAT
+achieves the best overall open-loop performance, followed by
+BEVPlanner++.
+From Table II, we observe that BEVPlanner++ performs
+well in open-loop evaluation, but its closed-loop performance
+degrades significantly, suggesting a reliance on ego-status
+cues. LAW achieves a PDMS of 84.6 when trained on
+NAVSIM, but drops to 72.3 in the heterogeneous setting.
+These results indicate that heterogeneous training improves
+generalization but may weaken domain-specific optimization
+due to feature separation. In contrast, our HEAT achieves
+strong performance in both open-loop and closed-loop evaluations, demonstrating robust learning and domain-invariant
+representations.
+D. Ablation Study and Discussion
+Effectiveness of the components. Table III shows component
+ablation results. ID-1, trained only on NAVSIM without the
+proposed module, achieves strong NAVSIM closed-loop results but performs poorly on nuScenes and Waymo, highlighting the need for heterogeneous training. ID-2, trained heterogeneously yet still without the module, substantially improves
+on nuScenes and Waymo relative to ID-1, but this comes at
+the cost of NAVSIM performance, a trade-off we attribute to
+domain-specific bias. In contrast, our approach improves performance across all domains, indicating successful trajectorycentric, domain-invariant learning. Notably, comparing ID-1
+and ID-5, NAVSIM closed-loop performance also increases
+
+over the in-domain baseline, suggesting that heterogeneous
+training helps extract trajectory cues and enables the model
+to handle multi-domain data on a common representational
+footing.
+Cluster number. As shown in Table IV, the number of clusters
+M influences the representation capacity of the model. Using
+a single cluster (M = 1) leads to degraded performance, as a
+single latent space is insufficient to capture diverse driving
+behaviors. Increasing the number of clusters to M = 3
+provides improvements by roughly separating distinct motion
+patterns, such as straight driving, left turns, and right turns. As
+M increases further, the performance becomes more stable,
+indicating that a richer set of trajectory-aware representations
+is beneficial. Although M = 18 yields the best performance
+in our setting, the results remain consistent across a wide
+range of M , demonstrating that our method maintains robust
+performance under different cluster configurations.
+Validation of Trajectory-Driven Learning. As shown in
+Fig. 3, we visualize the feature spaces of the visual latent Vt
+and the action latent at while progressively adding modules
+to assess domain-invariant learning. In the baseline without
+any modules, both visual and action latents cluster by data
+domain rather than by future trajectory, indicating a focus
+on domain-specific patterns. Introducing prototype-based contrastive learning yields trajectory-aligned structure in the visual
+latent. Refinement with the visual-coupled action memory then
+makes the action latent separable by trajectory as well. With
+both components, both visual and action latents form clear
+clusters by future trajectory.
+V. C ONCLUSION
+In this work, we propose, to our knowledge for the first
+time, a method for training end-to-end autonomous driving
+(E2E-AD) across heterogeneous domains with differing data
+distributions, a capability that is essential for scalability and
+real-world deployment. To this end, we introduce a trajectorydriven learning framework based on prototypes and episodic
+memory, which delivers substantial gains in both open-loop
+and closed-loop evaluations under heterogeneous settings. We
+also present a new benchmark for heterogeneous E2E-AD,
+trained and evaluated across three datasets, to encourage
+further research.
+Future work. While our work focuses on learning a unified
+model that performs consistently across multiple heterogeneous domains with diverse data distributions, achieving stable
+performance in this setting is itself a non-trivial challenge.
+Extending such capability to entirely unseen domains remains
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+w/ Contrastive Learning w/ Action Refinement
+
+Ours
+
+Action Latent
+
+Visual Latent
+
+Baseline
+
+8
+
+Fig. 3: UMAP [36] projections of the visual latent Vt
+and the action latent at , visualized under different module
+configurations.
+an important direction for future research, which we leave as
+future work.
+R EFERENCES
+[1] L. Chen, P. Wu, K. Chitta, B. Jaeger, A. Geiger, and H. Li, “End-to-end
+autonomous driving: Challenges and frontiers,” IEEE Transactions on
+Pattern Analysis and Machine Intelligence, 2024.
+[2] D. Zhang, J. Liang, K. Guo, S. Lu, Q. Wang, R. Xiong, Z. Miao, and
+Y. Wang, “Carplanner: Consistent auto-regressive trajectory planning for
+large-scale reinforcement learning in autonomous driving,” in Proceedings of the Computer Vision and Pattern Recognition Conference, 2025,
+pp. 17 239–17 248.
+[3] F. Codevilla, M. Müller, A. López, V. Koltun, and A. Dosovitskiy,
+“End-to-end driving via conditional imitation learning,” in 2018 IEEE
+International Conference on Robotics and Automation (ICRA), 2018, pp.
+4693–4700.
+[4] H. Cho, J.-Y. Kang, G. Lee, H. Yang, H. Park, S. Jung, and K.-J. Yoon,
+“Vr-drive: Viewpoint-robust end-to-end driving with feed-forward 3d
+gaussian splatting,” arXiv preprint arXiv:2510.23205, 2025.
+[5] C. Min, D. Zhao, L. Xiao, J. Zhao, X. Xu, Z. Zhu, L. Jin, J. Li,
+Y. Guo, J. Xing et al., “Driveworld: 4d pre-trained scene understanding
+via world models for autonomous driving,” in Proceedings of the
+IEEE/CVF conference on computer vision and pattern recognition, 2024,
+pp. 15 522–15 533.
+[6] Y. Li, L. Fan, J. He, Y. Wang, Y. Chen, Z. Zhang, and T. Tan, “Enhancing
+end-to-end autonomous driving with latent world model,” arXiv preprint
+arXiv:2406.08481, 2024.
+[7] H. Caesar, V. Bankiti, A. H. Lang, S. Vora, V. E. Liong, Q. Xu,
+A. Krishnan, Y. Pan, G. Baldan, and O. Beijbom, “nuscenes: A
+multimodal dataset for autonomous driving,” in Proceedings of the
+IEEE/CVF conference on computer vision and pattern recognition, 2020,
+pp. 11 621–11 631.
+[8] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li,
+I. Gilitschenski, B. Ivanovic, M. Pavone et al., “Navsim: Data-driven
+non-reactive autonomous vehicle simulation and benchmarking,” Advances in Neural Information Processing Systems, vol. 37, pp. 28 706–
+28 719, 2024.
+[9] H. Caesar, J. Kabzan, K. S. Tan, W. K. Fong, E. Wolff, A. Lang,
+L. Fletcher, O. Beijbom, and S. Omari, “nuplan: A closed-loop mlbased planning benchmark for autonomous vehicles,” arXiv preprint
+arXiv:2106.11810, 2021.
+[10] Waymo Research, “2025 waymo open dataset challenge: Visionbased end-to-end driving,” https://waymo.com/open/challenges/2025/
+e2e-driving/, 2025, accessed: 2025-04-25.
+[11] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du, T. Lin,
+W. Wang et al., “Planning-oriented autonomous driving,” in Proceedings
+of the IEEE/CVF conference on computer vision and pattern recognition,
+2023, pp. 17 853–17 862.
+[12] B. Jaeger, K. Chitta, and A. Geiger, “Hidden biases of end-to-end driving
+models,” in Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 2023, pp. 8240–8249.
+
+[13] S. Hu, L. Chen, P. Wu, H. Li, J. Yan, and D. Tao, “St-p3: End-to-end
+vision-based autonomous driving via spatial-temporal feature learning,”
+in European Conference on Computer Vision. Springer, 2022, pp. 533–
+549.
+[14] X. Weng, B. Ivanovic, Y. Wang, Y. Wang, and M. Pavone, “Paradrive: Parallelized architecture for real-time autonomous driving,” in
+Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, 2024, pp. 15 449–15 458.
+[15] B. Jiang, S. Chen, Q. Xu, B. Liao, J. Chen, H. Zhou, Q. Zhang,
+W. Liu, C. Huang, and X. Wang, “Vad: Vectorized scene representation
+for efficient autonomous driving,” in Proceedings of the IEEE/CVF
+International Conference on Computer Vision, 2023, pp. 8340–8350.
+[16] B. Jiang, S. Chen, H. Gao, B. Liao, Q. Zhang, W. Liu, and X. Wang,
+“Vadv2: End-to-end autonomous driving via probabilistic planning,” in
+The Fourteenth International Conference on Learning Representations,
+2026.
+[17] Y. Zheng, P. Yang, Z. Xing, Q. Zhang, Y. Zheng, Y. Gao, P. Li,
+T. Zhang, Z. Xia, P. Jia et al., “World4drive: End-to-end autonomous
+driving via intention-aware physical latent world model,” arXiv preprint
+arXiv:2507.00603, 2025.
+[18] J.-T. Zhai, Z. Feng, J. Du, Y. Mao, J.-J. Liu, Z. Tan, Y. Zhang,
+X. Ye, and J. Wang, “Rethinking the open-loop evaluation of end-toend autonomous driving in nuscenes,” arXiv preprint arXiv:2305.10430,
+2023.
+[19] Z. Li, Z. Yu, S. Lan, J. Li, J. Kautz, T. Lu, and J. M. Alvarez, “Is
+ego status all you need for open-loop end-to-end autonomous driving?”
+in Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, 2024, pp. 14 864–14 873.
+[20] A. Prakash, K. Chitta, and A. Geiger, “Multi-modal fusion transformer
+for end-to-end autonomous driving,” in Proceedings of the IEEE/CVF
+conference on computer vision and pattern recognition, 2021, pp. 7077–
+7087.
+[21] P. Wu, X. Jia, L. Chen, J. Yan, H. Li, and Y. Qiao, “Trajectory-guided
+control prediction for end-to-end autonomous driving: A simple yet
+strong baseline,” Advances in Neural Information Processing Systems,
+vol. 35, pp. 6119–6132, 2022.
+[22] Y. Wang, J. He, L. Fan, H. Li, Y. Chen, and Z. Zhang, “Driving into
+the future: Multiview visual forecasting and planning with world model
+for autonomous driving,” in Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 2024, pp. 14 749–14 759.
+[23] W. Tong, C. Sima, T. Wang, L. Chen, S. Wu, H. Deng, Y. Gu, L. Lu,
+P. Luo, D. Lin et al., “Scene as occupancy,” in Proceedings of the
+IEEE/CVF International Conference on Computer Vision, 2023, pp.
+8406–8415.
+[24] Y. Li, Y. Wang, Y. Liu, J. He, L. Fan, and Z. Zhang, “End-to-end driving
+with online trajectory evaluation via bev world model,” arXiv preprint
+arXiv:2504.01941, 2025.
+[25] P. Li and D. Cui, “Navigation-guided sparse scene representation for
+end-to-end autonomous driving,” in The Thirteenth International Conference on Learning Representations.
+[26] M. Hassan, S. Stapf, A. Rahimi, P. Rezende, Y. Haghighi,
+D. Brüggemann, I. Katircioglu, L. Zhang, X. Chen, S. Saha et al.,
+“Gem: A generalizable ego-vision multimodal world model for finegrained ego-motion, object dynamics, and scene composition control,”
+in Proceedings of the Computer Vision and Pattern Recognition Conference, 2025, pp. 22 404–22 415.
+[27] Z. Huang, J. Zhang, and E. Ohn-Bar, “Neural volumetric world models
+for autonomous driving,” in European Conference on Computer Vision.
+Springer, 2024, pp. 195–213.
+[28] Y. Chen, Y. Wang, and Z. Zhang, “Drivinggpt: Unifying driving world
+modeling and planning with multi-modal autoregressive transformers,”
+arXiv preprint arXiv:2412.18607, 2024.
+[29] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
+Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” Advances in
+neural information processing systems, vol. 30, 2017.
+[30] W. Sun, X. Lin, Y. Shi, C. Zhang, H. Wu, and S. Zheng, “Sparsedrive:
+End-to-end autonomous driving via sparse scene representation,” in 2025
+IEEE International Conference on Robotics and Automation (ICRA).
+IEEE, 2025, pp. 8795–8801.
+[31] B. Liao, S. Chen, H. Yin, B. Jiang, C. Wang, S. Yan, X. Zhang, X. Li,
+Y. Zhang, Q. Zhang et al., “Diffusiondrive: Truncated diffusion model
+for end-to-end autonomous driving,” arXiv preprint arXiv:2411.15139,
+2024.
+[32] Z. Li, K. Li, S. Wang, S. Lan, Z. Yu, Y. Ji, Z. Li, Z. Zhu, J. Kautz, Z. Wu
+et al., “Hydra-mdp: End-to-end multimodal planning with multi-target
+hydra-distillation,” arXiv preprint arXiv:2406.06978, 2024.
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021
+
+[33] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and
+B. Guo, “Swin transformer: Hierarchical vision transformer using shifted
+windows,” in Proceedings of the IEEE/CVF international conference on
+computer vision, 2021, pp. 10 012–10 022.
+[34] I. Loshchilov and F. Hutter, “Sgdr: Stochastic gradient descent with
+warm restarts,” arXiv preprint arXiv:1608.03983, 2016.
+[35] ——, “Decoupled weight decay regularization,” arXiv preprint
+arXiv:1711.05101, 2017.
+[36] L. McInnes, J. Healy, and J. Melville, “Umap: Uniform manifold
+approximation and projection for dimension reduction,” arXiv preprint
+arXiv:1802.03426, 2018.
+
+9
+
+
