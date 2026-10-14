@@ -1,0 +1,484 @@
+                                                 DriveAgent: Multi-Agent Structured Reasoning with LLM and
+                                                      Multimodal Sensor Fusion for Autonomous Driving
+                                          Xinmeng Hou2,∗ , Wuqi Wang1,∗ , Long Yang1 , Hao Lin3 , Jinglun Feng4,† , Haigen Min1,† , Xiangmo Zhao1
+
+
+                                            Abstract— We introduce DriveAgent, a novel multi-agent                        Similarly to AD problems, strong capabilities in reasoning
+                                        autonomous driving framework that leverages large language                     across diverse domains have been demonstrated with large
+                                        model (LLM) reasoning combined with multimodal sensor                          language models (LLM) and vision-language models (VLM)
+                                        fusion to enhance situational understanding and decision-
+                                        making. DriveAgent uniquely integrates diverse sensor modal-                   in the past few years [3], [4]. Nevertheless, a key challenge,
+arXiv:2505.02123v1 [cs.RO] 4 May 2025
+
+
+
+
+                                        ities—including camera, LiDAR, GPS, and IMU—with LLM-                          how to apply LLM into multimodal sensor fusion in driving
+                                        driven analytical processes structured across specialized agents.              scenarios, remains underexplored [5], [6]. Thus, an opportu-
+                                        The framework operates through a modular agent-based                           nity to enhance autonomous decision-making is presented by
+                                        pipeline comprising four principal modules: (i) a descriptive                  incorporating LLM-driven reasoning into sensor-rich driving
+                                        analysis agent identifying critical sensor data events based
+                                        on filtered timestamps, (ii) dedicated vehicle-level analysis                  pipelines.
+                                        conducted by LiDAR and vision agents that collaboratively
+                                        assess vehicle conditions and movements, (iii) environmen-
+                                        tal reasoning and causal analysis agents explaining contex-
+                                        tual changes and their underlying mechanisms, and (iv) an
+                                        urgency-aware decision-generation agent prioritizing insights
+                                        and proposing timely maneuvers. This modular design empow-
+                                        ers the LLM to effectively coordinate specialized perception and
+                                        reasoning agents, delivering cohesive, interpretable insights into
+                                        complex autonomous driving scenarios. Extensive experiments
+                                        on challenging autonomous driving datasets demonstrate that
+                                        DriveAgent is achieving superior performance on multiple
+                                        metrics against baseline methods. These results validate the
+                                        efficacy of the proposed LLM-driven multi-agent sensor fusion
+                                        framework, underscoring its potential to substantially enhance
+                                        the robustness and reliability of autonomous driving systems. 1                Fig. 1. Overview of the inputs and outputs for the proposed DriveAgent
+                                                                                                                       framework. DriveAgent takes multimodal sensor data as inputs, including
+                                                                                                                       camera, Lidar GPS, and IMU data. The input data are processed through
+                                                                 I. I NTRODUCTION                                      four structured tasks (T1 to T4), supporting comprehensive reasoning tasks
+                                                                                                                       at both the environment level and the vehicle level as outputs.
+                                           Promising progress has been made in autonomous driving
+                                        (AD) in recent years; however, some challenging problems                          Recent research has begun exploring the integration of
+                                        in AD have yet to be solved, especially under dynamic, mul-                    LLMs into autonomous driving tasks. For example, Driv-
+                                        timodal environments, such as contextual understanding and                     eLM [7] proposed structured reasoning around visual in-
+                                        interpretability [1]. Commonly adopted AD architectures,                       put, and V2V-LLM [8] advanced cooperative multimodal
+                                        whether modular or end-to-end, often struggle to integrate                     communication between vehicles. Additionally, frameworks
+                                        insights across heterogeneous sensor modalities—such as                        such as GenFollower [9] and LMDrive [10] have emphasized
+                                        cameras, LiDAR, IMU and GPS—especially in edge cases                           instruction-following and human-like behavior modeling.
+                                        where visual information is ambiguous or missing [2].                          Similarly, prompting techniques have also advanced LLMs
+                                                                                                                       by improving reasoning and problem-solving. LaMPilot [11]
+                                           1 Wuqi Wang, Long Yang, Haigen Min, and Xiangmo Zhao are with
+                                                                                                                       and KoMA [12] both leveraged language-based prompting
+                                        Chang’an University, Xi’an, Shaanxi, China.
+                                           2 Xinmeng Hou is with Chang’an University, Xi’an, Shaanxi, China and        agents for decision-making, while TreeOT [13] and Re-
+                                        Agency for Science, Technology and Research (A*STAR), Singapore.               ActSR [14] both proposed a similar method prompting LLMs
+                                           3 Hao Lin is with University of California, Davis, USA.
+                                                                                                                       to explore multiple reasoning paths, enhancing deliberate
+                                           4 Jinglun Feng is with CCNY Robotics Lab, The City College of New
+                                        York, USA. ∗ Equally contributed. † Corresponding authors.
+                                                                                                                       problem-solving, reasoning, and acting. However, current
+                                           Jinglun Feng:jfeng1@ccny.cuny.edu,Haigen Min:hgmin@@chd.edu.cn              approaches concentrate narrowly on closed-loop planning,
+                                           This work is supported in part by the National Natural Science Foundation   or single-task prompting, and use basic reasoning reliant
+                                        (52441205), National Natural Science Foundation of China (No.52372426),
+                                        Shaanxi Province Innovation Capability Support Plan-Innovative Talent Pro-
+                                                                                                                       only on relative object positions for visual understanding.
+                                        motion Plan (No.2023KJXX-020), Natural Science Foundation of Shaanxi           As a result, they struggle to generalize to varied driving
+                                        Province (No.2022JQ-663), Key Research and Development Program of              scenarios where visual sensors are unreliable—for instance,
+                                        Shaanxi Province (2024GX-YBXM-261), and Fundamental Research Funds
+                                        for the Central Universities, CHD (No.300102243202, 300102244713).
+                                                                                                                       when cameras are misaligned or during hazardous driving
+                                           1 Code     available     at     https://github.com/Paparare/                conditions.
+                                        DriveAgent                                                                        Motivated by the aforementioned limitations, we introduce
+DriveAgent—a modular, LLM-driven multi-agent frame-                surrounding environment between consecutive timestamps. It
+work designed to reason over multimodal sensor streams in          identifies environment variations Ei+1 between times Ti and
+autonomous driving scenarios. DriveAgent integrates cam-           Ti+1 (yielding changes {E2 , E3 , . . . , En }) and passes them
+era, LiDAR, GPS, and IMU data through a hierarchy of               to a causal analysis agent MC . The causal analysis agent
+specialized agents that perform perception, reasoning, and         uncovers the mechanisms behind each detected change and
+decision-making tasks in a coordinated manner. Our frame-          flags any objects requiring heightened caution as Ci . Finally,
+work leverages the structured compositionality of LLMs             the response aggregation agent MR consolidates the vehicle
+and domain-specific sensor processing modules to deliver           diagnostics Di from MD and the caution flags Ci from MC ,
+clear, reliable responses across both typical and challenging      and synthesizes them into a final response Ri for each critical
+driving situations. Unlike prior works that focus on end-          timestamp Ti . Each Ri thus contains both the vehicle’s
+to-end planning or vision-language alignment alone [15],           condition diagnosis (Di from the sensor comparison) and the
+[16], a generalizable architecture is offered by DriveAgent        relevant environmental and causal information (Ci indicating
+to explain vehicle behavior, environmental dynamics, and           any cautionary context).
+causal events across multiple sensor types.
+                                                                   A. Module 1: Descriptive Analysis
+   Fig. 1 illustrates our proposed study’s scope, showing
+how multimodal sensor inputs (e.g., camera, LiDAR, GPS,               Determining which information is crucial for an accurate
+and IMU data) and text data support both vehicle-level and         route description is a fundamental challenge in route analy-
+environmental-level tasks. Our contributions include:              sis. We address this with a self-referential filtration system
+   1) Multi-Modal Agent System: The proposed multi-                that automatically identifies critical timestamps based on the
+       modal agent system enables cohesive, end-to-end rea-        vehicle’s motion. The filtration threshold is determined by an
+       soning in complex driving contexts.                         LLM agent analyzing prototypical route descriptions, from
+   2) Vision-Language Model Fine-tune Strategy: The                both real and simulated autonomous driving on predefined
+       proposed fine-tuned VLM enables abilities including         paths. A single agent handles route classification and thresh-
+       object detection and traffic interpretation for the pro-    old selection via this mechanism.
+       posed system.                                                  We categorize driving routes based on their speed S and
+   3) Self-Reasoning Benchmarks: Autonomous driving                an urban complexity indicator U . Specifically, we define the
+       performance is evaluated based on tasks such as data        function R(S, U ), which outputs both a route category ri and
+       analysis, visual reasoning, and integrated environment      a corresponding threshold θi . Formally (the double colon ::
+       understanding.                                              indicates this correspondence):
+   4) Three-Tier Driving Dataset: The collected dataset                      R(S, U ) ∈ { r1 :: θ1 , r2 :: θ2 , r3 :: θ3 },    (1)
+       represents standard, typical, and challenged AD sce-
+       narios, offering distinct challenges for comprehensive      where r1 represents high-speed, low-complexity routes, r2
+       training and evaluation.                                    represents medium-speed, medium-complexity routes, and r3
+                                                                   represents variable-speed, high-complexity routes. For each
+                    II. M ETHODOLOGY                               category ri , θi is computed by an agent function G:
+   Our approach addresses four key tasks through a structured
+                                                                                          θi = G(S, U, ri ),                   (2)
+reasoning process. Given an input instruction I, the module
+M produces a response R in adherence to the prompt. To             which tailors standard kinematic baselines (angular velocity
+facilitate driving analysis, we design four sequential modules     of 10◦ /s, linear acceleration of 8 m/s2 , and yaw rate of
+as demonstrated in Fig. 2: (1) Descriptive Analysis, (2)           10◦ /s) to the specific speed S and urban complexity U . By
+Vehicle Reasoning, (3) Environmental Reasoning, and (4)            monitoring these kinematic signals, such as turning, accel-
+Response Generation.                                               eration/braking, and orientation changes, the filtration agent
+   In the first phase, the system selects n critical timestamps    efficiently pinpoints critical timestamps reflecting significant
+where significant events occur. We denote these timestamps         motion changes.
+and their triggering factors as {(Ti , Fi )}ni=0 , where Ti is
+the i-th timestamp and Fi is the factor that prompted its          B. Module 2: Vehicle Reasoning
+selection. This set of time-factor pairs forms the basis for all      The Vehicle Reasoning module comprises three agents:
+subsequent analyses. The vehicle-reasoning phase consists of       one processing vision data, one processing LiDAR data, and
+two independent sensor agents and one integration agent. The       an analyzer agent that synthesizes both to detect vehicle
+LiDAR agent ML produces triplets {(Ti , Fi , Li )}ni=0 , where     abnormalities. The designed reasoning pipeline is shown in
+Li is the LiDAR-based description at time Ti . Similarly,          Algorithm 1.
+the vision agent MV produces {(Ti , Fi , Vi )}ni=0 , with Vi          1) Vision Descriptor: The vision agent first assigns
+being the vision-based description at Ti . An aggregator agent     unique labels to all detectable objects in the camera view,
+MD then compares each LiDAR description Li with the                where each object gets an index i. It then examines two
+corresponding vision description Vi to diagnose potential          consecutive frames at times t and t+1, recording the position
+vehicle anomalies Di . In parallel, an environmental rea-          of each object i as pi (t) and pi (t + 1). By comparing
+soning agent uses Vi and Li to analyze changes in the              these positions, the agent measures how each object moved
+Fig. 2. An overview of the proposed architecture which is consisting of four modules (M1 to M4), where multimodal sensor inputs—camera, IMU, GPS
+and LiDAR—enable both environment-level tasks (e.g., information retrieval, environmental change detection, and reasoning) and vehicle-level tasks (e.g.,
+vehicle status analysis, motion evaluation, and behavior pattern recognition).
+
+
+
+between the timestamps and can also derive an overall
+average movement across all objects, which are denoted as                                           ∆pi = pi (t + 1) − pi (t)                        (3)
+pi (t) ∼ pi (t + 1) for each i. This relative position-change
+analysis identifies which objects have moved and by how                          3) Vehicle Status Reasoning: The analyzer agent takes
+much, providing a per-object motion summary between t                         the outputs of both the vision and LiDAR descriptors to
+and t + 1.                                                                    diagnose the vehicle’s status and sensor integrity. As a
+                                                                              first step, it filters out any objects beyond a 100 m range
+Algorithm 1 Vehicle Reasoning                                                 in the LiDAR data. Formally, it limits attention to the
+Require: {pi (t)} for vision data at t = 1, . . . , T , {pi (t)}              set Ω = {i | ∥Li (t)∥ ≤ 100}, where Li (t) is the LiDAR-
+    for LiDAR data at t = 1, . . . , T , Li (t), Ci (t) for Li-               derived position of object i at time t (in meters). This
+    DAR/camera positions, R: distance threshold (e.g., 100)                   focuses the analysis on nearby objects and also allows a
+ 1: for all t ∈ {1, . . . , T − 1} do                                         preliminary check for LiDAR sensor issues (e.g., if no
+ 2:    for all i do                                                           objects appear within range when expected, the LiDAR could
+ 3:      pi (t) ∼ pi (t + 1)                                                  be malfunctioning or noisy). For each object i ∈ Ω, the
+ 4:    end for                                                                agent then compares its LiDAR position to the corresponding
+ 5:    for all i do                                                           camera-inferred position. Let Ci (t) be object i’s position as
+ 6:      ∆pi = pi (t + 1) − pi (t)                                            estimated from the camera at time t. We define a consistency
+ 7:    end for                                                                measure between the two sensors as the Euclidean distance:
+             
+ 8:    Ω ← i | ∥Li (t)∥ ≤ R
+ 9:    for all i ∈ Ω do                                                                            ∆i (t) = Li (t) ∼ Ci (t)                          (4)
+10:      ∆i (t) = ∥Li (t) − Ci (t)∥                                              If ∆i (t) is large for a particular object, it suggests a
+11:    end for                                                                discrepancy between LiDAR and camera, potentially due to
+12: end for
+                                                                              calibration error or sensing noise. The agent also monitors
+13: return {∆pi , Ω, ∆i (t)}
+                                                                              if many objects exhibit large ∆i (t) values simultaneously,
+                                                                              which would indicate a broader sensor misalignment or a
+   2) LiDAR Descriptor: The LiDAR agent begins with the                       camera issue (e.g., blurring or calibration drift affecting Ci (t)
+set of object labels (as identified in the LiDAR point cloud)                 for multiple objects). After these checks, the agent compiles
+and their positions relative to the vehicle. If multiple objects              an integrated status report diagnosing any detected issues
+initially share the same label Li , the agent disambiguates                   with the LiDAR data, such as missing/ghost objects or range
+them by spatial separation or other distinctive features to                   errors; and camera data, such as poor object localization.
+ensure each object i is uniquely identified. It then considers
+two successive timestamps t and t + 1 and obtains object                      C. Module 3: Environmental Reasoning
+i’s positions pi (t) and pi (t + 1) from the LiDAR data. The                    Environmental reasoning module consists of two coordi-
+change in position is computed as:                                            nated agents: one focused on detecting and characterizing
+Algorithm 2 Environmental Reasoning                                 environmental cues (e.g., wind or collisions), and surround-
+Require: V(t), V(t − 1): sets of visual detections at times t       ing context (e.g., nearby object motion). It classifies each
+    and t − 1, L(t), L(t − 1): sets of LiDAR measurements           change as either self-moving (e.g., vehicles or pedestrians)
+    at times t and t − 1, Oi (t): position of object i at time      or externally influenced (e.g., displaced by force), using
+    t, ∆t: time interval used for change detection in object        cues like mobility features and motion behavior. The agent
+    positions                                                       then compiles a causal report summarizing the changes,
+ 1: for all vi (t) ∈ V(t) do                                        inferred origins, and confidence levels, enabling informed
+ 2:    ∆vi (t) = vi (t) − vi (t − 1)                                downstream decision-making with interpretable reasoning.
+ 3: end for
+ 4: for all ℓj (t) ∈ L(t) do                                        D. Module 4: Response Generation
+ 5:    ∆ℓj (t) = ℓj (t) − ℓj (t − 1)                                  This module synthesizes outputs from previous agents to
+ 6: end for                                                         generate a prioritized response, each insight ai is paired with
+ 7: ∆i,j (t) = ∥vi (t) − ℓj (t)∥                                    a category ci (e.g., safety, efficiency), forming the set A =
+ 8: for all Oi (t) do                                               {(ai , ci )}N
+                                                                                i=1 . A scoring function Ψ(ai , ci ) evaluates urgency,
+ 9:    ∆Oi (t) = Oi (t) − Oi (t − ∆t)                               and the highest-priority issue, â, can be identified as:
+10: end for
+                                                                                      â = arg max Ψ(ai , ci )                     (7)
+                                                                                                (ai ,ci )∈A
+
+environmental changes, and another dedicated to analyz-               The agent then selects the best response ϕ∗ from a
+ing the causes of those changes. Working together, these            candidate set Φ(â) = {ϕ1 , . . . , ϕM } by maximizing a utility
+agents provide a comprehensive understanding of the factors         function:
+driving each observed environmental change as shown in
+Algorithm 2.                                                                          ϕ∗ = arg max Score(ϕj )                      (8)
+   1) Environmental Reasoning: This agent identifies                                            ϕj ∈Φ(â)
+environmental changes by comparing current sensor                     The final response is:
+readings with those from the previous timestamp.
+Let V(t) = {v1 (t), v2 (t), . . . , vm (t)} and L(t) =
+                                                                                           R = â, ϕ∗ , A−
+                                                                                                              
+                                                                                                                                   (9)
+{ℓ1 (t), ℓ2 (t), . . . , ℓn (t)} denote the vision and LiDAR
+detections at time t, respectively. By analyzing differences           where A− = A \ {â} denotes secondary insights. This
+between V(t) and V(t − 1) as well as L(t) and L(t − 1), the         structured output can gather the top-priority issue, proposed
+agent detects new, missing, or significantly moved objects.         action, and remaining considerations to support transparent
+Detected changes are classified based on type (e.g., static         and interpretable decision-making.
+vs. dynamic) and severity. For each change, the agent also
+evaluates cross-sensor consistency. Given an object seen                                  III. E XPERIMENTS
+by both sensors, let vi (t) and ℓj (t) denote the positions of      A. Datasets
+the same object as perceived by the camera and LiDAR,
+                                                                       Due to the lack of public datasets for evaluating an
+respectively. The sensor agreement can be quantified by the
+                                                                    agent’s understanding of driving environments, we introduce
+Euclidean distance between these estimates:
+                                                                    a new dataset collected from an autonomous vehicle in real-
+                                                                    world scenarios [17]. As shown in Fig. 3, the vehicle was
+                  ∆i,j (t) = ∥vi (t) − ℓj (t)∥               (5)
+                                                                    equipped with multiple sensors and a navigation system 2 .
+   Note that a small ∆i,j (t) indicates that the vision and         All sensor data were time-synchronized for consistent multi-
+LiDAR agree on the object’s position, whereas a large               modal observations. Sensor specifications are provided in
+∆i,j (t) could signal sensor misalignment, calibration issues,      Table I.
+or an actual abrupt environmental change that one sensor               Moreover, as summarized in Table II, our dataset covers
+registers differently than the other.                               three distinct driving routes: R1, R2, and R3. R1 spans
+   2) Causal Analysis: This agent investigates the underly-         1277.76 meters and was recorded in a controlled environ-
+ing causes of the changes identified above. It first retrieves      ment, serving as the baseline scenario. The ego vehicle
+the state of each relevant object from prior reasoning stages       reached a maximum speed of 13.90m/s with an average
+or raw sensor data, denoting the position (or state) of object i    speed of 7.30m/s, and only forward-facing images were
+at time t as Oi (t). It then looks at how each object’s state has   captured. The environment dynamic level for R1 is qualita-
+evolved over a longer interval ∆t by computing and flags any        tively described as Small, reflecting relatively simple traffic
+object with a significant change ∆Oi (t) for deeper analysis:       conditions. R2, measuring 969.19 meters in length, features
+                                                                    a loop around an urban square and is qualitatively described
+               ∆Oi (t) = Oi (t) − Oi (t − ∆t)                (6)    as having a Large environment dynamic level, indicating a
+For each flagged change, the agent infers plausible causes            2 Datasets available at https://huggingface.co/datasets/
+by analyzing temporal patterns (e.g., sudden vs. gradual),          Parechan/driveagent
+ Sensor                 Model                         Frequency                                              Specifications
+ LiDAR          Robosense Ruby-128                       10 Hz                    128-beam, Maximum detection range: 230 m, Vertical FOV: -25° to
+                                                                                                  +15°, Horizontal FOV: 360°
+ Camera         Basler acA2440-75uc                      10 Hz                                      Default resolution: 2448×2048
+ GNSS/INS         Xsens MTI-680G          4 Hz (GNSS), 400 Hz (IMU/RTK)          0.2° roll/pitch, 0.5° Yaw/Heading, cm-level position accuracy, Internal
+                                                                                               u-blox ZED F9 RTK-enabled GNSS receiver
+
+                                                                      TABLE I
+                                 S ENSOR S PECIFICATION IN C HANG ’ AN U NIVERSITY X INDA AUTONOMOUS V EHICLE .
+
+
+
+
+                                                                                with an average speed of 4.29m/s. Similar to R2, R3
+                                                                                captures views from the right, left, and front cameras.
+                                                                                   In addition, an enhanced detection method, combined with
+                                                                                PointPillars architecture [18] and a clustering strategy, was
+                                                                                used to perform real-time perception on LiDAR observation
+                                                                                results and detect objects.
+
+                                                                                B. Task and Evaluation Metrics
+                                                                                   We define three primary tasks: (1) Object and Cate-
+                                                                                gory Detection, (2) Vehicle Reasoning (LiDAR and visual
+                                                                                understanding), and (3) Environmental Reasoning. Each
+                                                                                task is validated by its contribution to scene understand-
+                                                                                ing, decision-making, and system robustness, with results
+                                                                                discussed in Section IV.
+                                                                                   For object identification task, we consider seven key
+                                                                                categories: four-wheel vehicles (the principal motorized par-
+                                                                                ticipants on roads), non-four-wheel vehicles (e.g., bicycles
+                                                                                and scooters, which often pose higher risk due to less
+Fig. 3. Data collection vehicle sensor configuration and satellite images       coverage), pedestrians (vulnerable road users who commonly
+of recorded driving routes. There are three routes being recorded in total at   receive priority), signs (official traffic instructions and reg-
+Chang’an University, Xi’an, China. Route 1 (R1) is shown in red trajectory,     ulations), fixed installations (permanent structures, barriers,
+Route 2 (R2) is shown in purple trajectory, while Route 3 (R3) is shown in
+green trajectory.                                                               or buildings), plants (vegetation that may obscure visibility
+                                                                                or mark boundaries), and monitors (electronic displays or
+                                                                                cameras supporting traffic supervision). This task is trained
+ Attribute                                   R1         R2          R3          on datasets R2 and R3 and evaluated on R1, using precision,
+ Length (m)                               1277.76     969.19     1125.91        recall, and F1 as metrics; its importance lies in ensuring the
+ Max Speed (m/s)                           13.90       11.40      12.09         accurate classification of objects critical for traffic safety.
+ Average Speed (m/s)                        7.30       4.17       4.29             The vehicle-reasoning task include two tasks: a LiDAR un-
+ Environment Dynamic Level                 Small      Large      Medium         derstanding task, evaluated by comparing the model’s output
+ Roadside Obstructions                       ✗           ✗         ✓            with ground-truth labels in R2, and a vision-based reasoning
+ Righ & Left-side Camera Views               ✗          ✓          ✓            task, assessed on R2 and R3, where misaligned camera
+                                 TABLE II                                       views serve as distractors. These evaluations measure real
+          D ETAILED ATTRIBUTES FOR ROUTES R1, R2, AND R3.                       improvements in perception accuracy and prevent false gains
+                                                                                from random guessing. Finally, the environmental reasoning
+                                                                                task tests the system’s ability to tell apart stationary objects
+                                                                                from independently moving ones (like pedestrians), with
+                                                                                improvements validated through better situational awareness,
+more complex and active driving environment. The max-
+                                                                                collision avoidance, and safer navigation in dynamic traffic.
+imum and average speeds along R2 were 11.40m/s and
+4.17m/s respectively. Compared to R1, R2 includes right
+                                                                                C. Baseline Approaches
+and left-side camera views, providing a broader field of view.
+R3, at 1125.91 meters, introduces additional environmental                         For task 1, we benchmark five leading vision-language
+complexity, with roadside obstructions and is qualitatively                     models including LLaMA-3.2-Vision-Instruct [19], GPT-4o-
+described as having a Medium environment dynamic level,                         mini [20], Pixtra-large [21], GPT-4o [20], and Claude-3.7-
+indicating moderately active traffic with added structural                      Sonnet [22]—selected for their strong performance, diverse
+challenges. The maximum speed recorded was 12.09m/s,                            architectures, and proven effectiveness on vision tasks.
+   For tasks 2 & 3, we adopt three baseline methods: Zero-                         IV. R ESULTS AND A NALYSIS
+Shot [23], CoT [24], and CoT + Self-Refine [25]. Zero-
+                                                                  A. Object and Category Detection Performance
+Shot tests direct inference ability, CoT adds step-by-step
+reasoning, and CoT + Self-Refine further improves reasoning          In this subsection, we first evaluate the task 1 intro-
+through iterative refinement.                                     duced at Section III-B. Table III illustrates the substantial
+                                                                  performance gains achieved when training with structured
+D. Reasoning Instructions                                         annotation guidelines aimed at better and more accurate ob-
+   Fig. 4 outlines structured annotation guidelines that define   ject identification. The baseline LLaMA-3.2-Vision-Instruct
+the expected format and content of a high-quality response.       model achieves moderate performance (Precision = 64.33%,
+These guidelines emphasize three key aspects: (1) correctly       Recall = 35.26%, F1-score = 45.55). However, once an-
+identifying vehicles and other dynamic traffic elements (e.g.,    notation guidelines are systematically applied, the VLM
+bicycles, buses), (2) highlighting relevant static road infras-   model in DriveAgent exhibits a significant leap in all key
+tructure such as lane markings, traffic signs, and signals, and   metrics—reaching a precision of 89.96% and an F1-score of
+(3) ensuring that descriptions are objective, concise, and free   71.62, outperforming other models in the table.
+from subjective or irrelevant content.
+   To assess the quality of the model’s outputs, we com-              Model                       Precision   Recall   F1-score
+pare the generated descriptions against reference descriptions        LLaMA-3.2-Vision-Instruct    64.33      35.26     45.55
+derived from these guidelines. The evaluation focuses on              GPT-4o-mini                  64.40      51.60     57.30
+both content accuracy and coverage of key visual categories.          pixtra-large                 76.12      54.63     60.86
+                                                                      GPT-4o                       80.98      59.98     64.96
+Specifically, we extract five scene components from each              claude-3.7-sonnet            83.83      69.73     68.80
+output: Trees, Buildings, Vehicles, Pedestrians, and Signs.           DriveAgent                   89.96      63.52     71.62
+These categories are selected due to their relevance to
+road-scene understanding and their prevalence in standard                                     TABLE III
+autonomous driving datasets.                                        P RECISION (%), R ECALL (%), AND F1- SCORE FOR EACH BASELINE
+   Reasoning Setup: Reasoning experiments follow the                METHODS AND THE PROPOSED MODEL ON O BJECT AND C ATEGORY
+
+multi-phase reasoning methodology described in Section II,        D ETECTION TASK . R ED COLOR HIGHLIGHTS THE BEST PERFORMANCE .
+the proposed DriveAgent is deployed to complete four se-
+quential modules: Descriptive Analysis, Vehicle Reasoning,
+Environmental Reasoning, and Response Generation. For                Fig. 5 shows that compared to the human annotator,
+each phase, DriveAgent generates a response based on the          DriveAgent is the only model that consistently detects mon-
+intermediate input from the previous step, resulting in a total   itors, while the other baselines mostly miss them, which
+of four stepwise generations per input case. Evaluation is        is because overhead monitors are less conspicuous than
+conducted at two critical points: (1) assessing the accuracy of   ground-level objects. This improvement underscores the im-
+the agent’s vehicle diagnostic reasoning, and (2) evaluating      portance of precise, consistent labeling for training object
+the accuracy of its environmental and causal reasoning.           detection systems. By removing ambiguity and ensuring
+   VLM Implementation Details: The VLM model in                   uniform criteria for bounding boxes and class labels, the
+DriveAgent utilizes the LLaMA-3.2-Vision model (11B Pa-           new annotations allow the model to learn object boundaries
+rameter) as the foundation, where the vision tower is a pre-      and distinctions more effectively. Consequently, DriveAgent
+trained LLaMA vision encoder and the language model is            demonstrates superior accuracy in localizing and identifying
+LLaMA-3.2 (11B). A learnable linear image projection layer        objects, validating that high-quality, structured annotation
+is inserted between the vision encoder and the LLM to align       practices are crucial to achieving robust object identification
+visual features with the LLM’s input space. We fine-tune both     performance.
+the vision encoder and the LLM using Low-Rank Adaptation
+                                                                  B. Reasoning Performance
+(LoRA) [26], while training the projection layer from scratch
+(i.e., no LoRA applied). All experiments are conducted on a          Vehicle Reasoning: We first We first evaluate the Vehicle
+server equipped with an NVIDIA H100 GPU. The model                Reasoning task (LiDAR and Vision) introduced in in Sec-
+is optimized using the AdamW optimizer with an initial            tion III-B, as shown in Table IV.
+learning rate of 2 × 10−4 and a batch size of 2. We employ a         For LiDAR reasoning, the Zero-Shot approach achieves
+cosine learning rate decay schedule with a warm-up ratio of       moderate accuracy (47.50%–65.05%) across routes, estab-
+0.03. Training is performed for 10 epoch using instruction-       lishing a baseline for detecting sensor misplacement. CoT
+style supervision introduced in the VLM Instructions section,     alone leads to substantial performance drops, suggesting ba-
+where each training sample is formatted as an instruction-        sic sequential reasoning struggles with subtle errors. Adding
+response pair that includes special <Image>tokens to denote       Self Refine significantly improves accuracy, reaching 72.63%
+visual inputs. In practice, we construct structured JSON-         on R2 and 63.89% on R2-right. DriveAgent, however,
+formatted prompts containing both textual instructions and        achieves strong and stable performance, particularly on R2-
+placeholder tokens for images, and fine-tune the model with       left (69.90%), demonstrating reliable LiDAR misplacement
+supervised instruction tuning on these multimodal prompts.        detection.
+Fig. 4. Overview of the multimodal reasoning pipeline used for driving scene understanding. Visual descriptions are generated from camera images,
+focusing on identifying traffic-related objects and maintaining objective scene summaries. LiDAR-based descriptions analyze object sizes and relative
+positions to assess driving risk. In the reasoning stages, LLM agents evaluate the correctness of sensor-based analyses (vehicle reasoning) and identify
+environmental changes over time (environmental reasoning). Human instructions and corresponding LLM generations are provided for each step, supporting
+robust, explainable autonomous driving assessments.
+
+
+                                                                                Tasks           Method               R2     R2-left   R2-right    R3     R3-left   R3-right
+
+                                                                                Vehicle         Zero-Shot           62.11   65.05      52.78     57.14   47.50      55.26
+                                                                                Understanding   CoT                 15.79   22.33      15.74     18.10   20.00      13.16
+                                                                                                CoT + Self Refine   72.63   66.02      63.89     64.76   45.00      55.26
+                                                                                (Lidar)
+                                                                                                DriveAgent (ours)   65.26   69.90      58.33     55.24   51.25      50.00
+
+                                                                                Vehicle         Zero-Shot           70.53    2.91       0.93     82.86    6.25       3.95
+                                                                                Reasoning       CoT                 69.47   25.24      27.78     79.05   31.25      40.79
+                                                                                                CoT + Self Refine   65.26    0.97       2.78     80.00    3.75       5.26
+                                                                                (Vision)
+                                                                                                DriveAgent (ours)   96.84   58.25      71.30     87.62   68.75      63.16
+                                                                                                Zero-Shot           37.89      -         -       36.19      -         -
+                                                                                Environmental   CoT                 56.84      -         -       62.86      -         -
+                                                                                Reasoning       CoT + Self Refine   43.16      -         -       56.19      -         -
+                                                                                                DriveAgent (ours)   58.95      -         -       65.71      -         -
+
+Fig. 5. Distribution of object categories in the human-annotated ground                                   TABLE IV
+truth versus each model’s predictions. Colour key: deep blue = fixed
+installations, orange = four-wheel vehicles, grey = non-four-wheel vehicles,    R EASONING ACCURACY (%) IS REPORTED ACROSS MODALITIES AND
+yellow = plants, and light blue = monitors.                                      REGIONS , WITH EACH TASK PRESENTING RESULTS FROM SEVERAL
+                                                                               PROMPTING METHODS . T HE LABELS R- LEFT * AND R- RIGHT * DENOTE
+                                                                                 THE LEFT- AND RIGHT- SIDE CAMERA VIEWS OF THE SAME ROUTE ;
+   For Vision reasoning, detecting misaligned cameras is                         THESE VIEWS ACT AS DISTRACTORS FOR THE VEHICLE - REASONING
+even more challenging. Zero-Shot and CoT show very low                               SUBTASK . R ED COLOR HIGHLIGHTS THE BEST PERFORMANCE .
+accuracies on left and right views. In contrast, DriveAgent
+achieves notable gains, including 96.84% accuracy on
+R2, and clear improvements across left and right variants
+(58.25% and 71.30%), confirming that modality-specific                         with temporal object differentiation. The CoT method sig-
+tuning is crucial for visual sensor reasoning.                                 nificantly improves performance, achieving accuracies of
+   Environmental Reasoning: At last, we evaluate the task                      56.84% and 62.86%. However, the performance of CoT +
+3 introduced in Section III-B. The evaluation of environ-                      Self Refine strategy offers mixed results, where the perfor-
+mental reasoning performance is based on the agent’s ability                   mance drops to 43.16% for one set and recovers partially
+to detect independently moving objects by comparing two                        to 56.19% for the other, suggesting that the refinement
+selected timestamps. As shown in Table IV, the Zero-Shot                       process may not always synergize effectively with the in-
+performance is low (37.89% and 36.19%), indicating that                        herent sequential reasoning of CoT in this task. Notably,
+without any additional reasoning cues the agent struggles                      our proposed DriveAgent model outperforms all baselines,
+obtaining the highest accuracies of 58.95% and 65.71%                         [10] H. Shao, Y. Hu, L. Wang, S. L. Waslander, Y. Liu, and H. Li,
+respectively. These results underscore the importance of a                         “Lmdrive: Closed-loop end-to-end driving with large language
+                                                                                   models,” 2023. [Online]. Available: https://arxiv.org/abs/2312.07488
+dedicated, well-tuned approach for integrating temporal and                   [11] Y. Ma, C. Cui, X. Cao, W. Ye, P. Liu, J. Lu, A. Abdelraouf,
+spatial reasoning, which is critical for accurately identifying                    R. Gupta, K. Han, A. Bera, J. M. Rehg, and Z. Wang, “Lampilot:
+independently moving objects in dynamic environments.                              An open benchmark dataset for autonomous driving with language
+                                                                                   model programs,” in Proceedings of the Conference on Empirical
+                          V. C ONCLUSION                                           Methods in Natural Language Processing (EMNLP), 2024. [Online].
+                                                                                   Available: https://aclanthology.org/2024.findings-emnlp.287
+   In this paper, we propose DriveAgent, a modular, LLM-                      [12] K. Jiang, X. Cai, Z. Cui et al., “Koma: Knowledge-driven multi-agent
+guided multi-agent framework for structured reasoning in                           framework for autonomous driving with large language models,” arXiv
+                                                                                   preprint arXiv:2407.14239, 2024.
+autonomous driving. By integrating multimodal sensor in-                      [13] S. Yao, D. Yu, J. Zhao, I. Shafran, T. L. Griffiths, Y. Cao, and
+puts—camera, LiDAR, GPS, and IMU—into a hierarchy                                  K. Narasimhan, “Tree of thoughts: Deliberate problem solving with
+of perception and reasoning agents, DriveAgent addresses                           large language models,” arXiv preprint arXiv:2305.10601, 2023.
+                                                                              [14] S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao,
+a long-standing challenge in autonomous systems: robust                            “React: Synergizing reasoning and acting in language models,” arXiv
+interpretation of complex, sensor-rich driving environments.                       preprint arXiv:2210.03629, 2023.
+   We demonstrate how the system’s four core mod-                             [15] Z. Xu, Y. Zhang, E. Xie, Z. Zhao, Y. Gou, Y. Kwan, K. Wong, Z. Li,
+                                                                                   and H. Zhao, “Drivegpt4: Interpretable end-to-end autonomous driving
+ules—descriptive filtration, vehicle-level diagnostics, envi-                      via large language model. arxiv,” arXiv preprint arXiv:2310.01412,
+ronmental reasoning, and urgency-aware response genera-                            2023.
+tion—jointly enable high-resolution understanding of both                     [16] S. Park, M. Lee, J. Kang, H. Choi, Y. Park, J. Cho, A. Lee, and D. Kim,
+                                                                                   “Vlaad: Vision and language assistant for autonomous driving,” in
+vehicle behavior and environmental context. Experiments                            Proceedings of the IEEE/CVF Winter Conference on Applications of
+on real-world multi-sensor datasets shows that DriveAgent                          Computer Vision, 2024, pp. 980–987.
+not only surpasses baseline prompting approaches in both                      [17] W. Wang, H. Min, X. Wu, Y. Fang, G. Li, and X. Zhao, “A mod-
+                                                                                   ular loop closure detection scheme for autonomous driving-a loosely
+accuracy and stability, but also offers significant advantages                     coupled approach,” IEEE Transactions on Vehicular Technology, 2024.
+in interpretability and modular extensibility. Moreover, the                  [18] A. H. Lang, S. Vora, H. Caesar, L. Zhou, J. Yang, and O. Beijbom,
+proposed three-tier dataset, along with self-reasoning bench-                      “Pointpillars: Fast encoders for object detection from point clouds,”
+                                                                                   in Proceedings of the IEEE/CVF conference on computer vision and
+marks and structured VLM fine-tuning pipeline can further                          pattern recognition, 2019, pp. 12 697–12 705.
+contributed to the broader community. Last but not least,                     [19] M.      AI,     “Llama      3.2:     Advancing        vision     ai    on
+DriveAgent provides a path forward for generalizable, inter-                       edge       and      mobile       devices,”      https://ai.meta.com/blog/
+                                                                                   llama-3-2-connect-2024-vision-edge-mobile-devices/,                 2024,
+pretable, and sensor-aware autonomy. The proposed method                           accessed: 2025-04-12.
+bridges foundational advances in language modeling with                       [20] OpenAI, “Gpt-4o technical report,” 2024, https://openai.com/research/
+real-time demands of perception and control—laying the                             gpt-4o.
+                                                                              [21] P. AI, “Pixtra: A large vision-language model,” 2024, https://pixtra.ai.
+groundwork for future driving systems that are not only                       [22] Anthropic, “Claude 3.7 sonnet model card,” 2024, https://www.
+reactive, but also reflectively aware.                                             anthropic.com/index/claude-3-7-sonnet.
+                                                                              [23] T. B. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhari-
+                            R EFERENCES                                            wal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al., “Lan-
+                                                                                   guage models are few-shot learners,” Advances in neural information
+ [1] J. Deichmann, E. Ebel, K. Heineke, R. Heuss, M. Kellner,                      processing systems, vol. 33, pp. 1877–1901, 2020.
+     and F. Steiner, “Autonomous driving’s future: convenient and             [24] J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. Chi,
+     connected,” McKinsey & Company, 2023. [Online]. Avail-                        Q. V. Le, and D. Zhou, “Chain of thought prompting elicits reasoning
+     able: https://www.mckinsey.com/industries/automotive-and-assembly/            in large language models,” arXiv preprint arXiv:2201.11903, 2022.
+     our-insights/autonomous-drivings-future-convenient-and-connected         [25] A. Madaan, S. Lin, X. Liu, D. Zhou, Q. V. Le, D. Schuurmans, E. H.
+ [2] J. Xie, Z. Chen, R. Zhang, X. Wan, and G. Li, “Large                          Chi, and J. Wei, “Self-refine: Iterative refinement with self-feedback,”
+     multimodal agents: A survey,” 2024. [Online]. Available: https:               arXiv preprint arXiv:2303.17651, 2023.
+     //arxiv.org/abs/2402.15116                                               [26] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang,
+ [3] H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A. Lachaux,                W. Chen et al., “Lora: Low-rank adaptation of large language models.”
+     T. Lacroix, B. Rozière, N. Goyal, E. Hambro, F. Azhar et al., “Llama:        ICLR, vol. 1, no. 2, p. 3, 2022.
+     Open and efficient foundation language models,” arXiv preprint
+     arXiv:2302.13971, 2023.
+ [4] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,”
+     Advances in neural information processing systems, vol. 36, pp.
+     34 892–34 916, 2023.
+ [5] J. Sun et al., “A survey of reasoning with foundation models,”
+     arXiv preprint arXiv:2401.12345, 2024. [Online]. Available: https:
+     //arxiv.org/abs/2401.12345
+ [6] J. Zhang, J. Huang, S. Jin, and S. Lu, “Vision-language models for
+     vision tasks: A survey,” IEEE Transactions on Pattern Analysis and
+     Machine Intelligence, 2024.
+ [7] C. Sima et al., “Drivelm: Driving with graph visual question answer-
+     ing,” in Proceedings of the IEEE/CVF Conference on Computer Vision
+     and Pattern Recognition, 2024.
+ [8] Y.-C. Chiu et al., “V2v-llm: Vehicle-to-vehicle cooperative au-
+     tonomous driving with multi-modal large language models,” arXiv
+     preprint arXiv:2502.12345, 2025.
+ [9] Z. Lan, H. Li, L. Liu, B. Fan, Y. Lv, Y. Ren, and Z. Cui,
+     “Genfollower: Enhancing car-following prediction with large language
+     models,” arXiv preprint arXiv:2407.05611, 2024. [Online]. Available:
+     https://arxiv.org/abs/2407.05611
+

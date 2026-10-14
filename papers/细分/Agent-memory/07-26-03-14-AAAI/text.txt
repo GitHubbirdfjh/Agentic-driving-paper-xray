@@ -1,0 +1,785 @@
+                                            Driving with Regulation: Trustworthy and Interpretable Decision-Making for
+                                                     Autonomous Driving with Retrieval-Augmented Reasoning
+                                                                Tianhui Cai* , Yifan Liu* , Zewei Zhou, Haoxuan Ma, Seth Z. Zhao,
+                                                                         Zhiwen Wu, Xu Han, Zhiyu Huang† , Jiaqi Ma
+                                                                                          University of California, Los Angeles
+
+
+
+                                                                     Abstract                                  beyond technical robustness, AVs must ensure legally com-
+arXiv:2410.04759v3 [cs.AI] 19 Nov 2025
+
+
+
+
+                                                                                                               pliant and interpretable decision-making to enable trustwor-
+                                           Understanding and adhering to traffic regulations is essential
+                                           for autonomous vehicles to ensure safety and trustworthiness.
+                                                                                                               thy, socially-aligned deployment.
+                                           However, traffic regulations are complex, context-dependent,            Despite its importance, understanding traffic rules re-
+                                           and differ between regions, posing a major challenge to             mains a major challenge for AVs. Regulations are complex,
+                                           conventional rule-based decision-making approaches. We              context-dependent, and vary across regions, and small con-
+                                           present an interpretable, regulation-aware decision-making          textual changes can lead to different rule interpretations.
+                                           framework, DriveReg, which enables autonomous vehicles              While prior work encodes traffic rules via hand-crafted
+                                           to understand and adhere to region-specific traffic laws and        logic (Xiao et al. 2021; Manas, Zwicklbauer, and Paschke
+                                           safety guidelines. The framework integrates a Retrieval Aug-        2022; Sun et al. 2022), such approaches lack scalability
+                                           mented Generation (RAG)-based Traffic Regulation Retrieval
+                                                                                                               and adaptability. Moreover, traffic rules span strict legal
+                                           Agent, which retrieves relevant rules from regulatory doc-
+                                           uments based on the current situation, and a Large Lan-             codes and flexible safety guidelines, demanding diverse rea-
+                                           guage Model (LLM)-powered Reasoning Agent that evalu-               soning strategies. This semantic richness exceeds the ca-
+                                           ates actions for legal compliance and safety. Our design em-        pabilities of conventional models, but recent advances in
+                                           phasizes interpretability to enhance transparency and trust-        Large Language Models (LLMs) offer a promising solution
+                                           worthiness. To support systematic evaluation, we introduce          through their ability to interpret natural language and per-
+                                           DriveReg Scenarios Dataset, a comprehensive dataset of              form context-aware reasoning.
+                                           driving scenarios across Boston, Singapore, and Los Ange-               In addition to system development challenges, there is no
+                                           les, with both hypothesized text-based cases and real-world
+                                                                                                               comprehensive benchmark for evaluating traffic rules under-
+                                           driving data, specifically constructed and annotated to eval-
+                                           uate models’ capacity for regulation understanding and rea-         standing in AV decision-making. Datasets like Argoverse 2
+                                           soning. We validate our framework on the DriveReg Scenar-           (Wilson et al. 2023) and nuPlan (Karnchanachari et al. 2024)
+                                           ios Dataset and real-world deployment, demonstrating strong         focus on perception or planning, without annotations linking
+                                           performance and robustness across diverse environments.             actions to specific rules. Existing traffic rule-aware datasets
+                                                                                                               either lack real-world scenarios (Li et al. 2024b; Deng et al.
+                                         Code — https://github.com/Vickycth/driving-with-regulation            2025), or cover only a limited subset of regulations (Sun
+                                         Extended version — https://arxiv.org/abs/2410.04759                   et al. 2022; Deng et al. 2025; Li et al. 2024b).
+                                                                                                                   To address these limitations, we introduce DriveReg,
+                                                              1    Introduction                                an interpretable, traffic regulation-aware decision-making
+                                                                                                               framework for AVs, along with the DriveReg Scenarios
+                                         Autonomous driving technologies have advanced signifi-                Dataset, a benchmark of 500 scenarios spanning Boston,
+                                         cantly in recent years, showing potential to improve safety           Singapore, and Los Angeles. DriveReg integrates a Traf-
+                                         and efficiency (Zhao et al. 2023; Han et al. 2024; Huang              fic Regulation Retrieval (TRR) Agent built upon Retrieval-
+                                         et al. 2025; Huang, Liu, and Lv 2023; Li et al. 2023c, 2022,          Augmented Generation (RAG), with an LLM-based Rea-
+                                         2023a). However, the societal deployment of autonomous                soning Agent. Given a driving scenario, the system retrieves
+                                         vehicles (AVs) depends not only on technical progress in              relevant traffic rules from an extensive collection of regu-
+                                         perception or control, but also on their ability to operate           latory documents applicable to the city and evaluates each
+                                         legally, transparently, and in accordance with human expec-           candidate action on two levels: (1) Compliance, whether it
+                                         tations (Kubica 2022; Administration et al. 2016). Under-             satisfies mandatory legal constraints; and (2) Safety, whether
+                                         standing and complying with traffic regulations is vital for          it also adheres to non-mandatory guidelines. To ensure trans-
+                                         safety and public trust (Mehdipour et al. 2023). Therefore,           parency, DriveReg outputs reasoning steps with references
+                                            * These authors contributed equally.                               to the specific rules used in the decision. The DriveReg Sce-
+                                            †
+                                              Corresponding author. Email: zhiyuh@ucla.edu                     narios Dataset includes 360 hypothesized cases (120 per
+                                         Copyright © 2026, Association for the Advancement of Artificial       city), designed to cover all categories defined in each re-
+                                         Intelligence (www.aaai.org). All rights reserved.                     gion’s regulatory documents, and 140 real-world scenarios
+sourced from the nuScenes dataset and our in-house dataset.       complex contextual (Nakano et al. 2022) is well-suited for
+Each scenario is annotated with the relevant traffic rules        interpreting nuanced traffic regulations with multiple con-
+and labeled at the action level for compliance and safety,        ditions, and its inherent transparency improves decision-
+enabling fine-grained evaluation across different cities. The     making interpretability, crucial for regulatory compliance
+main contributions of our paper are summarized as follows:        and public trust.
+ • We propose DriveReg, an interpretable, LLM-driven
+   decision-making framework for autonomous driving that          2.3   Decision-Making of Autonomous Driving
+   integrates a Traffic Regulation Retrieval Agent and a          Decision-making methods for autonomous driving have
+   Reasoning Agent to assess action-level compliance and          evolved from rule-based (Wang et al. 2021) to learning-
+   safety, enabling regulation-adherent and region-aware          based methods (Kiran et al. 2021), which offer greater adapt-
+   decision-making.                                               ability in dynamic environments. Typical learning-based ap-
+ • We introduce the DriveReg Scenarios Dataset, and a             proaches include imitation learning (Bansal, Krizhevsky,
+   benchmark of 500 driving scenarios (hypothesized and           and Ogale 2018; Tang et al. 2023) and reinforcement learn-
+   real-world) from Boston, Singapore, and Los Ange-              ing (Yuan et al. 2024). More recently, GPT-Driver (Mao
+   les, annotated with retrieved traffic rules and compli-        et al. 2023) has reformulated motion planning as a language
+   ance/safety labels for action-level evaluation.                modeling problem. However, the integration of diverse se-
+ • We demonstrate the effectiveness, robustness, and re-          mantic traffic rules into decision-making using a unified
+   gional generalization of DriveReg through extensive ex-        model remains underexplored.
+   periments on the DriveReg Scenarios Dataset and vali-
+   date the DriveReg framework in real-world deployment                                  3    Method
+   to assess its practical performance.                           3.1   Overview
+                                                                  Our proposed method, as shown in Fig. 1, comprises two
+                   2    Related Work                              main components: a Traffic Rules Retrieval (TRR) Agent
+2.1   Traffic Regulation in Autonomous Driving                    that retrieves relevant traffic rules from regulation docu-
+Various techniques have been applied to integrate traffic reg-    ments using a retrieval query, and a Reasoning Agent that
+ulations into autonomous driving systems. Early approaches        assesses the traffic rule adherence of each action in the pro-
+included rule-based systems (Li et al. 2023b) and finite          posal set based on environment information, ego vehicle’s
+state machines (Bae et al. 2020), which encoded traffic laws      state, and retrieved traffic rules.
+through explicit if-then rules or state transitions. To handle       To support traffic rule retrieval, we perform an environ-
+complex scenarios, more sophisticated methods emerged,            ment analysis using a Vision-Language Model (VLM), de-
+such as using behavior trees (Tadewos, Shamgah, and Ka-           noted as V. Given multi-view images I from the ego vehicle
+rimoddini 2019), and formal methods (Maierhofer et al.            and navigation intent g ∈ {Left, Right, Forward}, V follows
+2020). However, these methods often struggled with the am-        a structured Chain-of-Thought (CoT) reasoning process: it
+biguity and regional variations of real-world traffic rules.      first provides a high-level overview of the driving scene,
+   Recently, Large Language Models (LLMs) have demon-             including road layout and general traffic structure. It then
+strated remarkable capabilities in understanding natural lan-     performs a more focused analysis of critical elements, such
+guage and interpreting complex scenarios (Wen et al. 2024;        as traffic signs, road users, and lane markings, particularly
+Zhang et al. 2024; Sima et al. 2023; Malla et al. 2023; Wei       those relevant to the intended maneuver g. Finally, the VLM
+et al. 2024). LLMs can process traffic rules in a more flexible   generates a concise natural language query that summarizes
+and context-aware manner. For example, LLaDA (Li et al.           the current scenario for retrieving relevant traffic rules. We
+2024a) utilizes LLMs to interpret traffic rules from local        denote this reasoning process as V(I, g) → (c, q), where c
+handbooks, while Agent-Driver (Mao et al. 2024) incorpo-          is the structured description of the scenario and q is the re-
+rates traffic rules into an LLM-based cognitive framework.        trieval query provided to the TRR Agent. An example of this
+However, ensuring LLMs accurately apply relevant traffic          environment analysis output is shown in Fig. 3.
+rules without hallucinations remains a key challenge.                For decision-making, we extract an action proposal set
+                                                                  containing possible actions from the Action Space A based
+2.2   Retrieval-Augmented Generation                              on the Global Planning output g. For simplicity and to main-
+Retrieval-Augmented Generation (RAG) (Lewis et al. 2021)          tain the focus of this work on traffic rule adherence, the Ac-
+addresses LLM hallucinations by combining neural retrieval        tion Space A only consists of a predefined set of actions:
+with sequence-to-sequence generation based on relevant            turning right, turning left, going forward (with current speed,
+documents. Recent studies (Borgeaud et al. 2022; Nakano           acceleration, or deceleration), changing lane to the left, and
+et al. 2022) have demonstrated significant improvements in        changing lane to the right. The candidate set Acand is ob-
+LLM accuracy and factual correctness across domains. For          tained by selecting actions from A that align with the cur-
+autonomous driving systems, RAG’s dynamic retrieval capa-         rent global intent g. For instance, if g = Left, then Acand =
+bility (Lewis et al. 2021) enables real-time access to region-    {turning left with current speed, turning left with an accel-
+specific traffic rules, while its enhanced factual grounding      eration, turning left with a deceleration}.
+(Borgeaud et al. 2022) reduces the risk of fabricating or mis-       Given the retrieval query q, the Traffic Rules Retrieval
+applying regulations. Additionally, RAG’s ability to handle       Agent (TRR) fetches a set of relevant traffic rules Rq from
+Figure 1: Overview of Driving with Regulation (DriveReg) Framework. The framework consists of two main components:
+the Traffic Rules Retrieval Agent and the Reasoning Agent. The Traffic Rules Retrieval Agent retrieves relevant rules from traf-
+fic regulation documents based on the generated traffic rule retrieval query. The Reasoning Agent then identifies the applicable
+rules from the retrieved set and performs compliance and safety checks based on those applicable rules.
+
+
+a collection of traffic regulatory documents D. The Traf-          vector similarity:
+fic Reasoning Agent (TRA) evaluates each candidate action                                                       
+                                                                                                             |D|
+a ∈ Acand for both compliance and safety, leveraging the                       Pqcand = TopKFAISS vq , {vpi }i=1 .             (3)
+structured scene description c and the set of retrieved traffic
+rules Rq , obtained by querying the Traffic Rules Retrieval          We retain only paragraphs with similarity scores exceed-
+Agent with q. Formally, the agents perform:                        ing a threshold τp :
+      TRR(q; D) → Rq , TRA(a, c, Rq ) → (lc , ls ),        (1)               Pq = {pi ∈ Pqcand | sim(vq , vpi ) ≥ τp }.        (4)
+where lc , ls ∈ {0, 1} are binary outputs for compliance and
+safety, respectively, with 1 indicating compliant or safe, and        To address the sparsity and granularity issues that arise
+0 otherwise.                                                       from long-form regulatory text, we further refine the re-
+   The final decision of the system is the set of actions that     trieval by segmenting each paragraph in Pq into individual
+are both compliant and safe:                                       sentences and performing sentence-level retrieval. Specifi-
+                                                                   cally, each paragraph p ∈ Pq is segmented into a set of
+       A∗ = {a ∈ Acand | lc (a) = 1 ∧ ls (a) = 1} .        (2)     sentences sj , each encoded as a sentence-level embedding
+                                                                   vsj = E ′ (sj ), where E ′ is a lighter-weight sentence encoder.
+3.2   Traffic Rules Retrieval Agent                                A second FAISS-based similarity search is then conducted
+To enhance the model’s understanding of local traffic rules        to identify the most relevant sentences to vq′ = E ′ (q):
+and norms, and to fully consider all the related rules from
+                                                                                                               |S|
+available sources, we developed the Traffic Regulation Re-                       Rq = TopKFAISS (v′ q , {vsj }j=1 ),          (5)
+trieval Agent, which employs a two-level retrieval strategy                     S
+as illustrated in Fig. 2.                                          where S = p∈Pq Sentences(p).
+   Since different regions have varying sources of traffic            Our two-level retrieval strategy combines paragraph-level
+rules, we use the United States as an example to illustrate the    retrieval for broad coverage with sentence-level refinement
+comprehensive collection of regulatory documents D used            for precision, yielding concise, context-aligned rule snippets
+by the TRR Agent, including state-level traffic laws, official     while improving efficiency and semantic relevance. By an-
+state driving manuals (which also include safety guidelines),      choring the Reasoning Agent in retrieved regulations, the
+city-level regulations, relevant court cases that establish le-    TRR Agent helps mitigate hallucinations of LLMs and en-
+gal precedent, and widely accepted traffic norms.                  hance decision reliability and transparency.
+   During the retrieval process, we first encode both the traf-
+fic rule retrieval query q and the regulatory documents D          3.3   Reasoning Agent
+into dense vector representations using a sentence embed-          The Reasoning Agent is responsible for determining
+ding model E(·). Each paragraph pi ∈ D is embedded as              whether each action in the proposal set complies with traffic
+vpi = E(pi ), and the query is embedded as vq = E(q).              rules, leveraging an LLM (e.g., GPT-4o) with CoT prompt-
+We utilize FAISS (Johnson, Douze, and Jégou 2017) to effi-        ing and few-shot learning. The Reasoning Agent receives
+ciently retrieve a top-k candidate set of paragraphs based on      three key inputs: (1) the current environment information
+Figure 2: Illustration of the proposed Traffic Regulation Retrieval (TRR) Agent. The retrieval results are obtained through
+the similarity score between scene description and well-curated regulation documents with a pre-defined relevance metric.
+
+
+from the environment analysis c, (2) the ego vehicle’s ac-            Dataset                        # Rules # Scenarios Real-World Multi-Region
+tion proposal set Acand , and (3) a set of retrieved traffic rules    VioHawk (Li et al. 2024b)        27        42         ×            ×
+from TRR Agent Rq .                                                   TARGET (Deng et al. 2025)        54       284         ×            ×
+   In the reasoning pipeline, the agent first filters Rq to iden-     LawBreaker (Sun et al. 2022)     24       173         ×            ×
+tify rules relevant to the current scene and the ego vehicle’s        DriveReg                        562       500         ✓            ✓
+intended maneuver. The filtered rules are categorized into
+two types: mandatory rules, which must be satisfied to en-           Table 1: Comparison of existing traffic rule-aware driving
+sure legal compliance, and safety guidelines, which repre-           datasets. DriveReg provides the most comprehensive cover-
+sent best practices not legally binding but recommended for          age with real-world data, multi-region scenarios, and fine-
+safe operation.                                                      grained compliance and safety labels.
+   For each action a ∈ Acand , the Reasoning Agent first out-
+puts a compliance indicator lc = 1 if the action does not
+violate any relevant mandatory rule in Rq , and lc = 0 other-        we preprocess comprehensive traffic regulation sources, and
+wise. It then produces a safety indicator ls = 1 if the action       each scenario is annotated with the relevant traffic rules and
+satisfies both the mandatory rules and any retrieved safety          the two-level decision labels indicating whether an action is
+guidelines, and ls = 0 if any of these are violated. Along-          (1) legally compliant and (2) safe, based on the applicable
+side each binary indicator, the Reasoning Agent provides a           regulations. An example is shown in Fig. 4, with additional
+concise explanation referencing the specific rules involved,         cases provided in the extended version, and comparison with
+clarifying why the action is considered compliant or non-            existing traffic rule-aware datasets is shown in Table 1.
+compliant, safe or unsafe. This interpretability is critical for
+                                                                     Traffic Regulation Sources. We use extensive traffic regu-
+transparency in decision-making. The framework then se-
+                                                                     lation sources for the three cities included in the DriveReg
+lects the actions that are marked as both compliant and safe
+                                                                     Scenarios Dataset, covering city ordinances, state or national
+as the final output for decision-making. An example output
+                                                                     laws, official driver manuals, and selected legal cases or
+of the Reasoning Agent is shown in Fig. 3.
+                                                                     norms. For the Boston region, this includes the Boston City
+                                                                     Traffic Rules and Regulations, the Massachusetts General
+3.4   DriveReg Scenarios Dataset                                     Laws, the Massachusetts Driver’s Manual, and twelve se-
+We introduce the DriveReg Scenarios Dataset, the first               lected state court cases on traffic violations. We also include
+dataset designed to evaluate models on understanding and             ten representative U.S. driving norms that reflect lawful be-
+reasoning over traffic regulations in diverse driving scenar-        havior without explicit violations. More details and source
+ios. It contains 360 hypothesized text-based scenarios and           descriptions for Singapore and Los Angeles are provided in
+140 real-world cases with front-camera images drawn from             the extended version.
+the nuScenes dataset and data collected during our deploy-           Scenario Collection and Annotation Process. 1) Hypoth-
+ment testing. Hypothesized scenarios offer greater diver-            esized Scenarios. We construct 120 hypothesized scenarios
+sity, while real-world data evaluates the framework’s prac-          per city, including 100 normal and 20 hard cases. Normal
+tical performance in real driving conditions. For each city,         scenarios are designed to cover all regulatory categories and
+         Figure 3: Pipeline of processing the selected scenario. The correct action is labeled in green background.
+
+
+                                                                   Category             Count    Category                     Count
+
+                                                                   Right-of-Way Rules       20   Special Driving Situations    11
+                                                                   Intersections            15   Rules for Passing              8
+                                                                   Pedestrians              15   Traffic Signs & Signals        8
+                                                                   Pavement Markings        10   Roadway Construction           5
+                                                                   Service Vehicles         8    Hard Cases                    20
+
+
+Figure 4: Example from the DriveReg Scenarios Dataset            Table 2: Distribution of Hypothesized Scenarios in Boston.
+showing scenario descriptions, relevant traffic rules, and
+action-level compliance/safety annotations.
+                                                                 fluenced by traffic rules. Similarly, we sampled from our de-
+                                                                 ployment logs in Los Angeles under comparable criteria.
+document sections, reflecting common traffic situations such
+as right-of-way decisions and pedestrian interactions. Each                             4    Experiments
+involves 1-2 straightforward rules to evaluate basic regu-
+lation understanding. Hard scenarios include cases with          4.1   Experimental Setup
+region-specific regulations and complex conditions involv-       Metrics. We evaluate each model’s decision-making by as-
+ing three or more applicable rules, such as school-bus han-      sessing its ability to determine the compliance and safety
+dling at intersections with malfunctioning signals.              of candidate actions in each scenario. For each action a ∈
+   The distribution of hypothesized scenarios for Boston         Acand , the model outputs a predicted compliance indicator
+across regulatory categories is shown in Table 2, demon-         lc ∈ {0, 1} and safety indicator ls ∈ {0, 1}. Compliance ac-
+strating comprehensive coverage across key regulatory do-        curacy (Compl.) and safety accuracy (Safety) are computed
+mains. Similar distributions were constructed for Singapore      as the percentage of actions for which the predicted compli-
+and Los Angeles and are provided in the extended version.        ance and safety indicators match the ground truth labels.
+2) Real-World Scenarios. To evaluate models’ performance         Baseline Models. We compare DriveReg with several state-
+in real-world driving contexts, we selected and annotated        of-the-art LLMs and VLMs (Liu et al. 2024; Guo et al. 2025;
+140 scenarios based on two sources: (1) nuScenes dataset         Dubey et al. 2024; Bai et al. 2023; Hurst et al. 2024). These
+(Caesar et al. 2020), which captures urban driving scenes        baselines do not incorporate external traffic regulations but
+in Boston and Singapore, and (2) an in-house dataset col-        may reflect some rule understanding from pretraining. Their
+lected in Los Angeles. Although nuScenes is not originally       performance without explicit regulation input is denoted as
+designed for traffic regulation analysis and lacks rule-level    Compl.(-R) and Safety(-R). To assess the impact of our TRR
+annotations, we manually reviewed front-camera images to         module, we also evaluate these models with retrieved traffic
+identify samples where vehicle behavior is meaningfully in-      rules of TRR, reported as Compl.(+R) and Safety(+R).
+Figure 5: Inference results from the DriveReg (Real-World) Scenarios Dataset. Actions in green boxes represent the final
+decision-making outputs, which are both compliant and safe. Results demonstrate that our framework successfully retrieves
+relevant traffic rules and interprets and assesses actions based on those rules. The correct action is labeled in a green background.
+(Due to space constraints, some actions and reasoning details are omitted.)
+
+
+Implementation Details. We adopt “text-embedding-ada-                 4o on real-world scenarios across the three cities. Our model
+002” as E and “paraphrase-MiniLM-L6-v2” as E ′ . τp is set            consistently outperforms the baseline in both compliance
+to 0.28 and K = 5 for FAISS similarity search. Experiments            and safety metrics. Notably, GPT-4o achieves higher safety
+are conducted over 5 random seeds. Additional settings are            than compliance scores, suggesting VLMs capture gen-
+included in the extended version.                                     eral safety patterns (e.g., avoiding pedestrians or maintain-
+                                                                      ing distance) better than precise legal constraints. In con-
+4.2   Main Results                                                    trast, compliance requires accurate interpretation of traf-
+                                                                      fic laws, which our framework addresses through retrieval-
+Hypothesized Scenarios Results. We evaluated our frame-               augmented reasoning. We also observe that some failure
+work’s performance on DriveReg hypothesized scenarios,                cases come from perception issues, such as misidentifying
+with results presented in Table 3. Regulations retrieved via          solid lane markings as broken, highlighting the importance
+TRR improve performance across most models, particularly              of fine-grained visual understanding in urban environments.
+in hard cases, underscoring the effectiveness of our TRR
+agent. We observe that the improvement is notably evident                Examples of output from our framework are shown in
+in scenarios involving region-specific traffic laws, such as          Fig. 5. In (a), we present a scenario in Boston where the
+Boston’s requirement that drivers must remain in the right            vehicle approaches a crosswalk. Here, the framework cor-
+lane unless passing or preparing for a left turn, which are           rectly identifies that accelerating forward is “compliant but
+often overlooked by pretrained models. These results reveal           not safe”, which aligns with the common-sense guideline to
+the limitations of relying solely on general world knowledge          use caution when approaching crosswalks, even when they
+encoded in foundation models, highlighting the need for ex-           are clear. In (b), we demonstrate the framework’s ability to
+plicit rule grounding in decision-making systems.                     handle region-specific regulations: The ego vehicle attempts
+   The DriveReg framework, incorporating the TRR Agent                to turn right at a red light, an action that is illegal in Sin-
+and rule-aware Reasoning Agent, achieves the highest over-            gapore but often permitted in the U.S. Our model correctly
+all performance. With access to regulatory input, DriveReg            outputs “non-compliant”, aligning with local traffic regula-
+reaches 98% compliance and 98% safety accuracy in normal              tions. These examples highlight the framework’s capacity
+scenarios (F1: 97.6%, p-value: 4.2e-03), and 99% compli-              to reason about both safety and region-specific laws. Ad-
+ance and 94% safety accuracy in hard scenarios (F1: 94.6%,            ditional results and video demonstrations are included in the
+p-value: 3.5e-03). In particular, for hard cases, DriveReg            extended version.
+improves compliance accuracy from 86%, as obtained by                 Retrieval Method Comparison. We compare our TRR ap-
+the underlying GPT-4o model, to 99% when enhanced with                proach against traditional information retrieval methods on
+TRR and TRA. These results demonstrate that TRA, uti-                 20 Boston-Hard scenarios using top-5 retrieval: Best Match
+lizing CoT reasoning, effectively interprets and applies re-          25 (BM25) (Robertson, Zaragoza et al. 2009), Query Likeli-
+trieved traffic regulations to guide decision-making in sce-          hood Model (QLM) (Ponte and Croft 2017), and the Traffic
+narios requiring precise legal understanding.                         Rule Extractor (TRE) in LLaDa (Li et al. 2024a). Accuracy
+Real-World Scenarios Results. Table 4 compares the per-               is measured as the successful extraction of all ground truth
+formance of our DriveReg framework to the baseline GPT-               regulations. As shown in Table 5, our semantic similarity-
+                                                             Hypothesized Scenarios - Normal                                    Hypothesized Scenarios - Hard
+      Method
+                                            Compl.(-R)        Compl.(+R)       Safety(-R)       Safety(+R)     Compl.(-R)        Compl.(-R)      Safety(-R)      Safety(+R)
+
+      DeepSeek-V3 (Liu et al. 2024)       0.87 ± 0.02         0.92 ± 0.03      0.90 ± 0.02     0.92 ± 0.03    0.82 ± 0.02       0.92 ± 0.04      0.84 ± 0.03    0.84 ± 0.03
+      DeepSeek-R1 (Guo et al. 2025)       0.92 ± 0.02         0.93 ± 0.02      0.93 ± 0.04     0.95 ± 0.01    0.85 ± 0.01       0.96 ± 0.03      0.86 ± 0.05    0.90 ± 0.03
+      Llama3.3-70b (Dubey et al. 2024)    0.90 ± 0.04         0.91 ± 0.02      0.93 ± 0.02     0.94 ± 0.04    0.81 ± 0.03       0.93 ± 0.02      0.86 ± 0.03    0.90 ± 0.03
+      Qwen2.5-72b (Bai et al. 2023)       0.93 ± 0.02         0.94 ± 0.01      0.92 ± 0.04     0.95 ± 0.02    0.88 ± 0.02       0.95 ± 0.04      0.85 ± 0.04    0.86 ± 0.03
+      GPT-4o (Hurst et al. 2024)          0.91 ± 0.02         0.93 ± 0.03      0.94 ± 0.01     0.97 ± 0.02    0.86 ± 0.03       0.95 ± 0.01      0.88 ± 0.02    0.90 ± 0.02
+      DriveReg (Ours)                          –               0.98 ± 0.01          –           0.98 ± 0.01        –             0.99 ± 0.02          –          0.94 ± 0.02
+
+
+Table 3: Average compliance and safety accuracy across three cities (Boston, Los Angeles, and Singapore) under DriveReg-
+Hypothesized driving scenarios. (-R) indicates baseline models relying solely on pretrained knowledge, while (+R) indicates
+that models provided with relevant traffic regulations retrieved by the TRR agent.
+
+
+                          Boston                Los Angeles             Singapore                  Method                              High-Level Comp.     High-Level Safety
+ Method
+                       Comp.   Safety         Comp.    Safety         Comp.   Safety
+                                                                                                   Agent-Driver (Mao et al. 2024)              0.91                0.86
+ GPT-4o                  0.86      0.91        0.91          0.93      0.84      0.89              DriveReg (Ours)                             0.98                0.97
+ DriveReg (Ours)         0.94      0.92        0.95          0.93      0.91      0.93
+                                                                                                Table 6: High-level decision-making evaluation on the
+Table 4: Comparison with GPT-4o on compliance and safety                                        Boston real-world data split.
+accuracy for real-world scenarios.
+                                                                                                                  Lidar
+       Method      Best Match 25     QLM        LLaDa TRE†          TRR (Ours)
+                                                                                                                     Front Camera
+      Accuracy          0.60         0.50             0.55              1.00
+
+
+Table 5: Traffic regulation retrieval accuracy comparison on
+20 scenarios using top-5 retrieval. † : LLaDA TRE is repro-                                        Radar
+duced following the original paper (Li et al. 2024a).
+                                                                                                                   Radar
+                                                                                                  (a)                                    (b)
+
+based TRR Agent achieves superior retrieval accuracy, sig-                                      Figure 6: (a) The vehicle used for deployment. (b) Inference
+nificantly outperforming keyword-based search methods.                                          time distribution of the Reasoning Agent when additional
+Comparison with Agent-Driver. We further evaluate                                               reasoning steps are omitted for real-time efficiency.
+DriveReg against Agent-Driver (Mao et al. 2024). Since
+Agent-Driver outputs trajectories without explicit compli-
+ance or safety indicators, we assess its reasoning perfor-                                         In addition to decision-making accuracy, we assess the in-
+mance by comparing its high-level plan outputs against a                                        ference time of DriveReg to evaluate real-time feasibility as
+randomly selected action from DriveReg’s compliant-safe                                         shown in Fig. 6 (b). Using GPT-4o, detailed reasoning out-
+action set A∗ . As shown in Table 6, DriveReg outperforms                                       puts average 2 seconds per decision, while shorter outputs
+Agent-Driver in both compliance and safety, indicating a                                        with only compliance/safety labels and rule numbers reduce
+stronger adherence to traffic rules.                                                            latency to around 1 second, which is suitable for high-level
+                                                                                                decision-making in most driving scenarios.
+4.3      Real-World Testing
+To validate our framework in a real-world setting, we con-                                                                  5       Conclusion
+ducted deployment testing on an autonomous vehicle, as                                          We introduce an LLM-driven, traffic regulation-aware
+shown in Fig. 6 (a), in Los Angeles. For safety reasons,                                        decision-making framework for autonomous driving that in-
+a human driver operated the vehicle while our system ran                                        tegrates a Traffic Rules Retrieval Agent and a Reasoning
+in parallel, fully functional but without actual control over                                   Agent. We also introduce a traffic rules scenario dataset to
+the vehicle. This setup allowed us to evaluate the system’s                                     evaluate models on their ability to understand and reason
+decision-making capabilities in real-time without compro-                                       over traffic regulations. Experiments conducted on both hy-
+mising safety. We tested the system in urban environments                                       pothesized and real-world scenarios demonstrate the strong
+involving dynamic traffic signals, intersections, and inter-                                    performance of our approach and its adaptability across dif-
+actions with vulnerable road users. The framework reliably                                      ferent regions. The framework shows significant potential
+retrieved relevant rules and produced safe, compliant deci-                                     to enhance the interpretability and trustworthiness of au-
+sions. Fig. 5 shows two examples: (c) a pedestrian crossing                                     tonomous driving systems. Future work will focus on ex-
+with a green light, and (d) a “No Turn on Red” intersection,                                    tending the evaluation to a wider range of regions and refin-
+both handled correctly by the system.                                                           ing the framework for broader real-world applicability.
+                   Acknowledgment                                 Proceedings of the IEEE/CVF International Conference on
+This work was supported by the U.S. Department of Trans-          Computer Vision, 3903–3913.
+portation Federal Highway Administration (FHWA) Center            Huang, Z.; Weng, X.; Igl, M.; Chen, Y.; Cao, Y.; Ivanovic,
+of Excellence on New Mobility and Automated Vehicles.             B.; Pavone, M.; and Lv, C. 2025. Gen-drive: Enhancing
+                                                                  diffusion generative driving policies with reward modeling
+                        References                                and reinforcement learning fine-tuning. In 2025 IEEE Inter-
+                                                                  national Conference on Robotics and Automation (ICRA),
+Administration, N. H. T. S.; et al. 2016. Federal automated
+                                                                  3445–3451. IEEE.
+vehicles policy: Accelerating the next revolution in roadway
+safety. US Department of Transportation.                          Hurst, A.; Lerer, A.; Goucher, A. P.; Perelman, A.; Ramesh,
+                                                                  A.; Clark, A.; Ostrow, A.; Welihinda, A.; Hayes, A.; Rad-
+Bae, S.; Joo, S.; Pyo, J.; Yoon, J.-S.; Lee, K.; and Kuc, T.-
+                                                                  ford, A.; et al. 2024. Gpt-4o system card. arXiv preprint
+Y. 2020. Finite State Machine based Vehicle System for
+                                                                  arXiv:2410.21276.
+Autonomous Driving in Urban Environments. 2020 20th In-
+ternational Conference on Control, Automation and Systems         Johnson, J.; Douze, M.; and Jégou, H. 2017. Billion-
+(ICCAS), 1181–1186.                                               scale similarity search with GPUs.             arXiv preprint
+                                                                  arXiv:1702.08734.
+Bai, J.; Bai, S.; Chu, Y.; Cui, Z.; Dang, K.; Deng, X.; Fan,
+Y.; Ge, W.; Han, Y.; Huang, F.; et al. 2023. Qwen technical       Karnchanachari, N.; Geromichalos, D.; Tan, K. S.; Li, N.;
+report. arXiv preprint arXiv:2309.16609.                          Eriksen, C.; Yaghoubi, S.; Mehdipour, N.; Bernasconi, G.;
+                                                                  Fong, W. K.; Guo, Y.; et al. 2024. Towards learning-based
+Bansal, M.; Krizhevsky, A.; and Ogale, A. 2018. Chauffeur-
+                                                                  planning: The nuPlan benchmark for real-world autonomous
+net: Learning to drive by imitating the best and synthesizing
+                                                                  driving. In 2024 IEEE International Conference on Robotics
+the worst. arXiv preprint arXiv:1812.03079.
+                                                                  and Automation (ICRA), 629–636. IEEE.
+Borgeaud, S.; Mensch, A.; Hoffmann, J.; Cai, T.; Ruther-
+                                                                  Kiran, B. R.; Sobh, I.; Talpaert, V.; Mannion, P.; Al Sal-
+ford, E.; Millican, K.; Van Den Driessche, G. B.; Lespiau,
+                                                                  lab, A. A.; Yogamani, S.; and Pérez, P. 2021. Deep rein-
+J.-B.; Damoc, B.; Clark, A.; De Las Casas, D.; Guy, A.;
+                                                                  forcement learning for autonomous driving: A survey. IEEE
+Menick, J.; Ring, R.; Hennigan, T.; Huang, S.; Maggiore, L.;
+                                                                  Transactions on Intelligent Transportation Systems, 23(6):
+Jones, C.; Cassirer, A.; Brock, A.; Paganini, M.; Irving, G.;
+                                                                  4909–4926.
+Vinyals, O.; Osindero, S.; Simonyan, K.; Rae, J.; Elsen, E.;
+and Sifre, L. 2022. Improving Language Models by Retriev-         Kubica, M. L. 2022. Autonomous Vehicles and Liability
+ing from Trillions of Tokens. In Chaudhuri, K.; Jegelka, S.;      Law. The American Journal of Comparative Law, 70: i39–
+Song, L.; Szepesvari, C.; Niu, G.; and Sabato, S., eds., Pro-     i69.
+ceedings of the 39th International Conference on Machine          Lewis, P.; Perez, E.; Piktus, A.; Petroni, F.; Karpukhin,
+Learning, volume 162 of Proceedings of Machine Learning           V.; Goyal, N.; Küttler, H.; Lewis, M.; tau Yih, W.;
+Research, 2206–2240. PMLR.                                        Rocktäschel, T.; Riedel, S.; and Kiela, D. 2021. Retrieval-
+Caesar, H.; Bankiti, V.; Lang, A. H.; Vora, S.; Liong, V. E.;     Augmented Generation for Knowledge-Intensive NLP
+Xu, Q.; Krishnan, A.; Pan, Y.; Baldan, G.; and Beijbom, O.        Tasks. arXiv:2005.11401.
+2020. nuscenes: A multimodal dataset for autonomous driv-         Li, B.; Wang, Y.; Mao, J.; Ivanovic, B.; Veer, S.; Leung, K.;
+ing. In Proceedings of the IEEE/CVF conference on com-            and Pavone, M. 2024a. Driving Everywhere with Large Lan-
+puter vision and pattern recognition, 11621–11631.                guage Model Policy Adaptation. arXiv:2402.05932.
+Deng, Y.; Tu, Z.; Yao, J.; Zhang, M.; et al. 2025. TARGET:        Li, Q.; Peng, Z.; Feng, L.; Liu, Z.; Duan, C.; Mo, W.; and
+LLM-Guided Generation of Traffic-Rule Test Scenarios for          Zhou, B. 2023a. ScenarioNet: Open-Source Platform for
+Autonomous Vehicles. IEEE Transactions on Software En-            Large-Scale Traffic Scenario Simulation and Modeling. Ad-
+gineering. Early Access.                                          vances in Neural Information Processing Systems.
+Dubey, A.; Jauhri, A.; Pandey, A.; Kadian, A.; Al-Dahle, A.;      Li, Q.; Peng, Z.; Feng, L.; Zhang, Q.; Xue, Z.; and Zhou, B.
+Letman, A.; Mathur, A.; Schelten, A.; Yang, A.; Fan, A.;          2022. Metadrive: Composing diverse driving scenarios for
+et al. 2024. The llama 3 herd of models. arXiv e-prints,          generalizable reinforcement learning. IEEE Transactions on
+arXiv–2407.                                                       Pattern Analysis and Machine Intelligence.
+Guo, D.; Yang, D.; Zhang, H.; Song, J.; Zhang, R.; Xu, R.;        Li, X.; Bai, Y.; Cai, P.; Wen, L.; Fu, D.; Zhang, B.; Yang, X.;
+Zhu, Q.; Ma, S.; Wang, P.; Bi, X.; et al. 2025. Deepseek-r1:      Cai, X.; Ma, T.; Guo, J.; Gao, X.; Dou, M.; Li, Y.; Shi, B.;
+Incentivizing reasoning capability in llms via reinforcement      Liu, Y.; He, L.; and Qiao, Y. 2023b. Towards Knowledge-
+learning. arXiv preprint arXiv:2501.12948.                        driven Autonomous Driving. arXiv:2312.04316.
+Han, X.; Meng, Z.; Xia, X.; Liao, X.; He, Y.; Zheng, Z.;          Li, Y.; Zhao, S. Z.; Xu, C.; Tang, C.; Li, C.; Ding,
+Wang, Y.; Xiang, H.; Zhou, Z.; Gao, L.; et al. 2024. Foun-        M.; Tomizuka, M.; and Zhan, W. 2023c. Pre-training
+dation intelligence for smart infrastructure services in trans-   on Synthetic Driving Data for Trajectory Prediction.
+portation 5.0. IEEE Transactions on Intelligent Vehicles.         arXiv:2309.10121.
+Huang, Z.; Liu, H.; and Lv, C. 2023. Gameformer: Game-            Li, Z.; Dai, J.; Huang, Z.; You, N.; Zhang, Y.; and Yang,
+theoretic modeling and learning of transformer-based inter-       M. 2024b. VioHawk: Detecting Traffic Violations of Au-
+active prediction and planning for autonomous driving. In         tonomous Driving Systems through Criticality-Guided Sim-
+ulation Testing. In Proceedings of the ACM SIGSOFT Inter-         on Intelligent Transportation Systems (ITSC), 4806–4812.
+national Symposium on Software Testing and Analysis (IS-          IEEE.
+STA).                                                             Wang, X.; Qi, X.; Wang, P.; and Yang, J. 2021. Decision
+Liu, A.; Feng, B.; Xue, B.; Wang, B.; Wu, B.; Lu, C.; Zhao,       making framework for autonomous vehicles driving behav-
+C.; Deng, C.; Zhang, C.; Ruan, C.; et al. 2024. Deepseek-v3       ior in complex scenarios via hierarchical state machine. Au-
+technical report. arXiv preprint arXiv:2412.19437.                tonomous Intelligent Systems, 1: 1–12.
+Maierhofer, S.; Rettinger, A.-K.; Mayer, E. C.; and Althoff,      Wei, Y.; Wang, Z.; Lu, Y.; Xu, C.; Liu, C.; Zhao, H.; Chen,
+M. 2020. Formalization of Interstate Traffic Rules in Tem-        S.; and Wang, Y. 2024. Editable Scene Simulation for Au-
+poral Logic. In 2020 IEEE Intelligent Vehicles Symposium          tonomous Driving via Collaborative LLM-Agents. In Pro-
+(IV), 752–759.                                                    ceedings of the IEEE/CVF Conference on Computer Vision
+Malla, S.; Choi, C.; Dwivedi, I.; Choi, J. H.; and Li, J. 2023.   and Pattern Recognition (CVPR).
+DRAMA: Joint Risk Localization and Captioning in Driv-            Wen, C.; Liu, Y.; Bethala, G. C. R.; Peng, Z.; Lin, H.; Liu,
+ing. In Proceedings of the IEEE/CVF Winter Conference on          Y.-S.; and Fang, Y. 2024. Enhancing Socially-Aware Robot
+Applications of Computer Vision, 1043–1052.                       Navigation through Bidirectional Natural Language Conver-
+Manas, K.; Zwicklbauer, S.; and Paschke, A. 2022. Ro-             sation. arXiv:2409.04965.
+bust Traffic Rules and Knowledge Representation for Con-          Wilson, B.; Qi, W.; Agarwal, T.; Lambert, J.; Singh, J.;
+flict Resolution in Autonomous Driving. In RuleML+ RR             Khandelwal, S.; Pan, B.; Kumar, R.; Hartnett, A.; Pontes,
+(Companion).                                                      J. K.; et al. 2023. Argoverse 2: Next generation datasets
+Mao, J.; Qian, Y.; Zhao, H.; and Wang, Y. 2023. Gpt-              for self-driving perception and forecasting. arXiv preprint
+driver: Learning to drive with gpt.            arXiv preprint     arXiv:2301.00493.
+arXiv:2310.01415.                                                 Xiao, W.; Mehdipour, N.; Collin, A.; Bin-Nun, A. Y.; Fraz-
+Mao, J.; Ye, J.; Qian, Y.; Pavone, M.; and Wang, Y.               zoli, E.; Tebbens, R. D.; and Belta, C. 2021. Rule-based
+2024.     A Language Agent for Autonomous Driving.                optimal control for autonomous driving. In Proceedings
+arXiv:2311.10813.                                                 of the ACM/IEEE 12th International Conference on Cyber-
+Mehdipour, N.; Althoff, M.; Tebbens, R. D.; and Belta, C.         Physical Systems, 143–154.
+2023. Formal methods to comply with rules of the road in          Yuan, K.; Huang, Y.; Yang, S.; Zhou, Z.; Wang, Y.; Cao,
+autonomous driving: State of the art and grand challenges.        D.; and Chen, H. 2024. Evolutionary decision-making and
+Automatica, 152: 110692.                                          planning for autonomous driving based on safe and rational
+Nakano, R.; Hilton, J.; Balaji, S.; Wu, J.; Ouyang, L.;           exploration and exploitation. Engineering, 33: 108–120.
+Kim, C.; Hesse, C.; Jain, S.; Kosaraju, V.; Saunders, W.;         Zhang, M.; Jin, D.; Gu, C.; Hong, F.; Cai, Z.; Huang, J.;
+Jiang, X.; Cobbe, K.; Eloundou, T.; Krueger, G.; Button, K.;      Zhang, C.; Guo, X.; Yang, L.; He, Y.; et al. 2024. Large mo-
+Knight, M.; Chess, B.; and Schulman, J. 2022. WebGPT:             tion model for unified multi-modal motion generation. arXiv
+Browser-assisted question-answering with human feedback.          preprint arXiv:2404.01284.
+arXiv:2112.09332.
+                                                                  Zhao, J.; Zhao, W.; Deng, B.; Wang, Z.; Zhang, F.; Zheng,
+Ponte, J. M.; and Croft, W. B. 2017. A language modeling          W.; Cao, W.; Nan, J.; Lian, Y.; and Burke, A. F. 2023. Au-
+approach to information retrieval. In ACM SIGIR Forum,            tonomous driving system: A comprehensive survey. Expert
+volume 51, 202–208. ACM New York, NY, USA.                        Systems with Applications, 122836.
+Robertson, S.; Zaragoza, H.; et al. 2009. The probabilistic
+relevance framework: BM25 and beyond. Foundations and
+Trends® in Information Retrieval, 3(4): 333–389.
+Sima, C.; Renz, K.; Chitta, K.; Chen, L.; Zhang, H.; Xie,
+C.; Luo, P.; Geiger, A.; and Li, H. 2023. DriveLM: Driv-
+ing with Graph Visual Question Answering. arXiv preprint
+arXiv:2312.14150.
+Sun, Y.; Poskitt, C. M.; Sun, J.; Chen, Y.; and Yang, Z. 2022.
+LawBreaker: An approach for specifying traffic laws and
+fuzzing autonomous vehicles. In Proceedings of the 37th
+IEEE/ACM International Conference on Automated Soft-
+ware Engineering, 1–12.
+Tadewos, T. G.; Shamgah, L.; and Karimoddini, A. 2019.
+Automatic Safe Behaviour Tree Synthesis for Autonomous
+Agents. In 2019 IEEE 58th Conference on Decision and
+Control (CDC), 2776–2781.
+Tang, X.; Yuan, K.; Li, S.; Yang, S.; Zhou, Z.; and Huang, Y.
+2023. Personalized Decision-Making and Control for Au-
+tomated Vehicles Based on Generative Adversarial Imita-
+tion Learning. In 2023 IEEE 26th International Conference
+              Driving with Regulation: Trustworthy and Interpretable Decision-Making for
+                       Autonomous Driving with Retrieval-Augmented Reasoning
+                                        Supplementary Material
+
+      A    DriveReg Scenario Dataset Details                        State-Level Manual: California Driver’s Manual (Hand-
+This section presents detailed descriptions of the regula-        book) - Section 6 (Navigating the Roads), Section 7 (Laws
+tory sources used in constructing the DriveReg Scenario           and Rules of the Road), Section 8 (Safe Driving), Section 12
+Dataset across Boston (MA), Los Angeles (CA), and Singa-          (Driver Safety)
+pore. Our dataset includes diverse types of legal documents         Court Cases: Ten selected California traffic violation
+and traffic-related materials to support comprehensive and        cases
+region-specific decision-making evaluation.                         Traffic Norms: Ten selected US driving norms without
+                                                                  regulation violations
+A.1    Types of Traffic Regulation Sources
+The regulatory documents used in DriveReg are drawn from          Singapore (City-State in Southeast Asia)
+five source types.                                                   State-Level Laws: Singapore Road Traffic Act 1961
+   City-Level Traffic Regulation: Set by local governments,          State-Level Manual: Singapore Basic Theory of Driving
+rules to address specific needs such as parking, speed limits,    - Part B (Signs and Signals, Traffic Rules and Regulations,
+and lane usage to manage local traffic and ensure safety.         Code of Conduct on the Road, Parts and Controls of a Car,
+   State-Level Traffic Law: Laws regulate vehicle operations      Work Zone, Driving in Special Zones, Driving in Tunnels,
+and ensure road safety, established by state legislatures and     Autonomous Vehicle) and Part C (Useful Information)
+enforced statewide.                                                  Court Cases: Twelve selected Singapore traffic violation
+   State-Level Driving Manual: Published by each state’s          cases
+DMV, this manual details state traffic laws and safe driving         Traffic Norms: Ten selected Singapore driving norms
+practices. It includes driving safety guidelines in the form of   without regulation violations
+text and illustrated images.
+   State-Level Court Cases: Judicial rulings on traffic-related   A.3    Traffic Document Preprocessing
+cases clarify laws and influence enforcement.                     To ensure consistent and structured access to regulatory in-
+   Traffic Norms: Widely recognized behaviors that drivers        formation, we implemented a comprehensive preprocessing
+follow to ensure smooth and safe road interactions. These         pipeline that accommodates the diverse formats and sources
+norms are essential for autonomous vehicles to align with         of traffic-related materials while preserving the original le-
+human driving behaviors and societal expectations. This pa-       gal language and intended meaning of the documents.
+per does not focus on building a repository of records for           Web-Based Document Extraction: For documents such
+such norms, but we will use examples to illustrate that our       as state laws and court cases that are accessible only via web
+framework still applies.                                          interfaces without direct download options, we employed
+                                                                  automated web crawlers to extract their content. This en-
+A.2    City-Specific Regulation Sources                           sures access to the most up-to-date versions while preserv-
+Boston (Massachusetts, USA)                                       ing their original structural organization and formatting.
+   City-Level Regulations: Boston City Traffic Rules and             PDF Handbook Processing: For driver’s manuals and
+Regulations - Article IV (One-Way Regulations) and Arti-          handbooks typically distributed in PDF format, we imple-
+cle V (Operation of Vehicles)                                     mented a specialized processing approach that separates tex-
+   State-Level Laws: Massachusetts General Laws - Chapter         tual content from visual elements. The text portions are ex-
+89 (Law of the Road), Sections 1-12                               tracted and processed, while images are systematically la-
+   State-Level Manual: Massachusetts Driver’s Manual              beled and their descriptive labels are strategically reinserted
+(Handbook) - Chapter 4 (Rules of the Road) and Chapter            into the text flow. This ensures that visual information criti-
+5 (Special Driving Situations)                                    cal to understanding traffic rules is preserved in textual form.
+   Court Cases: Twelve selected Massachusetts traffic viola-         Format Standardization: All extracted content is con-
+tion cases                                                        verted into a standardized Markdown format. This format
+   Traffic Norms: Ten selected US driving norms without           balances human readability with machine-parsable struc-
+regulation violations                                             ture, enabling efficient indexing and retrieval during rule
+                                                                  search and reasoning.
+Los Angeles (California, USA)                                        Quality Assurance: After automated processing, each
+   City-Level Regulations: Los Angeles City Traffic Rules         document is manually reviewed to correct formatting incon-
+and Regulations - Chapter VIII (Traffic), Divisions A             sistencies, misaligned headings, indentation errors, and ar-
+through W                                                         tifacts from OCR or parsing. This final step ensures high
+   State-Level Laws: California Vehicle Code - Division 11        fidelity between the processed documents and their original
+(Rules of the Road)                                               regulatory intent.
+   The resulting corpus provides a well-structured represen-        Category             Count Category                       Count
+tation of regulatory texts, suitable for research on traffic rule   Right-of-Way Rules     20    Special Driving Situations    13
+understanding, retrieval, and decision-making.                      Intersections          15    Rules for Passing              4
+                                                                    Pedestrians            15    Traffic Signs & Signals       11
+                                                                    Pavement Markings      10    Roadway Construction           4
+                                                                    Service Vehicles       8     Hard Cases                    20
+
+                                                                    Table S1: Distribution of hypothesized scenarios in Los An-
+                                                                    geles.
+
+                                                                    Category             Count Category                       Count
+                                                                    Right-of-Way Rules     22    Special Driving Situations    11
+                                                                    Intersections          17    Rules for Passing              3
+                                                                    Pedestrians            15    Traffic Signs & Signals        8
+                                                                    Pavement Markings      13    Roadway Construction           3
+                                                                    Service Vehicles       8     Hard Cases                    20
+
+                                                                    Table S2: Distribution of hypothesized scenarios in Singa-
+                                                                    pore.
+
+
+                                                                    ambiguous intersections, overtaking restrictions, and school
+                                                                    bus regulations. By including multi-source rule references
+                                                                    and fine-grained action-level labels, these examples further
+                                                                    demonstrate the dataset’s coverage, interpretability, and util-
+                                                                    ity for evaluating rule-aware decision-making.
+
+                                                                    A.5    Additional Real-world Scenarios Details
+                                                                    We collect real-world driving scenarios from two sources:
+                                                                    the nuScenes dataset (Caesar et al. 2020) and our deploy-
+                                                                    ment logs in Los Angeles. The nuScenes dataset is a large-
+                                                                    scale, real-world autonomous driving dataset containing an-
+                                                                    notated sensor data from urban driving scenes in Boston
+Figure S1: Additional hypothesized scenario examples from           and Singapore. Although it was not originally designed for
+the DriveReg Scenarios Dataset, showing scenario descrip-           traffic regulation reasoning, we manually reviewed front-
+tions, relevant traffic rules, and action-level compliance and      camera images to identify samples that are meaningfully in-
+safety annotations.                                                 fluenced by traffic rules, such as intersections, stop signs,
+                                                                    pedestrian crossings, and yield situations. From these se-
+                                                                    lected scenes, we annotated compliance and safety labels for
+A.4    Hypothesized Scenarios Details                               all candidate actions in the predefined action set, and addi-
+To ensure a comprehensive evaluation of traffic rule under-         tionally identified the relevant traffic regulations that apply
+standing, we designed hypothesized scenarios to systemat-           to each scenario. For Los Angeles, we collected real-world
+ically cover all major regulatory topics found in the docu-         data from our in-vehicle deployment during on-road testing.
+ments of each region. The category distribution for Boston          The vehicle was driven in a variety of urban environments,
+is provided in the main paper (Table 1). In Table S1 and            including major roads, secondary streets, intersections (with
+Table S2, we present the corresponding distributions for Los        and without traffic signals), and pedestrian-dense areas. We
+Angeles and Singapore. As shown, our hypothesized scenar-           used camera-recorded footage to select frames where traf-
+ios offer broad and balanced coverage across key traffic rule       fic regulation awareness is critical. Similar to the nuScenes-
+categories, supporting meaningful comparison and general-           based samples, we annotated each scenario with compliance
+ization across jurisdictions.                                       and safety labels, as well as the relevant traffic rules.
+   In Fig. S1, we present additional examples of hypothe-              To maintain a balanced dataset and avoid redundancy,
+sized scenarios from the DriveReg Scenarios Dataset. Each           we omitted some overly repetitive scenarios, particularly
+row includes (1) a natural language description of the traffic      those that share identical regulatory contexts. In total, we
+situation, (2) the relevant traffic rules retrieved from city-      curated 140 real-world scenarios, with the distribution by
+level, state-level, or court case sources, and (3) a list of        city summarized in Table S3. These real-world scenarios
+candidate actions with compliance and safety annotations.           cover a wide range of traffic rule types, including Right-
+These examples illustrate the diverse regulatory contexts           of-Way Rules, Intersections, Pedestrians, Pavement Mark-
+represented in our dataset, covering region-specific laws,          ings, and Traffic Signs & Signals. In contrast, categories
+such as Service Vehicles and Special Driving Situations are
+less represented, as these cases are rarely encountered in ur-
+ban driving data. Unlike the hypothesized scenarios, which
+were constructed to ensure comprehensive rule coverage, the
+real-world scenarios are limited to what naturally appears in
+recorded driving scenes. As a result, the observed rules tend
+to reflect more common and frequently encountered regula-
+tory situations.
+
+             City           Number of Samples
+             Boston                  57
+             Singapore               39
+             Los Angeles             44
+             Total                  140
+
+Table S3: Number of real-world scenarios in the DriveReg
+Scenario Dataset from nuScenes and Los Angeles.
+
+
+            B     Implementation Details
+B.1   Environment Analysis
+We use a Vision-Language Model (VLM), guided by a struc-
+tured system prompt (Fig. S2), as the perception module for
+environment analysis. The module receives a front-facing               Figure S2: System prompt of Environment Analysis
+camera image and the ego vehicle’s navigation intent as in-
+put, and outputs a structured scene description along with a
+natural language query for retrieving relevant traffic regula-   trieval of relevant traffic rules during autonomous driving
+tions.                                                           scenario analysis.
+   This module is implemented using GPT-4o with few-
+shot Chain-of-Thought prompting. While our current design        B.3     Baseline Model Details
+leverages a vision-language foundation model, the environ-
+ment analysis component is modular and can be replaced           Large Language and Vision-Language Models: We eval-
+with any structured perception pipeline capable of produc-       uate DriveReg against several state-of-the-art models span-
+ing scene-level summaries and regulation-aware query cues.       ning different architectures and parameter scales:
+                                                                    DeepSeek-V3 (Liu et al. 2024): A 671B parameter
+B.2   FAISS-Based Traffic Rule Retrieval                         Mixture-of-Experts (MoE) model with 37B activated param-
+Our Traffic Regulation Retrieval (TRR) Agent employs             eters, representing one of the largest open-source language
+Facebook AI Similarity Search (FAISS) (Johnson, Douze,           models. It employs sparse expert routing for efficient scal-
+and Jégou 2017) for efficient dense vector retrieval.           ing and demonstrates strong performance in mathematical
+   FAISS is a library for efficient similarity search and        reasoning, code generation, and multi-step logical reasoning
+clustering of dense vectors, specifically designed for high-     tasks.
+dimensional embeddings. It provides optimized algorithms            DeepSeek-R1 (Guo et al. 2025): A 671B parame-
+for approximate nearest neighbor (ANN) search that can           ter reasoning-focused variant optimized through advanced
+handle millions of vectors with sub-linear query complex-        chain-of-thought training and RLHF techniques. The model
+ity. FAISS offers scalability through both CPU and GPU im-       excels in multi-hop reasoning, mathematical problem-
+plementations with efficient memory management for large-        solving, and systematic problem decomposition across
+scale vector databases. The library supports multiple index-     STEM domains.
+ing methods, including flat search (exact), IVF (Inverted           Llama3.3-70B (Dubey et al. 2024): Meta’s 70B param-
+File), HNSW (Hierarchical Navigable Small World), and PQ         eter decoder-only transformer featuring robust instruction-
+(Product Quantization), with configurable parameters allow-      following capabilities and comprehensive safety alignment
+ing optimization for either retrieval speed or precision based   through constitutional AI principles. The model demon-
+on application requirements.                                     strates strong performance in conversational AI, content
+   For our traffic regulation retrieval task, we utilize FAISS   generation, and analytical reasoning.
+with cosine similarity as the distance metric, which is well-       Qwen2.5-72B (Bai et al. 2023): Alibaba’s 72B parame-
+suited for normalized text embeddings. The system performs       ter model with enhanced multilingual capabilities (30+ lan-
+approximate nearest neighbor search over pre-computed em-        guages) and advanced reasoning performance. It incorpo-
+beddings of regulatory documents, enabling real-time re-         rates mixture-of-experts knowledge distillation and excels
+in code generation, technical analysis, and multi-turn con-         B.4    Additional Experimental Setting
+versations.                                                         We adopt GPT-4o in DriveReg with temperature = 0.1, top-
+   GPT-4o (Hurst et al. 2024): OpenAI’s multimodal foun-            p = 0.95, and a maximum token length of 2048. The same
+dation model with integrated vision and language under-             configurations are used for all baseline models to ensure a
+standing through unified transformer architecture. It pro-          fair comparison. These hyperparameters, along with others
+cesses both textual and visual inputs for comprehensive             detailed in the main paper, are selected empirically based on
+scene analysis, visual reasoning, and cross-modal under-            performance across different settings.
+standing tasks.
+   These baseline models are evaluated under two condi-
+tions: without external regulation access to assess their in-
+                                                                                    C     Additional Results
+herent traffic rule understanding from pretraining, and with        C.1    Additional Hypothesized Scenarios Results
+retrieved traffic regulations to evaluate the effectiveness of      Table S4 shows the detailed results for the individual cities:
+our TRR module.                                                     Boston, Los Angeles, and Singapore. These results corre-
+                                                                    spond to the averages reported in Table 2 of the main pa-
+Baseline Retrieval Methods: To validate the effective-              per. DriveReg consistently achieves the highest performance
+ness of our embedding-based retrieval pipeline, we compare          across all three cities and both scenario types. All meth-
+against traditional information retrieval baselines:                ods show decreased performance on Hard scenarios com-
+   BM25 (Robertson, Zaragoza et al. 2009): Best Matching            pared to Normal scenarios, confirming that our hard case
+25 is a probabilistic ranking function that combines term           subset introduces greater complexity. This validates that the
+frequency (TF) and inverse document frequency (IDF) with            Hard Scenarios are indeed challenging, as intended by our
+document length normalization. For a query Q containing             scenario design. However, DriveReg maintains the smallest
+terms q1 , q2 , . . . , qn and document D, the BM25 score is        performance gap, indicating superior handling of complex
+computed as:                                                        regulatory situations. Moreover, the consistent improvement
+                        n
+                        X                                           from the without retrieved regulation (-R) to the with re-
+    BM25(Q, D) =              IDF(qi )·                      (S1)   trieved regulation (+R) setting across all baselines and sce-
+                        i=1                                         nario types confirms the critical importance of accessing rel-
+                                 f (qi , D) · (k1 + 1)              evant regulatory information for accurate compliance and
+                                                           ,      safety evaluation.
+                                                       |D|
+                        f (qi , D) + k1 · 1 − b + b · avgdl            We provide additional examples comparing DriveReg and
+                                                                    GPT-4o in Fig. S3. While GPT-4o sometimes misjudges
+where f (qi , D) is the frequency of term qi in document D,         compliance or safety, DriveReg can provide correct assess-
+|D| is the document length, and avgdl is the average docu-          ments in those cases by grounding its decisions in retrieved
+ment length in the collection. The parameters k1 (1.2) and          traffic rules and structured reasoning.
+b (0.75) control term frequency saturation and document
+length normalization, respectively. The IDF component is
+defined as:
+                                  N − n(qi ) + 0.5
+             IDF(qi ) = log                        ,         (S2)
+                                    n(qi ) + 0.5
+where N is the total number of documents and n(qi ) is the
+number of documents containing term qi .
+   Query Likelihood Model (QLM) (Ponte and Croft 2017):
+QLM is a language modeling approach that estimates the
+probability of generating the query from each document’s
+language model. The model ranks documents by computing
+P (Q|D), the probability that document D would generate
+query Q:                                                            Figure S3: Comparison between GPT-4o and DriveReg on
+                             Yn                                     hypothesized scenarios from Los Angeles, Singapore, and
+                 P (Q|D) =      P (qi |D).           (S3)           Boston. DriveReg produces more accurate compliance and
+                                    i=1                             safety assessments by using retrieved traffic regulations.
+   To address the problem of zero probabilities for unseen
+terms, QLM typically employs Jelinek-Mercer smoothing:
+                                                                    C.2    Additional Real-World Scenarios Results
+ P (qi |D) = λ · PM L (qi |D) + (1 − λ) · PM L (qi |C), (S4)
+                                                                    Fig. S4 presents additional examples of our framework’s
+where PM L (qi |D) = f (q|D|
+                          i ,D)
+                                is document-level probability,      output on real-world scenarios. In (a) and (b), we present two
+                P
+                    ′      f (q ,D ′ )
+                            i
+                                                                    scenarios: a crosswalk without traffic control signals and a
+PM L (qi |C) = P  D ∈C
+                              ′  is collection-level probabil-      crosswalk with traffic control signals. Our framework cor-
+                    D ′ ∈C |D |
+ity, and λ = 0.4 controls interpolation.                            rectly identifies this and retrieves the relevant traffic rules.
+                                          Hypothesized Scenarios - Normal              Hypothesized Scenarios - Hard
+ City          Method
+                                   Compl.(-R) Compl.(+R) Safety(-R) Safety(+R) Compl.(-R) Compl.(+R) Safety(-R) Safety(+R)
+               DeepSeek-V3            0.86          0.89        0.85         0.88      0.83         0.93        0.80        0.80
+               DeepSeek-R1            0.93          0.93        0.92         0.92      0.88         0.95        0.88        0.90
+               Llama3.3-70b           0.88          0.89        0.91         0.93      0.80         0.93        0.88        0.88
+ Boston
+               Qwen2.5-72b            0.90          0.91        0.88         0.89      0.88         0.95        0.83        0.85
+               GPT-4o                 0.90          0.93        0.88         0.93      0.85         0.95        0.88        0.88
+               DriveReg (Ours)          -           0.99          -          0.99        -          1.00          -         0.90
+             DeepSeek-V3              0.87          0.92        0.92         0.95      0.83         0.90        0.88        0.88
+             DeepSeek-R1              0.91          0.91        0.95         0.95      0.85         0.95        0.88        0.88
+             Llama3.3-70b             0.92          0.94        0.91         0.97      0.80         0.93        0.85        0.88
+ Los Angeles
+             Qwen2.5-72b              0.93          0.94        0.94         0.97      0.88         0.95        0.83        0.83
+             GPT-4o                   0.92          0.93        0.96         0.99      0.85         0.98        0.88        0.90
+             DriveReg (Ours)            -           0.95          -          0.99        -          0.95          -         0.93
+               DeepSeek-V3            0.91          0.96        0.93         0.93      0.80         0.93        0.83        0.85
+               DeepSeek-R1            0.92          0.94        0.97         0.99      0.85         0.98        0.88        0.90
+               Llama3.3-70b           0.91          0.92        0.98         0.98      0.83         0.93        0.90        0.93
+ Singapore
+               Qwen2.5-72b            0.93          0.97        0.94         0.98      0.88         0.95        0.88        0.90
+               GPT-4o                 0.91          0.94        0.97         0.98      0.88         0.95        0.88        0.93
+               DriveReg (Ours)          -           0.97          -          1.00        -          0.98          -         0.93
+
+Table S4: Compliance and safety accuracy on hypothesized driving scenarios across three cities in the DriveReg Scenarios
+Dataset. (-R) indicates baseline models relying solely on pretrained knowledge, while (+R) indicates that models are provided
+with relevant traffic regulations retrieved by the TRR agent.
+
+
+These two examples demonstrate our model’s ability to rea-             Angeles where multiple traffic rules must be considered si-
+son based on multiple environmental factors, accurately ad-            multaneously. In both cases, DriveReg successfully reasons
+justing its rule-retrieval and evaluation according to changes         over the relevant rules and produces the correct output.
+in the scenario.
+   In (b), we further demonstrate DriveReg’s ability in cases          C.3     Human Evaluation of Explanation Quality
+where multiple traffic elements and rules must be considered           To further assess the interpretability of DriveReg’s deci-
+simultaneously. In this scenario, the vehicle is turning right         sions, we conducted a human study evaluating the quality
+at a red traffic light where there is no “No Turn on Red” sign,        of its generated explanations. We invited 15 participants,
+making the turn legally permissible. However, a pedestrian             each of whom reviewed 40 explanation-decision pairs sam-
+is crossing the crosswalk in front of the vehicle, requiring           pled across all three cities (Boston, Los Angeles, Singapore)
+the vehicle to yield. Thus, turning right without yielding is          and both scenario types (Normal and Hard). For each pair,
+non-compliant with traffic regulations. As shown in the fi-            participants were shown the scenario description, the can-
+nal output, our model successfully identifies this and outputs         didate action set, DriveReg’s compliance/safety judgment,
+“non-compliant” for the case.                                          and the corresponding Chain-of-Thought explanation. Par-
+   In (c), we present a case where the ego vehicle is ap-              ticipants then rated the explanation on a simple 1-5 qual-
+proaching a work zone and should reduce its speed, which               ity scale, focusing on its consistency with the final decision
+our model successfully identifies, outputting the action “go           and how helpful it was for understanding the compliance
+forward with deceleration.” This is a scenario that previ-             or safety judgment. DriveReg achieved an average score of
+ous rule-based methods struggle to handle, as they typically           4.93, demonstrating that its reasoning is clear, reliable, and
+select only key rules due to the need for manually hand-               well aligned with its decisions.
+crafting the rules, often omitting specific cases such as reg-
+ulations for work zones.
+   In (d), we present a scenario from Singapore featuring
+white zig-zag lines ahead of a pedestrian crossing. These
+markings are unique to regions like Singapore and indicate
+that vehicles must not stop or overtake in the area. Our
+framework successfully identifies these regulatory markings
+and retrieves the corresponding local traffic rules, demon-
+strating its ability to adapt to region-specific traffic signals.
+   In (e) and (f), we show complex real-world cases in Los
+Figure S4: Inference results from the DriveReg (Real-World) Scenarios Dataset.
+

@@ -1,0 +1,911 @@
+                                         IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                          1
+
+
+
+
+                                                       DriveMCP: An Agentic AI framework for
+                                                          Advanced Driver Assistance System
+                                                Farzad Nadiri, Member, IEEE, Mehdi Cina, Member, IEEE, and Ahmad B. Rad, Senior Member, IEEE
+
+
+
+                                            Abstract—This paper introduces an agentic AI driver-                      operating a vehicle in an unfamiliar jurisdiction, but accompa-
+                                         assistance framework that integrates perception, compliance                  nied by a multilingual companion who is knowledgeable about
+                                         reasoning, vehicle-state interpretation, and safety arbitration into         various driving conditions, understands the rules of the road,
+                                         a modular and auditable pipeline. The architecture, referred
+                                         to as DriveMCP, incorporates a sensor-like perception stack                  and is capable of assisting the driver in safely navigating the
+                                         alongside DriveLM as the vision-language front end to generate               route. In this paper, we introduce a system that emulates this
+arXiv:2609.17247v1 [cs.RO] 15 Sep 2026
+
+
+
+
+                                         a graph-structured scene understanding (Graph Visual Question                scenario.
+                                         Answering) and language-grounded driving information. Key                       The current implementations increasingly incorporate on-
+                                         compliance elements in world_state, including posted speed                   the-fly perception and planning components, yet they remain
+                                         limits and jurisdiction cues, are derived from DriveLM outputs
+                                         through a structured parsing layer rather than being injected as             constrained by the difficulty of encoding diverse traffic rules,
+                                         simulator ground truth. A stateful orchestration layer coordinates           explaining decisions to human drivers, and above all adapting
+                                         specialized experts exposed as Model Context Protocol (MCP)                  to changing conditions such as weather, road conditions,
+                                         servers: (i) a Rules server that performs retrieval-augmented                and jurisdiction boundaries. From a broader perspective, mo-
+                                         compliance reasoning over jurisdiction-specific traffic codes and            tion planning and control have been extensively studied [1],
+                                         sign conventions, (ii) a Weather server that estimates traction
+                                         risk and contextual speed advisories, and (iii) an MCP-CAN                   and deep-learning-based driving pipelines continue to evolve
+                                         server that surfaces Controller Area Network (CAN)/On-Board                  rapidly [2], [3]. Recent multimodal large language models
+                                         Diagnostics (OBD) telemetry and diagnostic context for health-               (MLLMs) and vision-language(-action) models extend this tra-
+                                         aware risk shaping. These outputs are fused to generate a struc-             jectory by enabling natural-language queries, human-oriented
+                                         tured decision that prompts a recommended course of action.                  explanations, and high-level reasoning over a wide range of
+                                         The outcome is then further filtered by a Responsibility-Sensitive
+                                         Safety (RSS)-inspired guardrail that arbitrates speak versus act             driving scenes [4]–[9].
+                                         decisions under bounded online adaptation. In CARLA simula-                     Representative driving-oriented systems include DriveGPT4
+                                         tion across multilingual, cross-border, and dynamic speed-limit              [4], which couples multi-frame visual inputs with language-
+                                         scenarios, DriveMCP reduces traffic infractions and overspeed                grounded control prediction and interpretability, and retrieval-
+                                         relative to the VLM-Direct, VLM-Direct+RAG, and VLM-Tools-                   augmented approaches such as RAG-Driver [10] that ground
+                                         NoArbiter baselines, while improving hazard response time and
+                                         maintaining sub-second advisory latency. We further quantify                 explanations in external demonstrations or documents. Driv-
+                                         robustness under corrupted world_state fields and show that                  eLM [5] introduces graph-structured visual question answering
+                                         CAN-aware context improves recommended targets and TTC at                    for driving and a baseline agent that jointly performs GVQA
+                                         intervention under degraded braking envelopes.                               and end-to-end driving.
+                                            Index Terms—Intelligent vehicles, driver assistance systems,                 Despite these advances, monolithic VLM-based driving
+                                         vision-language models, retrieval-augmented generation, Model                assistants raise three practical concerns for deployment in
+                                         Context Protocol, CAN bus, safety arbitration.                               intelligent vehicles. First, compliance and updateability: traffic
+                                                                                                                      regulations vary by country, state, and even municipality, and
+                                                                  I. I NTRODUCTION                                    they evolve over time. Embedding such rules solely in model
+                                                                                                                      parameters or long prompts hinders verification and makes
+                                              AFE driving entails a balanced fusion of several attributes
+                                         S    including skills, vigilance, proactive and reactive control,
+                                         and sound decision making, along with a synchronized execu-
+                                                                                                                      updates costly. Second, traceability: safety cases often require
+                                                                                                                      reconstructing why an assistant suggested or performed an
+                                                                                                                      action, including which rules and observations were used.
+                                         tion of these processes. Failure in any of these components or
+                                                                                                                      Third, latency and robustness: a single large inference that per-
+                                         their real-time interactions can lead to catastrophic accidents.
+                                                                                                                      forms perception, rule reasoning, and decision-making can be
+                                         The possibility of incorporating all of these requirements in
+                                                                                                                      slow and may fail in out-of-distribution conditions, particularly
+                                         advanced driver-assistance systems (ADAS) and autonomous
+                                                                                                                      when multiple factors (e.g., signage and rain and degraded
+                                         driving appeared far-fetched only a few years ago. However,
+                                                                                                                      vehicle health) must be considered simultaneously.
+                                         the impressive and rapid development of AI in the last few
+                                                                                                                         In this paper, we present DriveMCP that addresses all the
+                                         years has drastically changed that narrative and the realization
+                                                                                                                      aforementioned challenges. The proposed system combines a
+                                         of ADAS and autonomous driving systems with such capabil-
+                                                                                                                      driving-specialized VLM (DriveLM) [5] with explicit expert
+                                         ities is within reach. Consider a situation in which a driver is
+                                                                                                                      services connected through Model Context Protocol (MCP)
+                                           Manuscript received Month DD, YYYY; revised Month DD, YYYY.                [15] and is coordinated by a stateful orchestration graph
+                                         (Corresponding author: Ahmad B. Rad.)                                        (LangGraph-style) [16]. The goal is not to replace certified
+                                           F. Nadiri, M. Cina and A. B. Rad are with the Department of Mechatronics
+                                         Engineering, Simon Fraser University, Burnaby, BC, Canada (corresponding     ADAS controllers with an LLM, but to build an assistance
+                                         author e-mail: arad@sfu.ca).                                                 layer that improves compliance reasoning, explainability, and
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                      2
+
+
+
+TABLE I: Key design requirements and corresponding                                             II. R ELATED W ORK
+DriveMCP mechanisms.
+                                                                          A. Vision-Language Models and VLA Agents for Driving
+ Requirement              Mechanisms                                         DriveGPT4 [4] demonstrates that a VLM can produce
+ Regulation updateabil-                                                   interpretable control predictions and explanations from multi-
+ ity                        •   Rules MCP server
+                            •   External regulatory corpus retrieval
+                                                                          frame inputs. DriveLM [5] frames driving with language
+                            •   Jurisdiction tagging and rule-pack ver-   as Graph Visual Question Answering (GVQA), explicitly
+                                sioning                                   modeling logical dependencies across perception, prediction,
+ Explainability    and
+ traceability               •   Structured world_state                    and planning tasks. Beyond VQA-style formulations, recent
+                            •   Tool-call and evidence logs               work has explored vision-language planning and instruction-
+                            •   Fused human-readable explanations         following agents for driving, including VLP [6] and VLAAD
+ Real-time responsive-
+ ness                       •   Selective tool routing                    [7], as well as camera-only closed-loop VLA models such
+                            •   Parallel MCP calls                        as SimLingo [8]. Jiang et al. present a systematic survey
+                            •   Query caching
+ Safety conservatism
+                                                                          on current vision-language-action (VLA) models and their
+                            •   RSS and TTC-based guardrails              evaluation in autonomous driving [9]. These studies highlight
+                            •   Speak-versus-act arbitration              the benefits of grounding and explanation, but many systems
+                            •   Conservative fallback under uncertainty
+ Vehicle-health aware-                                                    essentially merge multiple roles (perception, rule reasoning,
+ ness                       •   MCP-CAN telemetry                         planning) in a single inference.
+                            •   DTC-aware context modeling
+                            •   Degraded-mode advisories
+                                                                             DriveMCP adopts DriveLM as a perception-and-grounding
+                                                                          front-end but decouples compliance reasoning, environment
+                                                                          risk reasoning, and telemetry interpretation into external expert
+context awareness, while enforcing conservative safety con-               services with explicit interfaces. In contrast to monolithic VLA
+straints with RSS-inspired checks [20]. DriveMCP is designed              policies, DriveMCP treats DriveLM outputs as typed evidence
+to complement established perception–planning–control mod-                that is fused with tool responses and logged for audit, rather
+ules; for instance, specialized lateral-control strategies (e.g.,         than as a direct control policy.
+look-down control) remain applicable beneath an advisory
+layer [37].                                                               B. Explainable Driving and Language Explanations
+                                                                             Natural-language explanations for driving decisions have
+A. Design Requirements                                                    been studied as a way to improve transparency and user trust.
+                                                                          Kim et al. introduced textual rationales and the BDD-X bench-
+   Based on common requirements for driver assistance                     mark for self-driving explanations [11]. Another work explores
+(human-in-the-loop, auditability, real-time response), we em-             retrieval-grounded explanations for improved factuality and
+ploy the following design requirements to guide the architec-             generalization in driving assistants [10]. DriveMCP builds
+ture (Table I).                                                           on this motivation by providing citations from jurisdiction-
+                                                                          specific rulepacks and logging tool evidence to support post-
+B. Contributions                                                          drive audits.
+   The main contributions are:
+                                                                          C. Retrieval-Augmented Generation (RAG) and External
+   1) A sensor-to-world_state pipeline that combines a
+                                                                          Knowledge
+      sensor-like perception stack with DriveLM-derived driv-
+      ing facts, converting language-grounded cues (e.g., sign               Retrieval-augmented generation [12] augments parametric
+      readings) into typed fields with confidence.                        models with external memory by retrieving relevant doc-
+   2) A three-server MCP tool layer (Rules, Weather, MCP-                 uments at inference time. For intelligent vehicles, external
+      CAN) for compliance reasoning, traction-aware advi-                 knowledge includes but is not limited to traffic codes, sign
+      sory, and vehicle-health context, with explicit rulepack            conventions, road authority directives (e.g., variable speed
+      versioning and auditable citations.                                 limits), and manufacturer guidance for service and repair of the
+   3) A stateful orchestration design with parallel tool calls            vehicle. DriveMCP uses RAG primarily for compliance and
+      and an RSS/TTC-inspired safety arbiter that calibrates              traceable citations: tool outputs include document identifiers
+      speak versus act decisions.                                         and excerpts used for the final advisory. For retrieval, hybrid
+   4) A CARLA-based evaluation with VLM-only,                             pipelines commonly combine lexical methods such as BM25
+      VLM+RAG, and VLM+Tools baselines, plus robustness                   [13] with dense retrieval (e.g., DPR) [14] to balance exact
+      experiments (world-state corruption), arbiter sensitivity           matches against semantic similarity.
+      analysis, and CAN fault injection studies.
+   Overall, (2) primarily addresses compliance, updateability,            D. Agent Orchestration and Tool Protocols
+and traceability, (3) primarily addresses latency and robust-                Tool protocols enable language models to call external ser-
+ness, (1) supports traceability/robustness at the perception–             vices and devices. MCP [15] provides a standardized interface
+state boundary, and (4) provides empirical validation of ro-              for tool discovery and structured call/response. LangGraph-
+bustness (and latency where measured).                                    style orchestration [16] supports stateful, cyclic workflows
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                3
+
+
+
+with conditional branching and human-in-the-loop check-               Responses are fused into a single structured explanation and
+points. More broadly, tool-use and modular reasoning pat-          a recommended action. A safety arbiter (see Fig. 1) computes
+terns such as MRKL [17], ReAct [18], and Toolformer [19]           risk and applies guardrails to determine whether to speak
+motivate separating symbolic/knowledge-intensive steps (e.g.,      (advisory) or act (intervention) and to enforce minimum safety
+compliance lookup) from perception and response generation.        constraints. Finally, memory and feedback components store
+DriveMCP uses a graph to coordinate perception updates,            traces and enable bounded online adaptation.
+event extraction, tool routing, fusion, safety arbitration, and       Memory is accessed via an explicit read/write API. Short-
+memory updates.                                                    term memory caches recent world_state snapshots and
+                                                                   tool responses with timestamps and validity windows to re-
+                                                                   duce repeated calls and to enforce rate limits on messag-
+E. Safety Guardrails and Standards Context
+                                                                   ing. Long-term memory stores persistent artifacts such as
+   Responsibility-Sensitive Safety (RSS) [20] provides an in-      rulepack_version history, user preferences (e.g., advi-
+terpretable formalism for safe longitudinal and lateral interac-   sory verbosity), and feedback labels. The orchestrator queries
+tions. It has inspired open-source implementations [21] and is     memories at the start of each tick and commits a trace record
+often used as a supervisory constraint layer. Time-to-collision    after fusion and arbitration.
+(TTC) has long been used as a risk indicator in traffic safety
+studies [22], and conservative braking-envelope models are
+                                                                          IV. D RIVE LM-G ROUNDED P ERCEPTION AND
+standard in vehicle dynamics [23]. In addition, functional
+                                                                                 W ORLD -S TATE C ONSTRUCTION
+safety and SOTIF considerations (e.g., ISO 26262 and ISO
+21448) motivate conservative default behaviors, traceability,      A. DriveLM and Graph VQA
+and explicit handling of uncertainties [24], [25]. DriveMCP           DriveLM [5] frames driving with language as a structured
+is not presented as a certified safety mechanism; rather,          reasoning problem over graphs. Instead of treating scene
+RSS/TTC checks provide transparent constraints for a research      understanding as a flat captioning task, GVQA represents
+prototype. In particular, the arbiter should be viewed as a        traffic participants, lanes, signs, and their relations in a graph
+transparent guardrail for experiments that constrain recommen-     with logical dependencies across tasks (e.g., perception →
+dations and optional interventions, not as a replacement for       prediction → planning). DriveLM provides datasets built
+certified control and braking systems. In a production setting,    on nuScenes [30] and CARLA [29] and a baseline agent
+the same interfaces could be connected to certified safety         (DriveLM-Agent) that jointly performs GVQA and end-to-end
+monitors, and the full tool-trace (inputs, outputs, rulepack       driving. These properties make DriveLM a suitable front-end
+versions, and risk calculations) is intended to support post hoc   for assistance systems that require both grounded understand-
+analysis and SOTIF-style reasoning about uncertainty.              ing and interpretable intermediates.
+
+                  III. S YSTEM OVERVIEW
+                                                                   B. Sensor-like Perception Stack
+   Fig. 1 articulates the overall architecture of DriveMCP.
+                                                                      DriveMCP constructs world_state from sensor-like ob-
+A sensor interface provides synchronized camera, LiDAR,
+                                                                   servations that are closer to a production stack while remaining
+ego kinematics, and route context. A lightweight perception
+                                                                   controlled and repeatable in CARLA. We use a forward
+stack produces actor tracks and lane cues, while DriveLM
+                                                                   RGB camera and a LiDAR stream from CARLA, and we
+[5] processes the camera stream to produce GVQA answers
+                                                                   treat simulator ego kinematics as CAN-equivalent signals. A
+and language-grounded cues. Selected DriveLM outputs are
+                                                                   lightweight perception stack detects and tracks nearby actors
+parsed into typed fields and inserted into world_state
+                                                                   and provides lane context: (i) an off-the-shelf 2D detector on
+with confidence, so that the VLM is responsible for key
+                                                                   RGB for vehicles and pedestrians [31], (ii) LiDAR-based range
+driving facts (e.g., posted speed limits and jurisdiction cues)
+                                                                   refinement to estimate relative pose, (iii) a constant-velocity
+instead of receiving them as simulator ground truth. A stateful
+                                                                   Kalman tracker for short-term tracking and drop-out handling
+orchestration graph (see Fig. 1) then decides which MCP
+                                                                   [32], [33], and (iv) a lane and route interface from the CARLA
+servers to call:
+                                                                   map for lane assignment. This stack intentionally avoids using
+   • Rules MCP server: traffic code retrieval, sign interpre-
+                                                                   simulator ground truth actor identities or sign metadata, so that
+     tation, jurisdiction switching, and compliance advice.        downstream reasoning sees realistic imperfections. The em-
+   • Weather MCP server: weather estimation (from simu-
+                                                                   phasis on explicit fusion and geometry is aligned with broader
+     lation or API), traction assessment, and contextual speed     robotics practice; for example, prior work has used sensor
+     and following-distance guidance.                              fusion and perspective transformation to improve localization
+   • MCP-CAN server: decoded CAN signals, diagnostic
+                                                                   in embodied robots [38].
+     trouble codes (DTCs), and health-aware context (e.g.,
+     ABS faults, low tire pressure).
+Other MCP servers can be added by registering new tools            C. DriveLM-Derived Key Facts and Parsing
+behind the same MCP interface (e.g., map work zones, weather         Several compliance-critical fields are derived from DriveLM
+conditions, driver preference, or V2X alerts), without modify-     outputs rather than being injected directly. For each frame,
+ing the architecture.                                              DriveLM is prompted with targeted GVQA questions about
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                                4
+
+
+
+
+                                                                              Orchestrator
+                                                                            (stateful graph)
+                  Perception stack
+                                                                   - Short- term memory               Fusion & Explanation
+              (detector, tracker, lanes)                           - Long- term memory
+                                                                   - Feedback & bounded adaption                                HMI Output
+                                            World- state builder
+    Sensors                                                                                                                    (voice / text)
+                                           (parser + confidence)
+                                                                                                                             Optional actuation
+                      DriveLM                                                                            Safety Arbiter
+                   (GVQA + cues)                                    Rules      Weather         CAN        (TTC/RSS)
+                                                                    MCP         MCP            MCP
+
+
+
+Fig. 1: DriveMCP architecture with sensor-like perception and DriveLM-derived fact parsing: camera and LiDAR feed a
+lightweight perception stack and DriveLM; a parser converts DriveLM cues into typed world_state fields; an orchestration
+graph coordinates MCP servers (Rules, Weather, MCP-CAN); fused outputs are constrained by a safety arbiter; memory and
+feedback support adaptation and auditability.
+
+
+signs, speed limits, and jurisdiction cues (units, left-hand ver-            where gi may be rule-based (e.g., a newly parsed sign
+sus right-hand traffic, variable speed-limit gantries). DriveLM              with confidence above a threshold) or learned, and
+produces language-grounded statements that are converted into                ηi is a threshold. Examples include foreign_sign,
+typed fields using a constrained parser. For example, we do                  jurisdiction_change, dynamic_limit_update,
+not provide speed_limit_kph=80 directly; instead the                         low_friction, and vehicle_fault. Confidence-aware
+pipeline is:                                                                 triggers prevent brittle routing when perception is uncertain;
+  image → DriveLM → sign reading → parser                                    for instance, if a speed-limit sign is detected but the DriveLM
+                                                                   (1)       parse confidence is low, the system defaults to conservative
+                              → speed_limit_kph = 80.
+                                                                             advisory output and issues a Rules query that explicitly
+The parser performs numeric extraction, unit normalization,                  requests the applicable limit under uncertainty. Event tags
+and schema validation, and it returns a confidence score.                    enable selective invocation: only relevant tools are called,
+Low-confidence parses trigger conservative fallbacks, such as                reducing computation and driver distraction.
+issuing an advisory to slow down and routing a Rules query
+that explicitly asks for the applicable limit given the uncertain                                    V. MCP T OOL L AYER
+sign observation.
+                                                                             A. Model Context Protocol (MCP)
+D. World-State Representation and Uncertainty                                   DriveMCP deploys specialized experts as MCP servers
+   DriveMCP uses a typed world_state with three groups                       [15]. Each server exposes a tool catalog with JSON schemas,
+of fields:                                                                   supports structured call/response, and can be instrumented for
+   1) Ego: speed, acceleration, yaw rate, and lane assignment.               logging and safety policies (e.g., approval gates for high-
+   2) Environment: lanes, intersections, traffic lights, signs,              impact actions). This design reduces coupling between the
+       dynamic speed limits, weather tags, and a jurisdiction                orchestrator and expert implementations and enables incre-
+       tag.                                                                  mental updates (e.g., adding a new region rule pack) without
+   3) Actors: a set of tracked objects with relative pose, class,            retraining the full system.
+       and motion cues.
+Each field is represented as (value, confidence, provenance),                B. Rules MCP Server with Retrieval
+where provenance records whether the field originated from
+                                                                                The Rules server (see Fig. 1) answers compliance questions
+the perception stack, a DriveLM parse, CAN/OBD teleme-
+                                                                             such as:
+try, or the map, along with a timestamp. Missing or low-
+                                                                                • What does a sign mean in this jurisdiction and language?
+confidence fields are left unset and are handled by conser-
+                                                                                • Must the driver stop, yield, or proceed given right-of-way
+vative defaults in event extraction and the safety layer. This
+design reduces the realism gap introduced by a fully ground-                       conventions?
+                                                                                • What speed limit applies under a dynamic gantry or a
+truth world_state and makes failure modes attributable to
+specific upstream sources.                                                         “when wet” condition?
+                                                                                Fig. 2 details the internal retrieval-augmented pipeline used
+E. Event Extraction for Tool Routing                                         by the Rules MCP server. We implement the server as a
+   The orchestrator converts the current world_state into                    retrieval-augmented pipeline [12]. Given a driver query q,
+discrete events that trigger tool calls. Let ϕ(·) be a feature               jurisdiction tag j, and world context w, the retrieval step
+function over world_state and let c(·) denote associated                     returns documents D = Retrieve(q, j, w). A lightweight
+confidences. Event detectors output a set                                    model then produces a structured response:
+E = {ei | gi (ϕ(world_state), c(world_state)) > ηi },                                 rules_out = {legal_action, limit,
+                                                 (2)                                                                                              (3)
+                                                                                                          citations, confidence}.
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                                  5
+
+
+
+                           Rules MCP server               Retrieval-augmented step
+                            JSON schema
+                            + policy gates          Hybrid scorer
+                                                   BM25 + Dense
+                                                                                                                                   rules out:
+     Query q                Rules MCP Tool                                   Top-k passages         Compliance reasoner        legal action, limit
+ (driver + event)        get compliance(q,j,w)        Retriever                                  (LLM or lightweight model)   citations, confidence
+                                                                              + metadata
+                                                                                                                                rulepack version
+
+                             Query cache
+                         (route segment TTL)         Rulepacks
+                                                 DEU-v1, GBR-v1, ...                                                               Evidence log
+                                                                                                                                (doc ids + offsets)
+
+
+                    Fig. 2: Hybrid Retrieval-Augmented Generation (RAG) pipeline inside the Rules MCP server.
+
+
+   Citations record document identifiers and offsets for au-                     3) Jurisdiction Switching and Unit Normalization: Cross-
+ditability. In multilingual cases, the server includes translated             border scenarios require switching between rule sets and
+sign meaning and clarifies unit conversions.                                  normalizing units (e.g., mph vs. km/h). DriveMCP represents
+   1) Hybrid Retrieval and Corpus Management: Traffic reg-                    jurisdiction as an explicit field in world_state and treats
+ulation queries often require both semantic similarity (e.g.,                 a jurisdiction change as a first-class event. The Rules server
+“right-of-way at a roundabout”) and exact lexical matches                     returns both the legal limit and a normalized limit in SI units,
+(e.g., a sign code or a statutory phrase). We therefore support a             enabling consistent downstream safety computation. When
+hybrid retrieval score that combines sparse and dense signals:                signage conventions differ (e.g., sign shapes or languages),
+                                                                              the server includes a short explanatory note to prevent driver
+     S(q, d) = (1 − λ) BM25(q, d) + λ cos(ϕ(q), ϕ(d)),                 (4)    confusion.
+where ϕ(·) is an embedding model and λ ∈ [0, 1] balances                         4) Caching and Timeouts: To meet real-time constraints,
+the two terms. In practice, λ is tuned per corpus (statutes vs.               DriveMCP caches frequent rule queries within a route seg-
+sign tables) and cached for reproducibility. The Rules server                 ment (e.g., repeated speed-limit reminders) and uses per-tool
+also tracks a rulepack_version so that advisories can be                      timeouts. If retrieval fails or a tool times out, the orchestrator
+audited against the specific code snapshot used at inference                  issues a conservative advisory based on available context and
+time. In our implementation, sparse retrieval uses BM25-                      logs the degradation for later analysis.
+style indexing [13], while dense retrieval can use DPR-like
+embeddings for semantic matching [14].
+   2) Rulepacks, Coverage, and Versioning: The Rules server                   C. Weather MCP Server
+retrieves from jurisdiction-scoped rulepacks. A rulepack is                      The Weather server provides precipitation intensity, visibil-
+a versioned bundle of (i) traffic-code excerpts, (ii) sign ta-                ity risk, and an estimated friction range µest . In simulation,
+bles and conventions, and (iii) unit metadata (km/h versus                    these values are derived from CARLA weather parameters;
+mph, left-hand versus right-hand traffic), stored as JSON                     in a vehicle, they can combine onboard sensors and external
+plus the original source documents. In practice, sign conven-                 APIs. The server outputs:
+tions can be grounded in widely used standards and official
+guidance, including the Vienna Convention on Road Signs                                wx_out = {µest , risk_level,
+                                                                                                                                                  (5)
+and Signals [26], the U.S. MUTCD [27], and the U.K.                                                speed_factor, confidence}.
+TSRGD [28]. In our experiments we use three rulepacks:
+DEU-v1 (km/h, right-hand traffic), GBR-v1 (mph, left-hand                        The speed_factor scales legal limits into traction-aware
+traffic), and DEU-v1-VSL for variable speed-limit gantries                    advisories; it can also adjust safe following-distance parame-
+and “when wet” clauses. Each rulepack is versioned with                       ters in the safety layer.
+semantic versions and a content hash. All Rules outputs
+include rulepack_version and document identifiers to
+                                                                              D. MCP-CAN Server
+support audit trails and regression testing.
+   When multiple passages yield conflicting advice, the Rules                    Vehicle telemetry provides critical context not visible in
+server applies an explicit priority order (statutory code, official           camera images, including actuator limits, diagnostic faults,
+sign table, then secondary guidance) and defaults to the                      and driver inputs. We integrate an MCP-CAN server [36] that
+most conservative limit when ambiguity remains. Rulepack                      bridges CAN signals and OBD-II diagnostics into MCP tools,
+staleness is handled via effective_date metadata: if                          built on top of the CAN protocol family [34] and standard
+the active vehicle configuration indicates a newer rulepack                   OBD-II diagnostic services (e.g., SAE J1979) [35]. The server
+than the retrieved passage, the server lowers confidence and                  supports decoding CAN frames via DBC definitions, querying
+the orchestrator defaults to conservative advisory output. We                 selected signals, and reading diagnostic trouble codes (DTCs).
+provide a small synthetic rulepack and accompanying unit tests                For safety, DriveMCP treats CAN tools as read-only by
+in the supplemental material to support reproducibility and                   default; any actuation-capable command (if enabled) is gated
+auditability.                                                                 by explicit confirmation and the safety arbiter.
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                               6
+
+
+
+   1) Signal Selection and Health Indicators: Modern vehicles        Algorithm 1 DriveMCP orchestration tick (simplified).
+expose hundreds of signals; a driver-assistance layer should          1: Input: sensor snapshot, driver query
+request only a minimal subset to reduce bandwidth and                 2: Update world_state using simulator/DriveLM adapter
+privacy risk. DriveMCP uses a curated signal list grouped             3: E ← extract events from world_state
+by function: longitudinal control (speed, acceleration, brake         4: Route: select MCP tools based on E
+pressure), lateral status (steering angle, stability control), and    5: Parallel call: Rules, Weather, CAN tools (with timeouts)
+health indicators (DTC flags, warning lamps, tire pressure            6: Fuse tool outputs into fused response + confidence
+where available). The orchestrator requests signals only when         7: Compute safety metrics (TTC, RSS violation) from
+a relevant event is present (e.g., vehicle_fault) or when                world_state
+computing the health score h at a low rate.                           8: Decide SPEAK vs ACT using guardrails and thresholds
+   2) Diagnostics-to-Explanation Mapping: Diagnostic trou-            9: Log trace; update memory; apply bounded feedback up-
+ble codes are often cryptic. The MCP-CAN server provides                 dates
+a translation layer from codes to user-facing summaries (e.g.,       10: Output: advisory (and optional bounded actuation)
+“powertrain fault detected”) and recommended next steps (e.g.,
+“reduce speed; seek service soon”). DriveMCP treats these as
+advisory content only; it does not attempt to perform repair         DriveLM or sensors) or treated with reduced confidence, and
+actions.                                                             the arbiter defaults to the most conservative safe action when
+                                                                     uncertainty is high.
+E. Security and Policy Considerations                                  Algorithm 1 sketches one orchestration tick.
+   Tool modularity increases the attack surface; therefore,
+DriveMCP assigns each tool a capability level. Context-only          B. Fusion and Conflict Handling
+tools (Rules, Weather, CAN-read) are always enabled. Poten-             Tool outputs are fused into a single explanation and action.
+tially dangerous tools (e.g., those that could affect actuation)     Legal compliance has highest priority; safety and traction
+are disabled by default and require out-of-band authorization.       refine the recommended target (e.g., advising below the legal
+All tool calls are logged with timestamps and hashed payloads        limit). CAN-derived health constraints can further reduce
+to support audit trails.                                             recommended speed or increase headway. When there is a
+                                                                     contradiction (e.g., legal limit vs. traction), DriveMCP com-
+       VI. O RCHESTRATION , F USION , AND S AFETY                    municates both: the legal requirement and a recommended safe
+                    A RBITRATION                                     target, with an explanation of why.
+A. Stateful Graph Orchestration
+                                                                     C. Safety Metrics and RSS-Inspired Guardrails
+  DriveMCP orchestrates tool use via a stateful graph [16].
+Each node reads/writes a subset of state S:                             We compute safety metrics from world_state: time-to-
+                                                                     collision (TTC), headway, and an RSS-style violation flag. For
+ S = {world_state, events, tool_outs, fused,                         a lead vehicle at relative distance d and closing speed ∆v:
+                                                              (6)
+        safety, decision, memory}.                                                                    d
+                                                                                         TTC =               .                   (7)
+   Edges implement conditional routing based on event types                                       max(ϵ, ∆v)
+and confidence. When multiple factors are present (e.g., speed       A simplified RSS-inspired check flags unsafe gaps:
+limit sign + rain + DTC), the orchestrator invokes Rules,
+Weather, and CAN tools in parallel and waits for comple-                          rss_viol = ⊮[d < dmin (v, µest )].             (8)
+tion or timeouts. This design improves latency and avoids            Here dmin accounts for reaction time and braking limits; in
+irrelevant tool calls. Memory interfaces: The orchestrator           the prototype we use a conservative parametric form and treat
+communicates with memory modules through (i) a short-term            µest as uncertain under rain. TTC-based criteria have a long
+cache used for deduplication, rate limiting, and reuse of recent     history in traffic safety [22], and we use them here only as an
+tool evidence, and (ii) a long-term store used for preference,       interpretable risk surrogate for a research prototype.
+feedback, and audit trails. Concretely, nodes can read cached
+tool outputs before issuing a call, and every tick writes an         D. Health-Aware Risk Shaping from CAN
+append-only trace that records inputs, tool calls, responses,
+and the final arbitration decision.                                    CAN context affects both risk and messaging. We derive a
+   Temporal aspects and time-sensitive queries: Each or-             health score h ∈ [0, 1] from CAN/OBD signals:
+                                                                                                                   !
+chestration tick runs under a fixed end-to-end budget that                              X
+reflects the dynamics of driving assistance. Tool calls are                    h=σ           wk · ψk (can_signals) ,        (9)
+issued in parallel with per-tool timeouts. If a query is time                            k
+
+sensitive (e.g., variable speed limits, sudden weather changes,      where ψk are normalized indicators (e.g., ABS fault present,
+or a rapidly closing lead vehicle), late tool responses are          brake temperature high, low tire pressure) and σ is a squashing
+ignored for the current tick and can be incorporated on the next     function. The risk score is:
+tick. world_state fields include timestamps and validity
+                                                                                                 
+                                                                                       τ − TTC
+windows so that stale facts are either refreshed (re-query             r = α max 0,                 + β · rss_viol + γ · h. (10)
+                                                                                           τ
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                                  7
+
+
+
+                                                                                TABLE II: Safety arbiter constants used in all experiments.
+                                    Compute TTC, headway
+                                        and rss viol                             Parameter      Value          Meaning
+                                                                                 ϵ             0.1             TTC denominator floor
+                                                                                 tr            0.7 s           reaction time in dmin
+                                         Compute risk r
+                                                                                 d0            2.0 m           standstill buffer in dmin
+                                      (incl. CAN health h)                       τ             2.5 s           TTC reference in risk score r
+                                                                                 α, β, γ       0.6, 0.3, 0.1   weights for TTC term, RSS flag, CAN
+                                                                                                               health
+                                        Fuse tool outputs                        ∆             0.2             actuation margin in speak versus act
+                                        and confidence C                         Cact          0.4             cost of intervention
+                                                                                 Cerr          0.2             penalty for erroneous intervention
+                                                                                 Badv          0.6             advisory benefit factor
+                                                                                 Cfat          0.05            driver fatigue cost
+
+                                                                    no
+                                         rss viol = 1?
+                                                                                where tr is reaction time, d0 is a standstill buffer, and we use
+                                                                                the lower bound of µest under rain for conservatism. We set
+                              yes
+                                                                                tr = 0.7 s as a conservative human-reaction-time assumption
+                                                                                commonly used in ADAS-style safety models. This braking
+           Uact − Uspeak                    no         SPEAK
+                                                                                model is intentionally simplified; more detailed approaches
+              > ∆?                                    (advisory)
+                                                                                are standard in vehicle dynamics [23].
+                                                                                   All arbiter weights and margins (α, β, γ, τ, ∆ and utility
+                  yes                                                           constants) are tuned offline on a held-out calibration set
+                                                                                that mixes all three scenario families. During evaluation, all
+              ACT                                                               parameters are fixed across scenarios; we do not tune per
+            (bounded)
+                                                                                scenario.
+Fig. 3: Safety arbitration: actuation is permitted only when an
+RSS-style safety condition is violated and the utility margin                   G. Feedback and Bounded Adaptation
+exceeds ∆; otherwise the system defaults to advisory output.                       DriveMCP logs tool calls, fused outputs, safety met-
+                                                                                rics, and decisions. Feedback events (explicit driver ratings,
+                                                                                overrides, or supervisor labels such as late_warning or
+This mechanism makes the system more conservative under
+                                                                                false_positive) update parameters within bounds:
+degraded health, without relying on implicit model behavior.
+                                                                                                                           ∆
+                                                                                                   ∆ ← [∆ − klate nlate ]∆max
+                                                                                                                          min
+                                                                                                                              ,                (15)
+                                                                                                                        C
+E. Speak vs. Act Arbitration                                                                    Cmin ← [Cmin + kfp nfp ]Cmax
+                                                                                                                         min
+                                                                                                                             .                 (16)
+  DriveMCP treats interventions as higher-cost actions than                     These monotone updates reduce late warnings while control-
+advisories. We define utilities:                                                ling false positives and avoiding oscillations. Offline calibra-
+                        Uact = r − Cact − Cerr ,                         (11)   tion periodically updates default parameters from aggregated
+                                                                                traces.
+                     Uspeak = Badv · r − Cfat .                          (12)
+A decision margin ∆ is used:                                                       VII. I MPLEMENTATION
+                (                                               A. Process Architecture
+                  ACT,      (Uact − Uspeak ) > ∆ ∧ rss_viol = 1,
+decision =                                                         DriveMCP runs as multiple processes communicating via
+                  SPEAK, otherwise.
+                                                                RPC: (1) orchestrator, (2) retrieval service, (3) Rules server, (4)
+                                                           (13)
+                                                                Weather server, (5) MCP-CAN server, and (6) logging/memory
+This enforces that actuation is only permitted when an in-
+                                                                service. This separation supports isolation and independent
+terpretable safety condition is violated. Fig. 3 visualizes the
+                                                                updates.
+guardrail logic.
+                                                                                B. Latency Optimizations
+F. Arbiter Parameterization and Calibration
+                                                                                  To maintain responsiveness, DriveMCP uses:
+   DriveMCP explicitly parameterizes the safety arbiter so that                   • Selective invocation: tools are called only when events
+behavior can be audited and tuned without retraining percep-                        require them.
+tion or language components. Table II lists the constants used                    • Parallel MCP calls: multi-factor situations are handled
+in all experiments. We compute the RSS-inspired minimum                             concurrently.
+gap using a conservative longitudinal model:                                      • Caching: repeated queries (e.g., the same stop sign on a
+                                 v2                                                 short segment) reuse retrieved passages.
+dmin (v, µest ) = v tr +                    +d0 ,   abrake (µest ) = µest g,      • Timeout and fallback: if a tool times out, the system
+                           2 abrake (µest )
+                                                                         (14)       degrades gracefully to SPEAK-only conservative advice.
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                               8
+
+
+
+                                                                   C. Models, Context Inputs, and Prompts
+                                                                      DriveMCP uses DriveLM [5] as the vision-language front
+                                                                   end for GVQA and for extracting language-grounded driving
+                                                                   facts (sign readings, jurisdiction cues, variable limit updates).
+                                                                   For all VLM-based baselines we use the same DriveLM
+                                                                   checkpoint to isolate the effects of retrieval, tool use, and
+                                                                   arbitration.
+                                                                      All methods receive the same synchronized sensor snapshot
+Fig. 4: Scenario visualizations. Left: urban rain multilingual,    (RGB image, LiDAR, ego kinematics, and route context) and
+Right: dynamic variable speed limit.                               the same actor list from the perception stack. For VLM-only
+                                                                   baselines, the structured world_state is converted to a
+TABLE III: Rulepacks and jurisdiction configurations used in       compact textual summary that is appended to the prompt. For
+experiments.                                                       tool-based methods, world_state is passed as structured
+                                                                   JSON to tool calls.
+ Rulepack       Units       Traffic side   Used in scenarios          Prompt structure is fixed across methods: (i) a short system
+ DEU-v1         km/h        right-hand     URB-RAIN,               instruction specifying that the assistant must be conservative,
+                                           DYNAMIC-VSL (static     (ii) a context block containing ego state and a perception
+                                           limits)
+ DEU-v1-VSL     km/h        right-hand     DYNAMIC-VSL             summary, (iii) the driver query, and (iv) optional retrieved
+                                           (gantries, when-wet)    passages or tool outputs. VLM-Direct and VLM-Direct+RAG
+ GBR-v1         mph         left-hand      CROSS-BORDER (post-     are restricted to advisory-only output via prompting and
+                                           switch segment)
+                                                                   do not emit actuation commands. VLM-Tools-NoArbiter and
+                                                                   DriveMCP can produce bounded actuation suggestions, but
+                                                                   only DriveMCP filters them through the RSS/TTC arbiter.
+                VIII. E XPERIMENTAL S ETUP
+A. Simulation Environment and Scenarios
+   Experiments are conducted in CARLA 0.9.8 [29] across            D. World-State Corruption Protocol
+multiple towns under day/night lighting and controllable              To quantify robustness and to close the realism gap intro-
+weather. We evaluate three scenario families that stress com-      duced by clean simulator state, we inject controlled corruption
+pliance and adaptation:                                            into selected world_state fields derived from perception.
+   1) URB-RAIN-MULTILINGUAL: urban routes with                     We consider three corruption types: (i) missed signs (drop the
+      heavy rain and foreign-language signage; the assistant       speed-limit sign observation), (ii) misread limits (perturb the
+      must interpret signs and recommend safe speed and            parsed limit value and units), and (iii) actor dropouts (remove a
+      headway.                                                     tracked actor for a time window). We measure how corruption
+   2) CROSS-BORDER: routes that cross jurisdictions with           degrades (a) event extraction and tool routing (event F1 and
+      changes in signage conventions, right/left-hand traffic,     correct-tool rate), and (b) downstream safety and compliance
+      and units (km/h vs. mph); the assistant must switch rule     metrics (infractions, overspeed, hazard response, and TTC at
+      sets and explanations.                                       intervention).
+   3) DYNAMIC-VSL: corridors with variable speed limit
+      gantries and weather-conditioned limits; the assistant
+      must adopt new limits quickly while accounting for           E. Baselines
+      traction.                                                       We compare DriveMCP against three VLM baselines that
+For comparisons, perception inputs are constructed from the        isolate the impact of retrieval, tools, and arbitration:
+sensor-like stack in Section IV, including DriveLM-parsed              • VLM-Direct: a single DriveLM inference that consumes
+speed limits and jurisdiction cues. Unless otherwise stated, all         the current image and a textual perception summary and
+methods operate on the same sensor snapshots and the same                outputs an advisory response.
+rulepack configuration. To quantify remaining realism gaps,            • VLM-Direct+RAG: the same as VLM-Direct, but with
+we also evaluate robustness under controlled world_state                 top-k retrieved traffic-code passages and sign-table snip-
+corruption (missed signs, misread limits, and actor dropouts)            pets concatenated to the prompt.
+and report an oracle variant that uses simulator metadata only         • VLM-Tools-NoArbiter: a tool-augmented variant that
+for analysis.                                                            uses the same MCP tool layer (Rules, Weather, MCP-
+                                                                         CAN) and the same event-driven routing as DriveMCP,
+B. Rulepacks and Jurisdictions                                           but bypasses the safety arbiter and returns the fused
+                                                                         recommendation directly.
+   We evaluate DriveMCP under explicit jurisdiction config-
+                                                                       • DriveMCP (ours): full modular system with Rules,
+urations to support auditability and reproducibility. Table III
+                                                                         Weather, and CAN context, plus safety arbitration and
+lists the rulepacks used in our scenarios and their unit and
+                                                                         memory and feedback.
+traffic-side conventions.
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                9
+
+
+
+TABLE IV: Baseline configurations. All methods receive the         B. Safety Arbiter Calibration and Sensitivity
+same synchronized sensor snapshot.
+                                                                      All safety-arbiter constants are fixed across scenarios after
+ Method         Retrieval     Tools   Safety    world_state        offline calibration. To assess sensitivity, we vary the speak-
+                                      arbiter   form               versus-act margin ∆ while holding all other parameters con-
+ VLM-Direct     no            no      no        text summary       stant. Table VII shows the expected trade-off: increasing ∆
+ VLM-           yes           no      no        text summary       reduces intervention frequency and false positives but can
+ Direct+RAG
+ VLM-Tools-     yes           yes     no        structured JSON    delay escalation, reducing TTC at escalation.
+ NoArbiter
+ DriveMCP       yes           yes     yes       structured JSON
+ (ours)                                                            C. Ablation Study
+                                                                      Table VIII reports ablations with exact values and 95%
+                                                                   confidence intervals (CI) over 10 runs in CROSS-BORDER.
+F. Metrics                                                         Removing retrieval from the Rules server is the dominant
+                                                                   contributor to infractions under jurisdiction shifts. Removing
+  We report:
+                                                                   tool parallelism primarily impacts latency. The oracle variant
+  • Infractions per 10 km: speeding, failure to stop, illegal      quantifies the remaining gap between DriveLM-derived key
+    turns, incorrect yielding.                                     facts and simulator metadata.
+  • Overspeed (%): average percentage above the inferred
+    posted or dynamic limit.
+                                                                   D. CAN Fault Injection Experiment
+  • Hazard response time (s): delay from hazard onset to
+    first effective warning or intervention.                          To evaluate CAN-aware assistance, we inject degraded brak-
+  • Advisory latency (s): end-to-end time from event detec-
+                                                                   ing envelopes and corresponding CAN fault indicators (ABS
+    tion to advisory generation.                                   fault and low tire pressure) while keeping the visual scene
+  • TTC at first escalation (s): TTC at the moment the
+                                                                   unchanged. Table IX shows that CAN-aware context reduces
+    system first escalates; higher indicates earlier escalation.   recommended target speeds and improves TTC at escalation,
+  • Event extraction F1 (%): F1 score for detecting key
+                                                                   which reduces near-collisions in the degraded braking setting.
+    discrete events.
+  • Correct-tool rate (%): fraction of timesteps where the         E. Qualitative Observations
+    system invokes the correct subset of tools.                       In static regulation scenes, DriveMCP explanations closely
+  • Intervention false-positive rate (%): fraction of inter-       follow retrieved statute text, improving transparency compared
+    ventions that occur without an RSS violation.                  to monolithic responses. In URB-RAIN-MULTILINGUAL,
+  • Qualitative ratings: explanation clarity and perceived         the Weather server contributes traction-aware guidance (re-
+    helpfulness collected via debriefing questionnaires.           duced target speed and increased headway) that the Rules
+                                                                   server alone would not infer. CAN context is most useful when
+                            IX. R ESULTS                           the driver asks diagnostic questions (e.g., warning lights) or
+                                                                   when the health score indicates degraded braking, in which
+   Table V summarizes results for the three scenario families.     case the system adopts more conservative advice while pre-
+VLM-Direct benefits from language grounding but lacks ex-          serving legal compliance.
+plicit rule retrieval, tool access, and arbitration, which leads
+to more infractions under jurisdiction changes and dynamic          X. D ISCUSSION : T RACEABILITY, H UMAN FACTORS , AND
+limits. Adding retrieval (VLM-Direct+RAG) improves com-                                 CAN U SE C ASES
+pliance, especially in CROSS-BORDER and DYNAMIC-VSL,
+                                                                   A. Traceability and Post-Drive Audit
+but increases latency due to longer context and does not con-
+sistently improve hazard response. Tool augmentation (VLM-            A core motivation for tool modularity is the ability to
+Tools-NoArbiter) improves both compliance and hazard re-           reconstruct why a recommendation was produced. DriveMCP
+sponse, but it can trigger unnecessary escalations without an      records (i) the detected events, (ii) the exact set of MCP
+explicit safety filter. DriveMCP achieves the lowest infraction    tools invoked, (iii) the retrieved rule passages (document
+rate and overspeed across scenarios while maintaining sub-         identifiers and offsets), (iv) intermediate tool outputs, (v) the
+second advisory latency through selective routing and parallel     fused explanation, and (vi) the safety metrics and arbitration
+MCP calls.                                                         outcome. This trace supports debugging and regression testing,
+                                                                   policy review, and model update containment.
+
+A. Robustness to Corrupted World-State Fields                      B. Human Factors and Explanation Quality
+   Table VI quantifies how perception corruption affects event        Driver assistance must balance informativeness with cog-
+extraction, tool routing, and downstream safety and compli-        nitive load. DriveMCP controls verbosity using a two-level
+ance. Missed or misread speed-limit cues primarily degrade         explanation: (i) a short actionable directive (“slow to 60
+compliance (infractions and overspeed), while actor dropouts       km/h”), and (ii) an optional justification (“gantry limit updated;
+primarily degrade hazard response.                                 heavy rain reduces traction”). The orchestrator suppresses
+ IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                                                                                             10
+
+
+
+ TABLE V: Performance in CARLA scenarios (mean ± std. over 10 runs). Lower is better for infractions, overspeed, hazard
+ response, and latency; higher is better for TTC at first escalation.
+                                                          Infractions/10 km            Overspeed (%)              Hazard response (s)                             Advisory latency (s)      TTC at escalation (s)
+ Method
+                                                                   ↓                         ↓                             ↓                                               ↓                         ↑
+  URB-RAIN-MULTILINGUAL
+ VLM-Direct             1.1 ± 0.3                                                           2.1                                             1.10                         0.68                       1.5
+ VLM-Direct+RAG         0.9 ± 0.3                                                           1.8                                             1.05                         0.78                       1.6
+ VLM-Tools-NoArbiter    0.4 ± 0.2                                                           1.0                                             0.70                         0.25                       2.2
+ DriveMCP (ours)        0.3 ± 0.2                                                           0.9                                             0.73                         0.29                       2.0
+  CROSS-BORDER
+ VLM-Direct                                                  0.9 ± 0.4                      1.6                                             1.02                         0.61                       1.6
+ VLM-Direct+RAG                                              0.5 ± 0.2                      1.2                                             0.95                         0.71                       1.7
+ VLM-Tools-NoArbiter                                         0.3 ± 0.1                      0.8                                             0.70                         0.27                       2.3
+ DriveMCP (ours)                                             0.2 ± 0.1                      0.7                                             0.72                         0.31                       2.1
+  DYNAMIC-VSL
+ VLM-Direct                                                  0.9 ± 0.3                      1.8                                             1.08                         0.66                       1.6
+ VLM-Direct+RAG                                              0.5 ± 0.2                      1.4                                             1.00                         0.74                       1.7
+ VLM-Tools-NoArbiter                                         0.3 ± 0.2                      0.7                                             0.67                         0.26                       2.2
+ DriveMCP (ours)                                             0.2 ± 0.2                      0.6                                             0.69                         0.30                       2.0
+
+
+                                                                      VLM-Direct           VLM-Direct+RAG                                   VLM-Tools-NoArbiter           DriveMCP
+
+                                               Traffic infractions across scenarios                                                                    Hazard response time across scenarios
+                            1.6
+                                  1.1                                                                                                      1.2 1.10
+                            1.4                                                                                                                    1.05                                         1.08
+                                                               0.9                                                                                                        1.02                      1.00
+Infractions per 10 km ( )
+
+
+
+
+                                        0.9                                               0.9                                              1.0                                0.95
+                                                                                                                   Hazard response (s, )
+
+                            1.2
+                            1.0                                                                                                            0.8             0.73                      0.72                  0.69
+                                                                                                                                                       0.70                      0.70                  0.67
+                            0.8                                      0.5                        0.5                                        0.6
+                                              0.4
+                            0.6                     0.3                                               0.3
+                                                                           0.3                              0.2                            0.4
+                            0.4                                                  0.2
+                            0.2                                                                                                            0.2
+                            0.0                                                                                                            0.0
+                                   URB-RAIN                  CROSS-BORDER                DYNAMIC-VSL                                               URB-RAIN              CROSS-BORDER           DYNAMIC-VSL
+ Fig. 5: Infractions and hazard response times across scenarios for VLM-Direct, VLM-Direct+RAG, VLM-Tools-NoArbiter,
+ and DriveMCP.
+
+
+ repeated messages using short-term memory and adjusts tone                                                        perception, with key compliance fields parsed from DriveLM
+ based on feedback labels. This design aligns with prior work                                                      outputs. However, important gaps remain relative to on-road
+ on self-driving explanations that emphasizes concise, user-                                                       deployment, including sensor calibration errors, domain shift,
+ oriented rationales [11].                                                                                         and temporal inconsistency in VLM outputs under extreme
+                                                                                                                   conditions. Future work should evaluate multi-camera inputs,
+ C. CAN-Based Diagnostic and Degraded-Mode Assistance                                                              richer perception stacks, and stronger uncertainty propagation,
+    CAN/OBD context enables assistance beyond vision-only                                                          including conservative strategies for uncertain sign and juris-
+ interpretation. For example, if a stability-control warning is                                                    diction recognition.
+ present, the assistant can recommend a lower speed and
+ smoother braking, even when the scene appears benign. Like-
+ wise, a low tire pressure signal can increase hydroplaning risk
+ under rain and motivate earlier speed reduction. In DriveMCP,                                                     B. Knowledge Quality and Jurisdictional Coverage
+ CAN-derived constraints modify the health score h and are
+ surfaced explicitly to the driver.                                                                                   DriveMCP relies on external corpora for compliance rea-
+                                                                                                                   soning. Although this improves updateability, it introduces
+            XI. L IMITATIONS AND F UTURE W ORK
+                                                                                                                   new failure modes: stale rule packs, incomplete jurisdiction
+ A. Perception and DriveLM Integration                                                                             coverage, and retrieval errors. Future work should formalize
+    DriveMCP is evaluated in simulation using a sensor-like                                                        corpus curation and versioning, incorporate automated consis-
+ stack that derives world_state from camera and LiDAR                                                              tency checks, and add confidence estimation for retrieval.
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                                   11
+
+
+
+TABLE VI: Robustness under controlled world_state corruption in CROSS-BORDER (DriveMCP). Event F1 and correct-
+tool rate measure event extraction and routing quality.
+                               Event F1 (%)         Correct-tool rate (%)      Infractions/10 km           Overspeed (%)            Hazard response (s)
+Corruption setting
+                                     ↑                        ↑                         ↓                        ↓                           ↓
+Clean sensor stack                 92                        94                    0.2 ± 0.1                     0.7                        0.72
+Sign miss (10%)                    85                        88                    0.4 ± 0.2                     1.0                        0.75
+Sign miss (30%)                    70                        76                    0.8 ± 0.3                     1.8                        0.80
+Limit misread (10%)                78                        82                    0.6 ± 0.2                     1.5                        0.76
+Actor dropout (10%)                90                        92                    0.3 ± 0.1                     0.8                        0.88
+Actor dropout (30%)                84                        86                    0.5 ± 0.2                     1.0                        1.05
+
+
+
+TABLE VII: Sensitivity to arbitration margin ∆ in                                                     XII. C ONCLUSION
+DYNAMIC-VSL (DriveMCP).
+                                                                               This paper presented DriveMCP, a DriveLM-grounded,
+         Interventions/10 km   False positives (%) TTC at escalation (s)    MCP-orchestrated driver-assistance framework that combines
+   ∆
+                   ↓                   ↓                    ↑
+                                                                            regulation-aware retrieval, weather-aware traction reasoning,
+   0.0           3.2                    18                  2.3             CAN-based vehicle context, and RSS-inspired safety arbitra-
+   0.1           2.4                    12                  2.2
+   0.2           1.8                     8                  2.1             tion. By modularizing perception, compliance, environment
+   0.3           1.2                     5                  2.0             reasoning, and telemetry interpretation, DriveMCP improves
+   0.4           0.9                     4                  1.9             updateability and traceability while retaining low-latency re-
+                                                                            sponsiveness through parallel tool calls. Simulation results
+                                                                            demonstrate reduced infractions and improved hazard response
+C. Tool Reliability, Security, and Privacy                                  relative to VLM-Direct, VLM-Direct+RAG, and VLM-Tools-
+  Modular MCP servers simplify system composition but                       NoArbiter baselines. The proposed architecture provides a
+require robust security. A production system would need                     practical template for integrating VLM-based understanding
+authenticated tool endpoints, access control, and sandboxing to             with vehicle-grade constraints and auditable decision logic in
+prevent prompt injection or malicious tool outputs. For CAN                 intelligent vehicles.
+access, privacy concerns require minimizing signal requests
+and restricting logs to safety-relevant fields.                                                           R EFERENCES
+                                                                             [1] B. Paden, M. Čáp, S. Z. Yong, D. Yershov, and E. Frazzoli, “A survey of
+D. Safety Assurance and Certification Pathways                                   motion planning and control techniques for self-driving urban vehicles,”
+                                                                                 IEEE Trans. Intell. Veh., vol. 1, no. 1, pp. 33–55, Mar. 2016, doi:
+   The RSS/TTC arbiter in DriveMCP is intentionally sim-                         10.1109/TIV.2016.2578706.
+                                                                             [2] S. Grigorescu, B. Trasnea, T. Cocias, and G. Macesanu, “A survey
+plified and should not be interpreted as a certified safety                      of deep learning techniques for autonomous driving,” J. Field Robot.,
+controller. We view DriveMCP as a research prototype that                        vol. 37, no. 3, pp. 362–386, Apr. 2020, doi: 10.1002/rob.21918.
+demonstrates how interpretable guardrails and auditable tool                 [3] L. Chen, P. Wu, K. Chitta, B. Jaeger, A. Geiger, and H. Li, “End-
+                                                                                 to-end autonomous driving: Challenges and frontiers,” IEEE Trans.
+traces can support safety case arguments, but full assurance                     Pattern Anal. Mach. Intell., early access, 2024, doi: 10.1109/T-
+remains an open challenge. Relevant safety standards include                     PAMI.2024.3435937.
+ISO 26262 and ISO 21448 [24], [25].                                          [4] Z. Xu, Y. Zhang, E. Xie, Z. Zhao, Y. Guo, K.-Y. K. Wong, Z. Li,
+                                                                                 and H. Zhao, “DriveGPT4: Interpretable end-to-end autonomous driving
+                                                                                 via large language model,” IEEE Robot. Autom. Lett., vol. 9, no. 10,
+                                                                                 pp. 8186–8193, 2024, doi: 10.1109/LRA.2024.3440097.
+E. Human Factors and Overreliance                                            [5] C. Sima et al., “DriveLM: Driving with graph visual question answer-
+                                                                                 ing,” in Proc. Eur. Conf. Comput. Vis. (ECCV), 2024, pp. 261–279, doi:
+   Language-based assistants can shape driver behavior. Future                   10.1007/978-3-031-72943-0 15.
+work should measure driver trust calibration, distraction, and               [6] C. Pan, B. Yaman, T. Nesti, A. Mallik, A. G. Allievi, S. Velipasalar,
+                                                                                 and L. Ren, “VLP: Vision language planning for autonomous driving,”
+potential overreliance under long drives, including message                      in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR), 2024,
+frequency and phrasing.                                                          pp. 14760–14769.
+                                                                             [7] S. Park, M. Lee, J. Kang, H. Choi, Y. Park, J. Cho, A. Lee, and D. Kim,
+                                                                                 “VLAAD: Vision and language assistant for autonomous driving,” in
+                                                                                 Proc. IEEE/CVF Winter Conf. Appl. Comput. Vis. Workshops (WACVW),
+F. Future Extensions                                                             2024, pp. 980–987.
+                                                                             [8] K. Renz, L. Chen, E. Arani, and O. Sinavski, “SimLingo: Vision-
+   Beyond the three MCP servers used in this work, additional                    only closed-loop autonomous driving with language-action alignment,”
+domain services could include road-work feeds, HD map                            arXiv:2503.09594, 2025. [Online]. Available: https://arxiv.org/abs/2503.
+updates, and fleet learning signals. Multi-agent coordination                    09594
+                                                                             [9] S. Jiang et al., “A survey on vision-language-action models for au-
+perspectives (e.g., swarm intelligence) may also inform coop-                    tonomous driving,” arXiv:2506.24044, 2025. [Online]. Available: https:
+erative driving and fleet-scale adaptation [39]. We also plan                    //arxiv.org/abs/2506.24044
+to evaluate DriveMCP against closed-loop benchmarks and to                  [10] J. Yuan et al., “RAG-Driver: Generalisable driving explanations with
+                                                                                 retrieval-augmented in-context learning in multi-modal large language
+release reproducible tool-call traces and scenario specifications                model,” arXiv:2402.10828, 2024. [Online]. Available: https://arxiv.org/
+to support comparative research.                                                 abs/2402.10828
+IEEE TRANSACTIONS ON INTELLIGENT VEHICLES, VOL. X, NO. X, MONTH YYYY                                                                                        12
+
+
+
+                  TABLE VIII: Ablations in CROSS-BORDER (mean over 10 runs, with 95% CI for the mean).
+                                                   Infractions/10 km                       Advisory latency (s)                          Hazard response (s)
+Variant
+                                                            ↓                                       ↓                                             ↓
+DriveMCP (full)                                      0.20 ± 0.06                                0.31 ± 0.03                                      0.72
+No RAG in Rules                                      0.90 ± 0.19                                0.32 ± 0.03                                      0.74
+No tool parallelism                                  0.24 ± 0.07                                0.42 ± 0.04                                      0.73
+No CAN context                                       0.22 ± 0.06                                0.31 ± 0.03                                      0.72
+No feedback adaptation                               0.26 ± 0.07                                0.31 ± 0.03                                      0.75
+Oracle key facts (metadata)                          0.15 ± 0.05                                0.30 ± 0.03                                      0.71
+
+
+
+TABLE IX: CAN fault injection scenario (degraded braking).                           safe and scalable self-driving cars,” arXiv:1708.06374, 2017. [Online].
+Lower is better for near-collisions; higher is better for TTC.                       Available: https://arxiv.org/abs/1708.06374
+                                                                                [21] Intel, “ad-rss-lib: C++ library implementing the Responsibility-Sensitive
+                        Target (km/h) TTC (s) Near-collisions/10 km                  Safety (RSS) model,” GitHub repository, accessed 2025. [Online].
+     Method                                                                          Available: https://github.com/intel/ad-rss-lib
+                              ↓         ↑                ↓
+                                                                                [22] J. C. Hayward, “Near miss determination through use of a scale of
+     VLM-Direct               78          1.5              0.9                       danger,” Highway Research Record, no. 384, pp. 24–34, 1972.
+     VLM-                     77          1.6              0.8                  [23] R. Rajamani, Vehicle Dynamics and Control, 2nd ed. Springer, 2012.
+     Direct+RAG                                                                 [24] ISO, ISO 26262 Road Vehicles – Functional Safety. International Orga-
+     VLM-Tools-               70          2.0              0.4                       nization for Standardization, 2018.
+     NoArbiter                                                                  [25] ISO, ISO 21448 Road Vehicles – Safety of the Intended Functionality
+     DriveMCP (ours)          65          2.2              0.2                       (SOTIF). International Organization for Standardization, 2022.
+                                                                                [26] United Nations, “Vienna Convention on Road Signs and Signals,” 1968.
+                                                                                     [Online]. Available: https://treaties.un.org/
+TABLE X: Illustrative DriveMCP interactions (abbreviated).                      [27] Federal Highway Administration, “Manual on Uniform Traffic Control
+                                                                                     Devices (MUTCD), 11th Edition,” 2023. [Online]. Available: https://
+  Scenario          Driver query                Tools invoked → key out-             mutcd.fhwa.dot.gov/
+                                                put                             [28] U.K. Government, “The Traffic Signs Regulations and General Direc-
+  URB-RAIN          “What does this sign Rules + Weather → stop                      tions 2016,” 2016. [Online]. Available: https://www.legislation.gov.uk/
+                    mean?”                required; reduce speed due            [29] A. Dosovitskiy et al., “CARLA: An open urban driving simulator,” in
+                                          to low friction.                           Proc. Conf. Robot Learn. (CoRL), 2017.
+  CROSS-            “Are we in mph now?”  Rules     →      jurisdiction         [30] H. Caesar et al., “nuScenes: A multimodal dataset for autonomous
+  BORDER                                  switched; units converted;                 driving,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit.
+                                          new limit explained.                       (CVPR), 2020, pp. 11621–11631.
+  DYNAMIC-          “Why did the limit Rules + Weather →                        [31] J. Redmon, S. Divvala, R. Girshick, and A. Farhadi, “You only
+  VSL               drop?”                gantry update; recommend                   look once: Unified, real-time object detection,” in Proc. IEEE Conf.
+                                          compliant and safe target                  Comput. Vis. Pattern Recognit. (CVPR), 2016, pp. 779–788, doi:
+                                          speed.                                     10.1109/CVPR.2016.91.
+  CAN fault         “A warning light came CAN       +    Rules       →          [32] R. E. Kalman, “A new approach to linear filtering and prediction
+                    on; is it safe?”      DTC/health           context;              problems,” J. Basic Eng., vol. 82, no. 1, pp. 35–45, 1960, doi:
+                                          recommend conservative                     10.1115/1.3662552.
+                                          driving or safe pull-over.            [33] A. Bewley, Z. Ge, L. Ott, F. Ramos, and B. Upcroft, “Simple online
+                                                                                     and realtime tracking,” in Proc. IEEE Int. Conf. Image Process. (ICIP),
+                                                                                     2016, pp. 3464–3468, doi: 10.1109/ICIP.2016.7533003.
+                                                                                [34] ISO, ISO 11898-1 Road Vehicles – Controller Area Network (CAN)
+[11] J. Kim, A. Rohrbach, T. Darrell, and J. Canny, “Textual explanations for        – Part 1: Data Link Layer and Physical Signalling. International
+     self-driving vehicles,” in Proc. Eur. Conf. Comput. Vis. (ECCV), 2018,          Organization for Standardization, 2015.
+     pp. 563–578, doi: 10.1007/978-3-030-01216-8 35.                            [35] SAE International, SAE J1979: E/E Diagnostic Test Modes. SAE Inter-
+[12] P. Lewis et al., “Retrieval-augmented generation for knowledge-intensive        national, 2014.
+     NLP tasks,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS), 2020.      [36] F. Nadiri, “MCP-CAN: Model Context Protocol server for CAN and
+     [Online]. Available: https://arxiv.org/abs/2005.11401                           OBD telemetry,” GitHub repository, accessed 2025. [Online]. Available:
+[13] S. Robertson and H. Zaragoza, “The probabilistic relevance framework:           https://github.com/farzadnadiri/MCP-CAN
+     BM25 and beyond,” Found. Trends Inf. Retr., vol. 3, no. 4, pp. 333–389,    [37] F. Nadiri and A. B. Rad, “A novel lateral control system for autonomous
+     2009, doi: 10.1561/1500000019.                                                  vehicles: A look-down strategy,” Machines, vol. 13, no. 3, p. 211,
+                                                                                     Mar. 2025, doi: 10.3390/machines13030211.
+[14] V. Karpukhin et al., “Dense passage retrieval for open-domain question
+                                                                                [38] F. Nadiri, T. Banirostam, and A. B. Rad, “On a novel localization
+     answering,” arXiv:2004.04906, 2020. [Online]. Available: https://arxiv.
+                                                                                     methodology for humanoid soccer robots via sensor fusion and perspec-
+     org/abs/2004.04906
+                                                                                     tive transformation,” Int. J. Intell. Robot. Appl., vol. 9, pp. 1577–1593,
+[15] Model Context Protocol, “MCP specification and documentation,” ac-
+                                                                                     Apr. 2025, doi: 10.1007/s41315-025-00451-5.
+     cessed 2025. [Online]. Available: https://modelcontextprotocol.io/
+                                                                                [39] F. Nadiri and A. B. Rad, “Swarm intelligence for collaborative play in
+[16] LangChain, “LangGraph overview: Durable, stateful, human-in-the-
+                                                                                     humanoid soccer teams,” Sensors, vol. 25, no. 11, p. 3496, May 2025,
+     loop agent graphs,” accessed 2025. [Online]. Available: https://docs.
+                                                                                     doi: 10.3390/s25113496.
+     langchain.com/oss/python/langgraph/overview
+[17] A. Karpas et al., “MRKL systems: A modular, neuro-symbolic architec-
+     ture that combines large language models, external knowledge sources
+     and discrete reasoning,” arXiv:2205.00445, 2022. [Online]. Available:
+     https://arxiv.org/abs/2205.00445
+[18] S. Yao et al., “ReAct: Synergizing reasoning and acting in language
+     models,” in Proc. Int. Conf. Learn. Represent. (ICLR), 2023. [Online].
+     Available: https://arxiv.org/abs/2210.03629
+[19] T. Schick et al., “Toolformer: Language models can teach themselves
+     to use tools,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS), 2023.
+     [Online]. Available: https://arxiv.org/abs/2302.04761
+[20] S. Shalev-Shwartz, S. Shammah, and A. Shashua, “On a formal model of
+

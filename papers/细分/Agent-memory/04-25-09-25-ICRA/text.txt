@@ -1,0 +1,587 @@
+                                                     MTRDrive: Memory-Tool Synergistic Reasoning for Robust
+                                                             Autonomous Driving in Corner Cases
+                                                    Ziang Luo1,2∗ , Kangan Qian1,2∗ , Jiahua Wang2,† , Yuechen Luo1 , Jinyu Miao1 , Zheng Fu1 ,
+                                               Yunlong Wang1 , Sicong Jiang3 , Zilin Huang4 , Yifei Hu2 , Yuhao Yang2 , Hao Ye2 , Mengmeng Yang1 ,
+                                                                         Xiaojian Dong2 , Kun Jiang1 , Diange Yang1,‡
+
+
+                                            Abstract— Vision-Language Models(VLMs) have demon-
+                                         strated significant potential for end-to-end autonomous driving,
+                                         yet a substantial gap remains between their current capabilities
+arXiv:2509.20843v1 [cs.RO] 25 Sep 2025
+
+
+
+
+                                         and the reliability necessary for real-world deployment. A                  <Question>
+                                         critical challenge is their fragility, characterized by halluci-             You are the brain of an autonomous vehicle. your
+                                                                                                                       speed is 15.12, what is your driving plan next?
+                                         nations and poor generalization in out-of-distribution (OOD)                      <Experience>
+                                         scenarios. To bridge this gap, we introduce MTRDrive, a novel                     #</scenario 1>: TTC sign on right sidewalk,
+                                                                                                                           facing this scenario, use object detection
+                                         framework that integrates procedural driving experiences with                     tools, ... and finally turn left
+                                                                                                                           #</scenario 2>:...
+                                                                                                                                                                         Planning Decision Accuracy
+
+                                         a dynamic toolkit to enhance generalization and proactive                         <Tool>
+                                         decision-making.                                                                  function:get_object_detection",
+                                                                                                                           parameters: {"range": [20, 20]}
+                                            MTRDrive addresses these limitations through a closed-loop                     output: " A car is directly in front of ego
+                                                                                                                           vehicle"</tool>
+                                         system that combines a memory-based experience retrieval                    <Think>
+                                                                                                                     Combined with the earlier experience and tool
+                                         mechanism with dynamic toolkits. This synergy enables the                   result, we are facing ongoing roadwork,
+                                                                                                                     Construction barriers and workers are visible
+                                         model to interact more effectively with its environment, im-                on the left</think>
+                                         proving both reasoning and decision-making capabilities with               <Answer>
+                                                                                                                    Decelerate and Go straight left</answer>
+                                         the help of our memory-tool synergistic reasoning. Additionally,
+                                                                                                                                                                         Planning Decision Accuracy
+                                         we introduce a new benchmark based on complex Roadwork
+                                         construction scenarios to rigorously evaluate zero-shot gener-
+                                                                                                                   Fig. 1. An overview of our MTRDrive framework and its performance
+                                         alization.                                                                benefits. Left: The interactive reasoning process, where the agent leverages
+                                            Extensive experiments demonstrate the superior effectiveness           retrieved past experiences and real-time tool use in a chain-of-thought
+                                         of our approach. On the public NAVSIM benchmark, our 3B-                  process to make a final driving decision. Right: Quantitative results show
+                                         parameter MTRDrive model achieves an exceptional PDMS                     that MTRDrive significantly boosts planning decision accuracy over baseline
+                                         of 88.3 without chain-of-thought and sets a state-of-the-art              methods. The improvement is particularly dramatic in the challenging out-
+                                         performance bar on high-level planning, with a driving metric             of-domain test, demonstrating enhanced generalization.
+                                         score of 79.8% and a planning accuracy of 82.6%. Rigorous
+                                         zero-shot evaluation on the new Roadwork-VLM benchmark
+                                         shows a strong ability to reason robustly in unseen scenarios,
+                                         achieving a driving metric score of 80.2%. These results                     Despite these advances, a significant gap remains between
+                                         highlight MTRDrive’s potential to advance autonomous driving              current VLM performance and the reliability required for
+                                         toward safer and more reliable systems.                                   real-world deployment: The models are inherently fragile,
+                                                                                                                   often exhibiting visual hallucinations and failing in out-
+                                                                I. INTRODUCTION                                    of-distribution (OOD) scenarios [7], [14]. In autonomous
+                                            The emergence of Vision-Language Models (VLMs) [1]                     driving, a field where even a minor error can lead to catas-
+                                         has propelled the paradigm of end-to-end autonomous driv-                 trophic outcomes, such limitations present a critical barrier
+                                         ing forward, building a single, cohesive system that mir-                 to adoption[15], [16].
+                                         rors human cognitive processes. Unlike traditional modular                   Fundamentally, a robust driving decision is influenced by
+                                         pipelines that separate perception[2], [3], prediction[4], and            two key factors: the accuracy of perception and the soundness
+                                         decision-making[5], [6], VLMs break down these divisions                  of reasoning. Human cognition itself can be viewed as a
+                                         by jointly modeling multi-modal inputs and generating holis-              lifelong feedback loop:
+                                         tic driving responses in a unified framework. Recent impres-
+                                                                                                                           We are perpetually in a state of self-query: Our ini-
+                                         sive demonstrations show that these models, often enhanced
+                                                                                                                           tial experiences form the ’first draft’ of this model,
+                                         by techniques like Chain-of-Thought (CoT), can achieve
+                                                                                                                           which is then continuously edited and refined by
+                                         strong performance across various tasks, from perception-
+                                                                                                                           every subsequent interaction throughout our lives.
+                                         based Visual Question Answering (VQA) [7], [8], [9], [10]
+                                         to intricate motion planning [11], [12], [13].                            This principle is directly embodied by a human driver,
+                                                                                                                   who constantly engages in a closed-loop interaction with
+                                           1 School of Vehicle and Mobility, Tsinghua University, Beijing, China
+                                           2 Automotive and Robotics, Xiaomi Corporation, Beijing, China
+                                                                                                                   their environment. They ensure safety through continuous
+                                           3 McGill University, Montreal, Quebec, Canada                           perception and combine real-time analysis and past driving
+                                           4 University of Wisconsin-Madison, Madison, WI, USA                     experience to judge and execute their next action. This
+                                           ∗ Equal contribution. † Project Leader. ‡ Corresponding authors         dynamic, interactive process of observing and reflecting is
+what enables reliable navigation in complex and unforeseen         Chain-of-Thought (CoT) methodologies in autonomous driv-
+situations.                                                        ing have emerged as an explainable and transparent paradigm
+   Inspired by this human-like process, we propose MTR-            to improve perception, cognition, and planning capabili-
+Drive, a novel framework built on the principle of In-             ties. Studies such as DriveCoT [24], AgentDriver [25],
+teractive Reasoning to address the limitations of current          and Sce2DriveX [26] employ step-by-step reasoning with
+VLM-based driving agents. Unlike traditional methods that          fixed prompt templates, enriching contextual information and
+treat each input as a one-shot decision, MTRDrive endows           leading to improved driving decisions in complex scenarios.
+the agent with the ability to proactively retrieve driveing        AgentThink [7] introduced a framework that integrates tool-
+experience and employ tools to query its environment. As           use capabilities into the VLM reasoning process, allowing
+vividly demonstrated in Figure 1, by shifting from a static        models to dynamically invoke tools to enhance reasoning
+decision-making model to a dynamic, interactive one, our           accuracy and reduce hallucinations. AutoVLA [13] and Im-
+approach mitigates the risk of hallucinations and dramatically     promptu VLA[27] fuse reasoning processes with trajectory
+improves performance in novel, unseen scenarios.                   planning within the CoT framework, demonstrating superior
+   In summary, our key contributions are:                          generalization across benchmarks such as NAVSIM [28] and
+   • We introduce MTRDrive, a novel framework that mod-            Bench2Drive [29].
+      els autonomous driving as a dynamic, interactive pro-           However, these methods often depend on extensive CoT
+      cess, moving beyond static, one-shot decision-making         data to develop reasoning capabilities, which is a process
+      paradigms.                                                   that is highly inefficient and prone to hallucinations dur-
+   • We propose a memory-tool synergy mechanism that               ing reasoning. Moreover, they still fall short in leveraging
+      enables the agent to utilize both a knowledge base of        structured knowledge inherent to the autonomous driving
+      past driving experiences and active toolkits for real-time   domain[30]. Such limitations impede the ability of self-
+      information retrieval.                                       driving vehicles to perform robust detection and planning in
+   • We demonstrate that our approach effectively mitigates        complex environments. By contrast, our approach introduces
+      visual hallucinations and improves generalization            a driving knowledge base for efficient experience reuse and
+      in challenging out-of-distribution scenarios, which is       a tool-calling agent that supplies quantitative outputs (e.g.
+      critical for real-world deployment.                          detection results), ultimately supporting a more interactive
+                                                                   and grounded reasoning process.
+                    II. R ELATED W ORK
+A. Vision-Language-Action Models for Autonomous Driving                                III. M ETHODOLOGY
+   Recent advancements in language modeling have cre-                 Our proposed framework, MTRDrive, is a Vision-
+ated new opportunities for autonomous driving, particularly        Language Model (VLM) specifically designed for au-
+through vision-language-action (VLA) systems. Early efforts        tonomous driving planning. Drawing inspiration from hu-
+integrated Visual Language Models (VLMs) with textual              man cognitive processes, MTRDrive enhances its decision-
+prompts to generate scene descriptions and high-level naviga-      making capabilities by integrating memory retrieval and tool
+tion instructions [17], [18] without directly producing control    interaction. By retrieving and reasoning over past driving
+signals. For example, DriveGPT-4 [19] processed a single           experiences, the model improves its planning accuracy and
+front-camera image to produce either textual descriptions or       grounds its tool selection process in relevant prior knowl-
+high-level maneuver labels (e.g., ”slow down,” ”turn left”),       edge, thereby mitigating the risk of visual hallucinations. The
+while actual vehicle control remained handled by traditional       overall architecture of our framework is depicted in Figure
+modules such as PID controllers. Subsequent work, including        2.
+OpenDriveVLA [20] and Orion [12], significantly narrowed              The MTRDrive framework comprises two core compo-
+the semantic gap between language instructions and vehicle         nents: a Driving Experience Base that stores structured
+actions, effectively embedding natural language into the           driving experience, and an Experience-Driven Planning Mod-
+core planning loop. To further advance end-to-end pipeline         ule that leverages these experience for tool interaction and
+performance, unified VLA models such as EMMA [21],                 decision-making. This architecture enables our agent to
+LMDrive [9], CarLLaVA [22], and SimLingo [23] have been            achieve a higher level of cognitive function by synergizing
+developed based on language backbones and fine-tuned using         historical knowledge with real-time perception.
+trajectories from human experts or simulators.
+                                                                   A. Driving Experience Base Construction
+   However, these data-driven fine-tuning methods often
+struggle to mitigate visual hallucinations and perform inad-          To emulate the human ability to learn from experience,
+equately in out-of-distribution (OOD) scenarios. In contrast,      we first construct a structured, retrievable knowledge base
+our framework empowers the agent to proactively interact           of past driving scenarios.
+with its environment with memory-tool synergistic reasoning.          1) Semantic Scenario Encoding: The foundation of our
+                                                                   experience base is an effective retrieval system that can
+B. Chain-of-Thought in Autonomous Driving                          identify semantically similar past scenarios. While generative
+  The latest generation of VLMs extends beyond explanation         VLMs like Qwen-VL[31] excel at multimodal understanding,
+and plan conditioning to support long-horizon reasoning.           their complex architectures and input formats are suboptimal
+        Question:                                                                     Scenario Description(SD)：TTC sign on right sidewalk...
+         You are the brain of an autonomous vehicle. your
+                                                                                      Reason Process(P): The road is partially obstructed by ...
+        speed is 5.12..., what is your driving plan next?
+                                                                                      High Level Decision(P): KEEP, Do left turn
+
+                                   Embedding
+                                                                      Memory bank Tool Use(T): <tools>get_open_world_vocabulary_detection...
+                                     Model                               Embedding
+                                                                           Model      Metadata(M): Clear day, good visibility...
+                                                            Calling
+                                                            Memory
+                                                                                         Tool Engine
+                                      <Memory>
+                               SD(1),P(1),P(1),T(1),M(
+                                    1) <Memory>                                          <tool>function:get_open_world_vocabulary_detectio
+                                                                                         n,
+                                      <Memory>                                           parameters: {“text”: Right Turn sign}
+                               SD(2),P(2),P(2),T(2),M(                                   output: "A "No Right Turn" sign is visible near the
+                                    2) <Memory>
+                                                                  Tool libs Calling      construction area"</tool>
+        Top-K                                                               Tools
+                                    <Memory>                                             <tool>function:get_object_detection",
+      Retrived Data            SD(k),P(k),P(k),T(k),                                     parameters: {"range": [20, 20]}
+                                 M(k) <Memory>
+                                                                                         output: " A car is directly in front of ego
+                                                                                         vehicle"</tool>
+             VLMs            CoT
+                            <think>Combined with the earlier experience and tool result, we are facing ongoing roadwork, Construction
+                            barriers and workers are visible on the left</think>
+
+                            <speed>Decelerate</speed>
+
+                            <path> Go straight left </path>
+
+
+
+Fig. 2. Overview of MTRDrive. Given a forward-facing camera image and a text prompt, the Vision-Language Model (VLM) interacts with two external
+modules: a memory bank for experience retrieval and a tool engine for information gathering. The retrieved knowledge and tool-generated results are
+synthesized within a chain-of-thought reasoning process to produce the final driving actions, such as speed and path adjustments.
+
+
+
+for the large-scale, low-latency similarity retrieval required                the scenario description, which defines the scanarios encoun-
+for real-time driving. Therefore, we require an embedding                     tered by the agent; P is the reasoning process, an abstract
+model that prioritizes semantic representation efficiency.                    solution trajectory that includes the agent’s thought process
+   We selected the pre-trained visual encoder from CLIP[32]                   and the invocation of tools; H is the high-level decision (γ),
+for this purpose. CLIP’s architecture is explicitly optimized                 which serves as the ultimate goal for the scenario; T captures
+for learning a joint image-text embedding space, making                       the tools used in the reasoning process; and M contains the
+it highly effective at capturing visual semantic similarity.                  metadata (C) of the scenario.
+Compared to large generative models, the CLIP encoder                            By storing and retrieving experiences in this structured
+offers significantly faster inference speeds and a smaller                    format, our agent learns not just to perform a task but to
+memory footprint, rendering it ideal for our large-scale                      understand the context, common failure patterns, and suc-
+retrieval task. Its training on a vast dataset of image-text                  cessful reasoning paths. This process enables it to proactively
+pairs ensures a rich and generalizable feature space without                  leverage its toolkit for introspection, refining its plans by
+requiring task-specific fine-tuning.                                          retrieving and applying relevant past experience to new,
+   Formally, for any given driving scenario image I, the                      unforeseen situations.
+visual encoder Fenc maps it to a latent embedding vector                      B. Experience-Driven Tool Interaction and Introspection
+vI = Fenc (I), where vI ∈ Rd . The similarity between two
+                                                                                 1) Vision Toolkit: To augment the VLM’s perceptual
+scenarios, represented by images I1 and I2 , is computed
+                                                                              capabilities beyond its intrinsic understanding, MTRDrive
+using the cosine similarity of their embeddings:
+                                                                              is equipped with specialized Vision Toolkits. This suite
+                                             vI1 · v I2                       of external tools allows the agent to actively probe the
+                Similarity(I1 , I2 ) =                                        visual environment for specific, high-fidelity information.
+                                            ∥vI1 ∥∥vI2 ∥
+                                                                              The primary tools include:
+   This efficient and semantically meaningful representation                     Object Detection: This tool performs standard object
+serves as the key for retrieving relevant experiences from our                detection to identify and locate common traffic agents such as
+knowledge base.                                                               cars, pedestrians, and cyclists within a defined spatial range.
+   2) Structured Experience Representation: The structured                    It provides the foundational awareness of the immediate
+knowledge base formally represents each experience as a                       driving context.
+Driving Scenario Document. This document, which we use                           Open-World Vocabulary Detection: Going beyond pre-
+as a tuple for conceptual clarity, stores the key elements of                 defined categories, this tool enables the agent to search for
+past driving experience as ⟨SD, P, H, T, M ⟩. Here, SD is                     any object or concept described by an open-vocabulary text
+query. This is crucial for interpreting unique or complex                              SFT as a Warm-up. The initial stage is SFT, serving as a
+scenarios, such as finding ”a ’No Right Turn’ sign near the                         critical warm-up phase to address the cold start problem. By
+construction area”, as shown in Figure 2.                                           fine-tuning the model, we teach it the fundamental syntax
+   Image cropping: This tool defines a function to crop a                           for tool use and memory integration. This process yields a
+rectangular region from an image. It requires the input image                       competent initial policy, πref , which provides a robust starting
+path, an output path for the new file, and the coordinates of                       point for the subsequent reinforcement learning phase.
+the crop region. This function serves as the agent’s “zoom-                            RLFT for Policy Refinement In the second stage, we
+in” mechanism for meticulous examination of critical areas.                         further enhance the model’s decision-making abilities using
+   2) Experience-driven approach to tool interaction: While                         RLFT. We employ the GRPO algorithm [35] to optimize the
+vision toolkits provide powerful perceptual abilities, a critical                   initial policy πθ based on our task-specific reward signals.
+challenge highlighted by recent studies[33], [34] is that                           GRPO evaluates multiple candidate outputs sampled from
+Multimodal Large Language Models (MLLMs) can develop                                the reference policy πref to guide the optimization. The
+a bias towards textual information during reasoning, leading                        objective is formulated as:
+to inappropriate or misguided tool selections. To address                                                       "      G
+                                                                                                                                                  #
+                                                                                                                    1 X
+this, MTRDrive introduces a core innovation: an experience-                           JGRPO (θ) = Eq,{oi }∼πref           Ji − βDKL (πθ ||πref )
+driven approach that guides tool interaction. By retrieving                                                        G i=1
+the top-K most similar past scenarios, the model uses the                                                                                         (1)
+                                                                                                                                           
+documented reasoning processes (P ) and tool usage patterns                                   Ji = min wi Ai , clip (wi , 1 − ϵ, 1 + ϵ) Ai        (2)
+(T ) as a strong contextual prior. This guides the VLM to
+                                                                                    where wi is the importance sampling ratio and Ai is the
+make more informed and visually-grounded decisions about
+                                                                                    calculated advantage.
+which tool to deploy, ensuring its actions are directly relevant
+                                                                                       To guide the model in learning to strategically invoke
+to the current visual reality rather than being driven by
+                                                                                    its experience, we introduce a specialized format reward
+textual artifacts. This principle of grounding tool selection in
+                                                                                    function. Specifically, the format reward function Rformat is
+experience can be formally expressed as modeling a policy:
+                                                                                    defined as:
+                                                                                                 
+                     Tselect ∼ P (T | Ocurrent , Eretrieved )                                    1.0, if experience is correctly used
+                                                                                                 
+                                                                                       Rformat = 0.5, if experience is correctly omitted (3)
+   where Tselect represents the tool selection action, Ocurrent is
+                                                                                                 
+                                                                                                   0,     otherwise
+                                                                                                 
+the current visual observation, and Eretrieved is the context
+provided by the set of top-K retrieved experiences. This                            The correct choice is determined based on a heuristic related
+formulation highlights that the tool-use decision is critically                     to the relevance of retrieved experiences for the current task.
+informed by relevant past knowledge, not just the immediate                            The complete reward function is a combination of the
+sensory input.                                                                      format reward and a task accomplishment reward, defined
+                                                                                    as:
+                                                                                                        R = λ · Rformat + RAcc                  (4)
+   Stage1: Supervised Fine-Tuning         Stage2: RL-based Enhancement
+                                                                 Multimodal         where RAcc represents the accuracy reward for the final
+                        Multimodal                                 Input
+                          Input
+                                                                                    driving plan, and λ is a hyperparameter used to adjust the
+                                                                Vision Encoder      balance between the two reward components. Essentially,
+         Supervised                            Answers
+                                                                                    the reward function we designed provides the model with
+                                                                     LLM
+         Fine-Tuning                          Generation                            an explicit signal for the meta-cognitive task of deciding
+                                                                                    when to seek external knowledge. This enables the model
+                                                                                    to actively reflect on the utility of its experience during the
+         Pretrained VLM                                                             reasoning process, similar to how humans learn to draw upon
+                                                                    Final Answer
+                                                                       Reward
+           Vision Encoder                                                           past experiences when facing novel or challenging situations.
+                                                                       Experience
+        Large Language Model
+                                              GRPO
+                                                                         Format
+                                                                                                         IV. E XPERIMENTS
+                                           Answers Evaluation
+                                                                        Reward         In this section, we conduct a series of extensive experi-
+            Frozen        Trainable          Update Policy
+                                                                                    ments to validate the effectiveness of our MTRDrive frame-
+                                                                                    work. Our experimental design is centered around answering
+Fig. 3. Two-stage Training Pipeline for MTRDrive. This figure illustrates           the following core questions to demonstrate the efficacy and
+the two-stage training pipeline, which consists of SFT as a Warm-up and
+RLFT for Policy Refinement, designed to effectively train MTRDrive, a               robustness of our approach:
+model aimed at autonomous driving tasks.                                               1) Q1: Can our interactive reasoning approach signifi-
+                                                                                           cantly improve model generalization and effectively
+   3) Two-stage Training Pipeline: To effectively train                                    mitigate hallucinations?
+MTRDrive, we adopt a two-stage training pipeline designed                              2) Q2: Can MTRDrive demonstrate strong zero-
+to first impart foundational skills and then refine them                                   shot generalization on our newly constructed
+through goal-oriented optimization.                                                        RoadWork-VLM benchmark?
+                                                             TABLE I
+                         P ERFORMANCE C OMPARISON ON NAVSIM (SFT) AND ROADW ORK (Z ERO -S HOT ) B ENCHMARKS
+
+                                                                                   Driving Metrics (%) ↑                               Planning (%) ↑
+                    Dataset         Vision Language Models
+                                                                       Risk Assess.         Reason.          Scene Aware.         Path.       Speed.        Acc.
+                                    Qwen2.5-VL-72B                          82.9               81.1              84.0              70.4        48.2         37.8
+                                    Qwen2.5-VL-32B                          85.7               85.3              86.4              67.1        48.2         35.9
+                   NAVSIM           InternVL3-8B                            81.2               79.7              81.6              41.8        34.8         16.5
+                    (SFT)           Qwen2.5-VL-7B                           77.0               74.9              76.6             15.70        41.6          8.1
+                                    Qwen2.5-VL-3B                           74.1               72.1              73.5               4.4        30.7          1.6
+                                    MTRDrive (Ours)                         79.8               78.8              80.8             93.1         84.6         82.6
+                                    Qwen2.5-VL-72B                          83.6               80.9              84.8              47.6        61.1         29.7
+                                    Qwen2.5-VL-32B                          85.7               85.3              86.4              47.1        45.5         23.5
+                  ROADWork          InternVL3-8B                            77.9               73.7              77.7              33.5        63.9         23.1
+                  (Zero-shot)       Qwen2.5-VL-7B                           71.8               66.6              70.5             15.23        63.8          9.2
+                                    Qwen2.5-VL-3B                           64.5               64.5              61.7               6.1        29.5          0.5
+                                    MTRDrive (Ours)                         80.2               79.6              80.3             44.2         72.1         33.5
+
+
+
+                                                         32B                                                   DECELERATE，Go straight left
+                                             DECELERATE，STOP
+                                                                                                               <experience>Here are some similar scenarios: #1 There are
+                                                                                                               orange cones, use tools to detect digtal sign to guarantee the
+                                             1. There are traffic cones and a construction area ahead,
+                                                                                                               safty. Turn right because the digital sign.
+                                             indicating potential lane restrictions or road work.
+                                             2. The traffic light ahead is red, suggesting that the            <Tool>get_object_detection
+                                             vehicle should stop.
+                                                                                                               <think> Detect a construction zone ahead indicated by orange
+                                             Given these observations, the vehicle needs to decelerate         cones and a digital sign indicating left turn. Orange traffic cones
+                                             to a safe speed before stopping at the intersection.              and a digital sign indicate a lane closure or cautionary area ahead.
+                                                                                                               This requires careful navigation to avoid the cones.
+
+
+                                                         32B                                                    KEEP，Go straight left
+                                             ACCELERATE, Go straight forward
+                                                                                                                <experience>Here are some similar scenarios: #1 The road is
+                                                                                                                partially obstructed by a construction zone on the right side,
+                                             1. The road surface appears smooth, with no visible                featuring heavy machinery and workers. use tools to detect traffic
+                                             obstacles, though there is ongoing construction activity           signs. Turn left because there are obstructions on right side.
+                                             to the right, marked by a \"No Right Turn\" sign and a
+                                             \"Slow Work Zone\" warning.                                        <Tool>get_open_world_vocabulary_detection
+
+                                             2.The absence of any immediate stop signs or signals               <think>The critical objects include the construction zone with a
+                                             suggests that the flow of traffic is currently uninterrupted.      \"No Right Turn\" sign means turn right is forbidden. The
+                                                                                                                construction zone poses a significant obstacle, requiring careful
+                                                                                                                navigation.
+
+
+
+Fig. 4. Qualitative comparison of MTRDrive versus the Qwen-32B baseline in challenging real-world scenarios. The examples highlight how MTRDrive’s
+interactive reasoning, which leverages past experiences and tools, mitigates common VLM failures like visual hallucination (top) and flawed reasoning
+(bottom), leading to safer and more accurate driving plans.
+
+
+
+   3) Q3: How does our two-stage training strategy                                    and corresponding angular changes, and finally derive high-
+      enable the model to learn efficient and correct                                 level speed and path plans.
+      interactive behaviors?                                                             However, due to the relative simplicity of its scenarios,
+   Beyond these core questions, we conduct a supplementary                            NAVSIM alone is insufficient to validate an agent’s ability
+experiment on the NAVSIM dataset to further investigate                               to handle the complexities of real-world driving. To address
+the impact of high-level decisions on closed-loop trajectory                          this, we specifically test our model’s generalization to more
+prediction. This study highlights the crucial role of high-level                      intricate, unseen scenarios like construction zones.
+planning in generating accurate and reliable trajectories.
+                                                                                         To rigorously evaluate our agent’s zero-shot generalization
+A. Setup                                                                              and reasoning capabilities in these complex environments,
+   1) Datasets: We conduct our experiments on two                                     we introduce Roadwork-VLM, a new benchmark meticu-
+distinct benchmarks: NAVSIM[28] and ROADWork[14].                                     lously processed from the original ROADWork dataset[14].
+NAVSIM[28] is a large-scale real-world autonomous driving                             We leveraged the powerful Qwen2.5-VL-72B[31] model
+dataset designed for non-reactive simulation and bench-                               to re-annotate the entire dataset, generating detailed sce-
+marking. Built upon OpenScene, it specifically focuses on                             nario descriptions, high-level navigation instructions, and
+challenging scenarios involving dynamic intention changes,                            full Chain-of-Thought reasoning sequences based on the
+while filtering out trivial cases such as stationary scenes                           provided image and trajectory information. This process
+or constant-speed driving. To align with high-level decision                          results in a complete, human-like VLM dataset for end-
+making, we further process the NAVSIM trajectories to com-                            to-end driving, enabling us to test an agent’s ability to
+pute the vehicle’s dynamic characteristics—such as speed                              perform complex, high-level behavioral decisions in a zero-
+                                                          TABLE II
+                          A BLATION S TUDY ON NAVSIM (SFT) AND ROADW ORK (Z ERO -S HOT ) B ENCHMARKS
+
+                                                    Acc.     Driving                 Driving Metrics (%) ↑                   Planning (%) ↑
+      Dataset        Model Variant          SFT
+                                                   Reward     Exp.
+                                                                          Risk Assess.     Reason.     Scene Aware.     Path.       Speed.   Acc.
+                     BaseModel               ✗        ✗          ✗            74.1            72.1            73.5       4.4         30.7     1.6
+     NAVSIM          +SFT                    ✓        ✗          ✗            78.2            78.1            78.7      92.8         83.4    79.9
+      (SFT)          +SFT+GRPO               ✓        ✓          ✗            79.9            78.8            80.6      92.0         84.2    79.6
+                     MTRDrive (Ours)         ✓        ✓          ✓            79.8            78.8            80.8      93.1         84.6    82.6
+                     BaseModel               ✗        ✗          ✗            64.5            64.5            61.7       6.1         29.5     0.5
+    ROADWork         +SFT(NAVSIM)            ✓        ✗          ✗            75.0            75.9            75.4      48.6         27.5    13.3
+    (Zero-Shot)      +SFT+GRPO (NAVSIM)      ✓        ✓          ✗            79.2            79.4            80.4      17.3         36.4    17.3
+                     MTRDrive (Ours)         ✓        ✓          ✓            80.2            79.6            80.3      44.2         72.1    33.5
+
+
+
+shot setting. We will open-source Roadwork-VLM to foster             accuracy, maintaining a clear lead over the strongest baseline
+further research in this critical area.                              (29.7%).
+   2) Metrics: We evaluate our framework’s performance on               This success is particularly noteworthy as it does not
+two distinct aspects of autonomous driving: long-term high-          simply stem from superior general reasoning. While massive
+level planning and short-term trajectory prediction.                 VLMs exhibit high raw reasoning scores, our model is
+   For high-level planning and reasoning, we use a combi-            exceptionally effective at translating its understanding into
+nation of metrics. Our primary metric is High-Level Plan-            correct, actionable plans. Crucially, in the zero-shot setting,
+ning Accuracy, which strictly assesses the correctness of an         MTRDrive’s reasoning scores become highly competitive.
+agent’s strategic decision. A plan is only considered correct        This suggests our experience-retrieval mechanism is a key
+if the entire meta-action—encompassing both longitudinal             factor for robustly making sound decisions in novel environ-
+speed and lateral path—exactly matches the ground truth.             ments, validating our core design principle.
+To analyze the thought process behind these decisions, we               Qualitatively, as illustrated in Fig.4, MTRDrive success-
+adopt the methodology from DriveLMM-o1 [36], where                   fully navigates challenging, real-world corner cases where
+GPT-4o-mini serves as an automated judge to evaluate the             the base VLM fails. In these complex scenarios, the Qwen-
+model’s textual output on Risk Assessment, Commonsense               32B model often struggles with flawed reasoning, such as
+Reasoning, and Scene Awareness.                                      hallucinating critical objects or failing to grasp the safety
+   For the fine-grained task of short-term trajectory pre-           implications of the scene, which leads to incorrect and
+diction, we use the standard metric from the NAVSIM                  potentially dangerous driving plans. In contrast, MTRDrive
+benchmark. The Predictive Driver Model Score (PDMS) is               adeptly retrieves relevant past experiences and invokes its
+employed to measure the point-wise accuracy and physical             tools to acquire crucial decision-making information. By
+realism of the agent’s predicted closed-loop trajectory.             grounding its reasoning in this retrieved context, it avoids
+   3) Implementation Details: We build our MTRDrive                  hallucinations and correctly interprets complex situations,
+agent upon the Qwen2.5-VL-3B[31], an open-source Vision-             such as navigating a construction zone or obeying a pro-
+Language Model that provides a strong balance of perfor-             hibitive traffic sign.
+mance and efficiency. All experiments are conducted on 16                                           TABLE III
+NVIDIA H20 GPUs.                                                     NAVSIM N A V T E S T CLOSED - LOOP RESULTS . B OLD = BEST OVERALL ; †
+   Our two-stage training pipeline is configured as follows.                           = FINE - TUNED ON NAVSIM LABELS .
+For the initial SFT stage, we fine-tune the model for 2 epochs
+using the AdamW optimizer with a learning rate of 4e−5 and              Method                   NC    DAC      TTC   CF       EP    PDMS
+a global batch size of 2. During this stage, the parameters
+                                                                        VADv2 [37]              97.2   89.1     91.6 100.0   76.0     80.9
+of the vision encoder are kept frozen to preserve its pre-              DrivingGPT [38]         98.9   90.7     94.9 95.6    79.7     82.4
+trained features. In the subsequent RLFT stage, we employ               UniAD [39]              97.8   91.9     92.9 100.0   78.8     83.4
+the GRPO algorithm with a group size of 8 and a KL penalty              TransFuser [40]         97.7   92.8     92.8 100.0   79.2     84.0
+                                                                        DiffusionDrive [41]     98.2   96.2     94.7 100.0   82.2     88.1
+coefficient β of 0.02. All stages utilize a cosine annealing            WoTE [42]               98.5   96.8     94.9 99.9    81.9     88.3
+learning rate scheduler to ensure stable convergence.
+                                                                                                VLM-based methods
+B. Experiment Results on High level planning                            InternVL3-2B†           97.2   87.4     91.8 100.0   78.9     78.9
+                                                                        QwenVL2.5-3B†           97.7   93.1     92.3 100.0   73.0     84.2
+  1) Main Results: As presented in Table I, our results                 +High-level Decisions   98.2   94.6     94.3 100.0   80.6     86.3
+highlight MTRDrive’s decisive advantage in high-level plan-             +GRPO                   96.8   95.4     90.5 100.0   86.1     87.3
+ning. On the NAVSIM (SFT) benchmark, our model’s 82.6%                  MTRDrive                97.3   95.8     91.2 100.0   86.8     88.3
+accuracy more than doubles the 37.8% of Qwen2.5-VL-
+72B. This superiority is maintained in the challenging zero-           2) Ablation Study: To dissect the contribution of each
+shot ROADWork setting, where MTRDrive achieves 33.5%                 component in our framework, we conducted a thorough
+ablation study, with results presented in Table II. We analyze     AutoVLA[13]. Exploring a more sophisticated decoder archi-
+the incremental impact of Supervised Fine-Tuning (SFT),            tecture to improve the fine-grained quality of the trajectory
+Reinforcement Learning (GRPO) with our proposed reward,            output remains a promising direction for our future research.
+and the Driving Experience module.
+   The study first reveals that the base VLM, without any                                 V. CONCLUSIONS
+training, fails at the planning task (1.6% accuracy on                We have presented MTRDrive, an interactive reason-
+NAVSIM). The introduction of SFT provides the most signif-         ing framework for end-to-end autonomous driving that
+icant initial performance boost, increasing accuracy to 79.9%      successfully mitigates hallucinations and improves out-
+on NAVSIM by teaching the model the fundamental syntax             of-distribution generalization in Vision-Language Models.
+and structure of the planning task. The subsequent addition        By integrating memory-based experience retrieval with a
+of GRPO further refines the policy, leading to improved            dynamic toolkit, MTRDrive enables grounded, proactive
+reasoning scores and a notable increase in zero-shot planning      decision-making through a closed-loop, human-like reason-
+accuracy on ROADWork from 13.3% to 17.3%.                          ing process. To validate its generalization capabilities, we
+   Most critically, the final addition of the Driving Experience   also introduced a new benchmark focused on complex Road-
+module demonstrates its indispensable role in generalization.      work construction scenarios.
+While providing a solid boost on the in-domain NAVSIM                 Ultimately, MTRDrive advances autonomous driving sys-
+dataset to our final 82.6% accuracy, its impact on the zero-       tems from passive perception to active, experience-guided
+shot ROADWork benchmark is transformative. It nearly dou-          reasoning, moving closer to reliable and interpretable de-
+bles the planning accuracy from 17.3% to our final 33.5%.          ployment. This work lays a solid foundation for future VLM-
+This result unequivocally proves that the experience-retrieval     based agents capable of handling complex, long-tail driving
+mechanism is the key component that empowers the model to          scenarios.
+apply its learned skills effectively to new and unseen driving        For future work, we plan to explore the integration of
+scenarios.                                                         different specialized decoders with our framework. This
+                                                                   will allow for a deeper investigation into how the synergy
+C. Impact of High-Level Planning on Trajectory Prediction          between memory retrieval and tool use can be optimized to
+                                                                   enhance the fine-grained quality of VLM-based trajectory
+   Beyond evaluating high-level planning itself, we conduct
+                                                                   planning.
+a supplementary experiment on the NAVSIM dataset to
+investigate the impact of these high-level decisions on closed-                                R EFERENCES
+loop trajectory prediction. This study, detailed in Table
+III, highlights the crucial role of structured reasoning in        [1] S. Jiang, Z. Huang, K. Qian, Z. Luo, T. Zhu, Y. Zhong, Y. Tang,
+                                                                       M. Kong, Y. Wang, S. Jiao et al., “A survey on vision-language-action
+generating accurate and reliable trajectories.                         models for autonomous driving,” arXiv preprint arXiv:2506.24044,
+   Our analysis begins with a strong VLM baseline,                     2025.
+QwenVL2.5-3B. This model is fine-tuned to function as              [2] Y. Shi, K. Jiang, K. Wang, K. Qian, Y. Wang, J. Li, T. Wen, M. Yang,
+                                                                       Y. Xu, and D. Yang, “Effocc: A minimal baseline for efficient fusion-
+a pure trajectory predictor, directly outputting waypoints             based 3d occupancy network,” arXiv e-prints, pp. arXiv–2406, 2024.
+without any Chain-of-Thought reasoning, and achieves a             [3] K. Qian, J. Miao, X. Jiao, Z. Luo, Z. Fu, Y. Shi, Y. Wang,
+respectable PDMS of 84.2. However, the key insight emerges             K. Jiang, and D. Yang, “Priormotion: Generative class-agnostic mo-
+                                                                       tion prediction with raster-vector motion field priors,” arXiv preprint
+when we introduce coarse-to-fine strategy. By prompting                arXiv:2412.04020, 2024.
+the model to first predict a high-level meta-action before         [4] K. Qian, J. Miao, Z. Luo, Z. Fu, Y. Shi, Y. Wang, K. Jiang,
+generating the trajectory, the performance significantly im-           M. Yang, D. Yang et al., “Lego-motion: Learning-enhanced grids with
+                                                                       occupancy instance modeling for class-agnostic motion prediction,”
+proves to a PDMS of 86.3. This single modification, focusing           arXiv preprint arXiv:2503.07367, 2025.
+purely on hierarchical planning, is sufficient to outperform       [5] Z. Qian, K. Jiang, Z. Cao, K. Qian, Y. Xu, W. Zhou, and D. Yang,
+highly specialized methods like UniAD (83.4) and Trans-                “Spider: Self-driving planners and intelligent decision-making engines
+                                                                       with reusability,” in 2024 IEEE 27th International Conference on
+Fuser (84.0). This result strongly validates our hypothesis            Intelligent Transportation Systems (ITSC). IEEE, 2024, pp. 937–944.
+that decomposing the planning task and leveraging high-            [6] Z. Fu, H. Lin, K. Qian, T. Wen, H. Gao, Z. Zhong, and D. Yang,
+level reasoning is critical for improving low-level trajectory         “Enhancing autonomous vehicle planning with a robust fault-tolerant
+                                                                       mechanism for action-induced agent detection,” in ICASSP 2025-
+quality.                                                               2025 IEEE International Conference on Acoustics, Speech and Signal
+   Building upon this foundation, the subsequent integration           Processing (ICASSP). IEEE, 2025, pp. 1–5.
+of our GRPO training strategy and the experience-retrieval         [7] K. Qian, S. Jiang, Y. Zhong, Z. Luo, Z. Huang, T. Zhu, K. Jiang,
+                                                                       M. Yang, Z. Fu, J. Miao et al., “Agentthink: A unified framework for
+mechanism further enhances performance. Our full MTR-                  tool-augmented chain-of-thought reasoning in vision-language models
+Drive model achieves a final PDMS of 88.3. This result not             for autonomous driving,” arXiv preprint arXiv:2505.15298, 2025.
+only demonstrates the synergistic benefits of our complete         [8] M. Nie, R. Peng, C. Wang, X. Cai, J. Han, H. Xu, and L. Zhang,
+                                                                       “Reason2drive: Towards interpretable and chain-based reasoning for
+framework but also matches the state-of-the-art performance            autonomous driving,” in European Conference on Computer Vision.
+of specialized methods like WoTE on this benchmark. While              Springer, 2024, pp. 292–308.
+our method achieves top-tier performance through superior          [9] H. Shao, Y. Hu, L. Wang, G. Song, S. L. Waslander, Y. Liu, and
+                                                                       H. Li, “Lmdrive: Closed-loop end-to-end driving with large language
+high-level reasoning, we believe further gains are possible            models,” in Proceedings of the IEEE/CVF Conference on Computer
+by enhancing the trajectory decoder like Recogdrive[11] and            Vision and Pattern Recognition, 2024, pp. 15 120–15 130.
+[10] C. Sima, K. Renz, K. Chitta, L. Chen, H. Zhang, C. Xie,                   [30] W. Wang, J. Xie, C. Hu, H. Zou, J. Fan, W. Tong, Y. Wen, S. Wu,
+     J. Beißwenger, P. Luo, A. Geiger, and H. Li, “Drivelm: Driving                 H. Deng, Z. Li et al., “Drivemlm: Aligning multi-modal large language
+     with graph visual question answering,” in European conference on               models with behavioral planning states for autonomous driving,” arXiv
+     computer vision. Springer, 2024, pp. 256–274.                                  preprint arXiv:2312.09245, 2023.
+[11] Y. Li, K. Xiong, X. Guo, F. Li, S. Yan, G. Xu, L. Zhou,                   [31] S. Bai, K. Chen, X. Liu, J. Wang, W. Ge, S. Song, K. Dang, P. Wang,
+     L. Chen, H. Sun, B. Wang et al., “Recogdrive: A reinforced cog-                S. Wang, J. Tang et al., “Qwen2. 5-vl technical report,” arXiv preprint
+     nitive framework for end-to-end autonomous driving,” arXiv preprint            arXiv:2502.13923, 2025.
+     arXiv:2506.08052, 2025.                                                   [32] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal,
+[12] H. Fu, D. Zhang, Z. Zhao, J. Cui, D. Liang, C. Zhang, D. Zhang,                G. Sastry, A. Askell, P. Mishkin, J. Clark et al., “Learning transferable
+     H. Xie, B. Wang, and X. Bai, “Orion: A holistic end-to-end au-                 visual models from natural language supervision,” in International
+     tonomous driving framework by vision-language instructed action                conference on machine learning. PmLR, 2021, pp. 8748–8763.
+     generation,” arXiv preprint arXiv:2503.19755, 2025.                       [33] Y. Hu, W. Shi, X. Fu, D. Roth, M. Ostendorf, L. Zettlemoyer, N. A.
+[13] Z. Zhou, T. Cai, S. Z. Zhao, Y. Zhang, Z. Huang, B. Zhou, and J. Ma,           Smith, and R. Krishna, “Visual sketchpad: Sketching as a visual chain
+     “Autovla: A vision-language-action model for end-to-end autonomous             of thought for multimodal language models,” Advances in Neural
+     driving with adaptive reasoning and reinforcement fine-tuning,” arXiv          Information Processing Systems, vol. 37, pp. 139 348–139 379, 2024.
+     preprint arXiv:2506.13757, 2025.                                          [34] Z. Liu, Y. Liu, G. Zhu, C. Xie, Z. Li, J. Yuan, X. Wang, Q. Li, S.-
+[14] A. Ghosh, S. Zheng, R. Tamburo, K. Vuong, J. Alvarez-Padilla,                  C. Cheung, S. Zhang et al., “Infi-mmr: Curriculum-based unlocking
+     H. Zhu, M. Cardei, N. Dunn, C. Mertz, and S. G. Narasimhan,                    multimodal reasoning via phased reinforcement learning in multimodal
+     “Roadwork dataset: learning to recognize, observe, analyze and drive           small language models,” arXiv preprint arXiv:2505.23091, 2025.
+     through work zones,” arXiv preprint arXiv:2406.07661, 2024.               [35] Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang,
+[15] K. Qian, Z. Ma, Y. He, Z. Luo, T. Shi, T. Zhu, J. Li, J. Wang,                 Y. Li, Y. Wu et al., “Deepseekmath: Pushing the limits of mathematical
+     Z. Chen, X. He et al., “Fasionad: Fast and slow fusion thinking systems        reasoning in open language models,” arXiv preprint arXiv:2402.03300,
+     for human-like autonomous driving with adaptive feedback,” arXiv               2024.
+     preprint arXiv:2411.18013, 2024.                                          [36] A. Ishaq, J. Lahoud, K. More, O. Thawakar, R. Thawkar, D. Dis-
+                                                                                    sanayake, N. Ahsan, Y. Li, F. S. Khan, H. Cholakkal et al., “Drivelmm-
+[16] K. Qian, Z. Luo, S. Jiang, Z. Huang, J. Miao, Z. Ma, T. Zhu, J. Li,
+                                                                                    o1: A step-by-step reasoning dataset and large multimodal model
+     Y. He, Z. Fu et al., “Fasionad++: Integrating high-level instruction
+                                                                                    for driving scenario understanding,” arXiv preprint arXiv:2503.10621,
+     and information bottleneck in fat-slow fusion systems for enhanced
+                                                                                    2025.
+     safety in autonomous driving with adaptive feedback,” arXiv preprint
+                                                                               [37] S. Chen, B. Jiang, H. Gao, B. Liao, Q. Xu, Q. Zhang, C. Huang,
+     arXiv:2503.08162, 2025.
+                                                                                    W. Liu, and X. Wang, “Vadv2: End-to-end vectorized autonomous
+[17] J. Mao, Y. Qian, J. Ye, H. Zhao, and Y. Wang, “Gpt-driver: Learning            driving via probabilistic planning,” arXiv preprint arXiv:2402.13243,
+     to drive with gpt,” arXiv preprint arXiv:2310.01415, 2023.                     2024.
+[18] B. Jiang, S. Chen, B. Liao, X. Zhang, W. Yin, Q. Zhang,                   [38] Y. Chen, Y. Wang, and Z. Zhang, “Drivinggpt: Unifying driving world
+     C. Huang, W. Liu, and X. Wang, “Senna: Bridging large vision-                  modeling and planning with multi-modal autoregressive transformers,”
+     language models and end-to-end autonomous driving,” arXiv preprint             arXiv preprint arXiv:2412.18607, 2024.
+     arXiv:2410.22313, 2024.                                                   [39] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du,
+[19] Z. Xu, Y. Zhang, E. Xie, Z. Zhao, Y. Guo, K.-Y. K. Wong, Z. Li, and            T. Lin, W. Wang et al., “Planning-oriented autonomous driving,” in
+     H. Zhao, “Drivegpt4: Interpretable end-to-end autonomous driving via           Proceedings of the IEEE/CVF conference on computer vision and
+     large language model,” IEEE Robotics and Automation Letters, 2024.             pattern recognition, 2023, pp. 17 853–17 862.
+[20] X. Zhou, X. Han, F. Yang, Y. Ma, and A. C. Knoll, “Opendrivevla:          [40] K. Chitta, A. Prakash, B. Jaeger, Z. Yu, K. Renz, and A. Geiger,
+     Towards end-to-end autonomous driving with large vision language               “Transfuser: Imitation with transformer-based sensor fusion for au-
+     action model,” arXiv preprint arXiv:2503.23463, 2025.                          tonomous driving,” IEEE transactions on pattern analysis and machine
+[21] J.-J. Hwang, R. Xu, H. Lin, W.-C. Hung, J. Ji, K. Choi, D. Huang,              intelligence, vol. 45, no. 11, pp. 12 878–12 895, 2022.
+     T. He, P. Covington, B. Sapp et al., “Emma: End-to-end multimodal         [41] B. Liao, S. Chen, H. Yin, B. Jiang, C. Wang, S. Yan, X. Zhang, X. Li,
+     model for autonomous driving,” arXiv preprint arXiv:2410.23262,                Y. Zhang, Q. Zhang et al., “Diffusiondrive: Truncated diffusion model
+     2024.                                                                          for end-to-end autonomous driving,” in Proceedings of the Computer
+[22] K. Renz, L. Chen, A.-M. Marcu, J. Hünermann, B. Hanotte, A. Karn-             Vision and Pattern Recognition Conference, 2025, pp. 12 037–12 047.
+     sund, J. Shotton, E. Arani, and O. Sinavski, “Carllava: Vision lan-       [42] Y. Li, Y. Wang, Y. Liu, J. He, L. Fan, and Z. Zhang, “End-to-end
+     guage models for camera-only closed-loop driving,” arXiv preprint              driving with online trajectory evaluation via bev world model,” arXiv
+     arXiv:2406.10165, 2024.                                                        preprint arXiv:2504.01941, 2025.
+[23] K. Renz, L. Chen, E. Arani, and O. Sinavski, “Simlingo: Vision-
+     only closed-loop autonomous driving with language-action alignment,”
+     in Proceedings of the Computer Vision and Pattern Recognition
+     Conference, 2025, pp. 11 993–12 003.
+[24] T. Wang, E. Xie, R. Chu, Z. Li, and P. Luo, “Drivecot: Integrating
+     chain-of-thought reasoning with end-to-end driving,” arXiv preprint
+     arXiv:2403.16996, 2024.
+[25] J. Mao, J. Ye, Y. Qian, M. Pavone, and Y. Wang, “A language agent
+     for autonomous driving,” arXiv preprint arXiv:2311.10813, 2023.
+[26] R. Zhao, Q. Yuan, J. Li, H. Hu, Y. Li, C. Zheng, and F. Gao,
+     “Sce2drivex: A generalized mllm framework for scene-to-drive learn-
+     ing,” arXiv preprint arXiv:2502.14917, 2025.
+[27] H. Chi, H.-a. Gao, Z. Liu, J. Liu, C. Liu, J. Li, K. Yang,
+     Y. Yu, Z. Wang, W. Li et al., “Impromptu vla: Open weights and
+     open data for driving vision-language-action models,” arXiv preprint
+     arXiv:2505.23757, 2025.
+[28] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li,
+     I. Gilitschenski, B. Ivanovic, M. Pavone et al., “Navsim: Data-driven
+     non-reactive autonomous vehicle simulation and benchmarking,” Ad-
+     vances in Neural Information Processing Systems, vol. 37, pp. 28 706–
+     28 719, 2024.
+[29] X. Jia, Z. Yang, Q. Li, Z. Zhang, and J. Yan, “Bench2drive: Towards
+     multi-ability benchmarking of closed-loop end-to-end autonomous
+     driving,” Advances in Neural Information Processing Systems, vol. 37,
+     pp. 819–844, 2024.
+

@@ -1,0 +1,626 @@
+                                               ImagiDrive: A Unified Imagination-and-Planning Framework for
+                                                                    Autonomous Driving
+                                                        Jingyu Li1,2∗ , Bozhou Zhang1∗ , Xin Jin3 , Jiankang Deng4 , Xiatian Zhu5 , Li Zhang1,2†
+
+
+                                            Abstract— Autonomous driving requires rich contextual com-         to anticipate outcomes and evaluate decisions proactively
+                                         prehension and precise predictive reasoning to navigate dy-           (Fig. 1(b)).
+                                         namic and complex environments safely. Vision-Language Mod-
+                                         els (VLMs) and Driving World Models (DWMs) have inde-                    However, integrating these two paradigms remains largely
+                                         pendently emerged as powerful recipes addressing different            unexplored. DWMs typically focus on improving generative
+                                         aspects of this challenge. VLMs provide interpretability and          quality in novel scenes, while their potential in action pre-
+arXiv:2508.11428v2 [cs.CV] 28 Feb 2026
+
+
+
+
+                                         robust action prediction through their ability to understand          diction is underutilized. Some methods [14], [16] generate
+                                         multi-modal context, while DWMs excel in generating de-
+                                         tailed and plausible future driving scenarios essential for           trajectories using inverse dynamics models on generated im-
+                                         proactive planning. Integrating VLMs with DWMs is an in-              ages, but this process is overly complex and lacks deep scene
+                                         tuitive, promising, yet understudied strategy to exploit the          understanding, often resulting in suboptimal predictions. A
+                                         complementary strengths of accurate behavioral prediction and         natural direction is to combine the complementary strengths
+                                         realistic scene generation. Nevertheless, this integration presents   of VLMs and DWMs: using planning to guide imagination
+                                         notable challenges, particularly in effectively connecting action-
+                                         level decisions with high-fidelity pixel-level predictions and        and imagined futures to refine planning. This integration,
+                                         maintaining computational efficiency. In this paper, we propose       however, poses challenges in aligning high-level reasoning
+                                         ImagiDrive, a novel end-to-end autonomous driving framework           with low-level generation and mitigating the slow inference
+                                         that integrates a VLM-based driving agent with a DWM-based            speed of both components.
+                                         scene imaginer to form a unified imagination-and-planning
+                                         loop. The driving agent predicts initial driving trajectories            To this end, we introduce ImagiDrive, an end-to-end
+                                         based on multi-modal inputs, guiding the scene imaginer               autonomous driving framework that integrates a VLM-based
+                                         to generate corresponding future scenarios. These imagined            driving agent with a DWM-based scene imaginer in a re-
+                                         scenarios are subsequently utilized to iteratively refine the         current imagination-and-planning loop (Fig. 1(c)). Our driv-
+                                         driving agent’s planning decisions. To address efficiency and
+                                         predictive accuracy challenges inherent in this integration,          ing agent can be easily integrated with mainstream vision-
+                                         we introduce an early stopping mechanism and a trajectory             language models such as LLaVA [17], [18] and the In-
+                                         selection strategy. Extensive experimental validation on the          ternVL series [7], enabling multi-modal inputs and structured
+                                         nuScenes and NAVSIM datasets demonstrates the robustness              outputs. Meanwhile, our scene imaginer, with its unified
+                                         and superiority of ImagiDrive over previous alternatives under        input-output design, is capable of generating future scene
+                                         both open-loop and closed-loop conditions. Code will be avail-
+                                         able at https://github.com/fudan-zvg/ImagiDrive                       images conditioned on different driving world models [14],
+                                                                                                               [15]. The core steps of our imagination-and-planning loop
+                                                                 I. I NTRODUCTION                              are summarized as follows: the agent proposes an initial
+                                                                                                               trajectory from the current frame, which conditions the scene
+                                            End-to-end autonomous driving has made significant                 imaginer to generate future scenes. These imagined frames
+                                         progress, with unified models [1], [2], [3], [4], [5] jointly         are then fed back into the agent to iteratively refine its plan-
+                                         optimizing perception, prediction, and planning on large-             ning decisions. To ensure robust and efficient inference, we
+                                         scale datasets. Despite strong performance, these methods             maintain a trajectory buffer to store trajectories generated in
+                                         often lack holistic scene understanding and causal reasoning,         each iteration, and incorporate early stopping and trajectory
+                                         limiting their ability to produce rational and flexible trajecto-     selection strategies based on safety and consistency.
+                                         ries. Recently, vision-language models (VLMs) [6], [7], [8],
+                                         [9] and driving world models (DWMs) [10], [11], [12], [13],              Our contributions are summarized as follows: (i) We
+                                         [14], [15] have emerged as promising alternatives. VLMs,              present ImagiDrive, a novel recurrent-loop autonomous driv-
+                                         pretrained on image-text pairs, offer strong scene comprehen-         ing framework that tightly couples a driving agent with
+                                         sion, logical reasoning, and zero-shot generalization, mak-           a scene imaginer for imagination-driven planning. (ii) We
+                                         ing them ideal for cognitively inspired driving (Fig. 1(a)).          develop a VLM-based driving agent that supports diverse
+                                         Meanwhile, DWMs simulate future scenarios conditioned                 multi-modal inputs and produces structured trajectory predic-
+                                         on past observations and potential actions, enabling agents           tions. To better integrate with our scene imaginer, we further
+                                                                                                               propose the trajectory buffer with two key strategies: early
+                                           † Corresponding author, ∗ Equal contribution                        stopping and trajectory selection, which together enable effi-
+                                           1 The authors are with School of Data Science, Fudan University.
+                                                                                                               cient and reliable inference. (iii) Comprehensive experiments
+                                           2 The authors are with Shanghai Innovation Institute.
+                                           3 The author is with Eastern Institute of Technology.               on the nuScenes and NAVSIM datasets under both open-loop
+                                           4 The author is with Imperial College London.                       and closed-loop conditions demonstrate the effectiveness and
+                                           5 The author is with University of Surrey.                          adaptability of ImagiDrive.
+                           Good planning                                                                                          Better planning
+                                                                           Imagination � + 2
+                       Keep speed, observe
+                       the oncoming car,                                                                                         Based on the imagined
+                                                                                                               Imagination       future scenarios, I will
+                       activate the right turn
+                       signal, and follow the                                                                                    slow down and wait for
+                       planned trajectory.                                                                                       the car to pass before
+                                                                                                                                 turning right.
+
+
+
+
+   (a) VLM-based planning model                              (b) Driving world model                                    (c) ImagiDrive
+
+Fig. 1. Overview of autonomous driving paradigms. (a) VLM-based end-to-end methods may produce an effective planning strategy to avoid potential
+collisions. (b) DWMs predict and generate future scenarios (T+2 seconds) to identify potential hazards. (c) Our proposed framework, ImagiDrive, integrates
+both paradigms: Using future scene imagination from the DWM-based scene imaginer to iteratively refine VLM-based policy decisions and enhance safety.
+
+
+
+                        II. R ELATED WORK                                      have shifted from isolated task pipelines to unified end-
+                                                                               to-end frameworks that jointly address perception and ego-
+   VLMs for autonomous driving. Large Language Models                          trajectory generation [36], [?], [4]. Early works such as
+(LLMs) [19] and Vision-Language Models (VLMs) [20],                            ST-P3 [36] adopt intermediate representations to enable
+[17] exhibit strong multi-modal reasoning capabilities. In                     end-to-end learning, but limited scene understanding con-
+autonomous driving, VLMs have emerged as promising                             strains planning quality. UniAD [1] extends this by unifying
+human-like agents, benefiting from large-scale datasets with                   diverse subtasks, while VAD [2] further improves mod-
+language annotations [21], [22]. Early works [23], [24] lever-                 ularity through vectorized representations. SparseAD [37]
+age general-purpose GPT models but struggle with domain                        and SparseDrive [3] enhance efficiency and scalability via
+adaptation, prompting the development of domain-specific                       sparse inputs. With more challenging simulators and bench-
+VLMs for better generalization. DriveLM [25] introduces                        marks [38], [39], recent efforts have focused on real-world
+Chain-of-Thought reasoning from perception to planning,                        and closed-loop driving. VADv2 [40] achieves state-of-the-
+while DriveMM [26] unifies diverse datasets to build a                         art CARLA [41], [42] performance by incorporating a large
+generalizable VLM. Inspired by advances in robotic VLA                         trajectory vocabulary, conflict-aware loss, and probabilistic
+models [27], recent driving agents like EMMA [6], Sim-                         planning. DiffusionDrive [5] improves accuracy and diversity
+Lingo [28], and ORION [29] integrate vision, language, and                     with a truncated diffusion policy.
+action for planning and decision-making. However, these
+methods often rely on complex temporal modeling. In con-                                                   III. M ETHOD
+trast, we propose a VLM that reasons about future behavior                        Overview. Our ImagiDrive, as illustrated in Fig. 2, in-
+via imagined future scenes, without requiring explicit tem-                    tegrates a driving agent, a trajectory buffer and a scene
+poral modules.                                                                 imaginer in a recurrent imagination-and-planning frame-
+World models in autonomous driving. World models have                          work: Given a current frame as input, the driving agent
+become a growing focus in autonomous driving for predict-                      predicts an initial trajectory, which is then used to guide
+ing future scene evolution from current observations. Most                     the scene imaginer in generating short-term future scene
+approaches adopt generative models, such as autoregressive                     sequences; Subsequently, selected future frames are fed back
+Transformers (e.g., GAIA-1 [30]) or diffusion models (e.g.,                    into the agent for iterative planning refinement. To enhance
+DriveDreamer [11], Drive-WM [31]), to synthesize future                        efficiency and safety, we further introduce a convergence-
+visual representations. Recent works enhance generation with                   based early stopping mechanism and a direction-consistent
+structured constraints [11], view consistency [32], or large-                  trajectory selection strategy.
+scale pretraining for zero-shot generalization [16]. However,
+these models often struggle with physically plausible and                      A. Driving agent
+detail-rich predictions under complex maneuvers. Vista [14]                       We build the driving agent based on the VLM with
+addresses this by introducing structure-aware losses and                       additional input modalities and output heads (Fig. 3). VLM
+larger datasets for improved long-term scene fidelity. Al-                     provides a unified and simple framework that can flexibly
+ternatively, some works explore joint generation of future                     handle single-frame or multi-frame inputs, incorporate ad-
+world states and actions [12], [33], or apply world models                     ditional driving states, and support interpretable trajectory
+to end-to-end autonomous driving [34], [35]. In contrast to                    prediction.
+all these methods, we treat the world model as a future                        Flexible input integration. The input of our method is
+scene synthesizer, conditioned on high-quality trajectories to                 multi-modal, consisting of visual data, ego state, textual
+generate more coherent future scene contexts.                                  prompts, and a set of trajectory queries to predict reliable
+End-to-end autonomous driving. Recent advancements                             driving plans. Specifically, the visual input can be either
+                     User instruction                                                                      Resopnse                            ImagiDrive
+                                                                 Driving agent
+ImagiDrive-A
+                Given the current frame, shortly                                                    Intend to drive straight ahead,
+                describe your intended driving                                                      maintaining a steady speed,
+                actions and the planning trajectory.         VLM-based
+                                                                                                    and prepare to turn right at
+                                                             Multi-modal input/output              the upcoming intersection.                                        Legends
+                                                                                                                                                                Yi Planning trajectory
+                                                                                                  Planning trajectory Y0
+                                                             Plug-and-play architecture
+                Current
+                 frame                                                                                                                                          Vi Trajectory direction
+
+
+                                                                                                                              Early stop strategy (ESS)
+                                                                                                                      Y0
+                     User instruction
+                                                                                                                      Y1
+
+
+
+
+                                                                                                                                 measurement
+                                                               Driving agent
+
+
+
+
+                                                                                                                                                        Conergence
+                                                                                                                                  Trajectory
+
+
+                                                                                                                                                        evaluation
+                                                                                                                      Y2
+
+
+
+
+                                                                                                                                   change
+                                                                                                                                                                           Continue
+               Current
+                                                                                                                      Y3
+                                                                                                                                                                           or stop ?
+                frame
+ImagiDrive-S
+
+
+
+
+                                                                                               Trajectory
+                                                   Select      Imagination-and-                  buffer                 Trajectory select strategy (TSS)
+                 Key
+                                                                                                                      Y0                v0
+                                                     key        planning loop
+
+
+
+
+                                                                                                                                               Mean direction
+
+
+
+                                                                                                                                                                        based selection
+                                                                                                                      Y1                v1
+               frames
+
+
+
+
+                                                                                                                                                computation
+
+
+
+
+                                                                                                                                                                         consistency-
+                                                   frames
+
+
+
+
+                                                                                                                                                                          Directional
+                                                                                                                                                                                          Y*
+
+
+
+
+                                                                                                                           estimation
+                                                                                                                           Direction
+                                                                                                                      Y2                v2
+                                                                                              ESS        TSS
+                                                                                                                      Y3                v3
+                                                               Scene imaginer
+                                                             DWM-based
+                                                             Training-free
+                                                             Unified input/output
+                Generated future frames                                                                                    Conditional frames
+
+Fig. 2. Overview of ImagiDrive. Overview of our system, which includes a driving agent, a scene imaginer, and a trajectory buffer. It operates in two
+modes: ImagiDrive-A is a standard planning model that uses only the driving agent, while ImagiDrive-S adopts an imagination-and-planning loop, where
+the scene imaginer generates future frames based on past observations and predicted trajectories. These imagined frames are iteratively fed back to refine
+planning. The trajectory buffer stores all trajectories, selects the best one, and decides early termination.
+
+
+
+a single front-view image or a sequence of frames that                                 ego state information eego . We initialize a set of learnable
+includes future predictions generated by the scene imaginer.                           trajectory queries q ∈ RNq ×C to predict trajectory, where
+We encode the vehicle’s current speed as an ego state                                  each query corresponds to waypoints at different future time
+and represent it with a dedicated placeholder token ego                                steps, and Nq denotes the number of queries. After encoding
+token, enabling seamless integration into the VLM input                                each modality, we replace the placeholder tokens with their
+stream. Similarly, we allocate several trajectory tokens as                            corresponding embeddings to form the final input sequence.
+placeholders to indicate positions in the sequence where the                           The VLM then processes this sequence to produce output
+model is expected to reason about the trajectory at different                          features:
+future time steps. To enable adaptation to different tasks, such
+as predicting from the current frame or refining plans with                                               ol , q̃ = V LM (ei , eego , el , q).                                             (1)
+future information, we design two prompt templates. These
+templates guide effective interaction among visual features,                           where ol denotes the language predictions and q̃ =
+textual prompts, and trajectory tokens for plan generation.                            {q̃1 , . . . , q̃Nq } represents the contextualized trajectory
+Vision-language model. Thanks to the unified token-based                               queries, which are subsequently sent to the trajectory decoder
+input and output architecture of the current VLMs, our                                 to get final trajectory.
+driving agent can seamlessly support both single-frame and                             Unified output format. For the language output, we perform
+multi-frame inputs. For current frame inputs, we feed the                              auto-regressive decoding and apply a cross-entropy loss
+image Ic ∈ RH×W directly into the visual encoder. In                                   on the predicted tokens. Unlike previous methods [4], [3]
+contrast, future frames If ∈ RH×W generated by the scene                               that utilize multiple queries to represent diverse candidate
+imaginer frequently exhibit artifacts such as soft edges,                              trajectories, we design each trajectory query q̃i to correspond
+ghosting, and diminished texture fidelity. To address this,                            to a specific future time step ti . We employ an MLP as
+we apply targeted distortion augmentations during training,                            the trajectory decoder and the model outputs a sequence
+including Gaussian blur, shadow overlays, and random noise                             of 2D waypoints: W = {wt1 , wt2 , . . . , wtNq }, where each
+injection, to improve the model’s robustness against such                              wti ∈ R2 denotes the predicted vehicle position at time
+distortions.                                                                           ti . This design allows the model to generate a temporally
+   Similar to the standard VLM processing pipeline, we use                             coherent trajectory by explicitly reasoning over multiple
+a vision encoder to process image inputs ei and a tokenizer                            future steps. We use Smooth L1 loss to supervise the
+to handle language instruction inputs el . In addition, we                             predicted waypoints, and the overall training objective jointly
+employ a lightweight MLP network to process the additional                             optimizes the language modeling loss Ll and the trajectory
+                                                             Trajectories   We then select two special frames from the generated future
+  Driving Agent
+                                                                MLP
+                                                                            sequence as key frames, corresponding to 0.5 and 1.0 seconds
+                                                                            into the future, respectively. These frames, together with
+                           Vision-language model
+                                                                            the current frame, are used as inputs to the agent to guide
+                                                                            subsequent trajectory prediction.
+                                                                               After the initial round of planning and imagination, our
+       Vision encoder           MLP         Text tokenizer                  model proceeds iteratively: the VLM-based driving agent
+                                                                            refines its trajectory by incorporating the current frame and
+                                                             Trajectory
+                                                              queries       selected future key frames generated by the scene imaginer,
+    Current  Generated           Ego          Language                      shown in Fig. 2. We store each trajectory predicted by the
+     frame future frames        speed        instruction                    agent into the trajectory buffer. This process continues for a
+                                                                            fixed number of iterations or terminates early if a stopping
+Fig. 3. Overview of Driving agent. The agent takes multi-model inputs       criterion is triggered.
+and produces both language and trajectory predictions.
+                                                                            Early stop strategy. As driving agent and scene imaginer
+                                                                            both are inefficient, minimizing the computation overhead is
+prediction loss Ltraj . The total loss is shown below:                      crucial for practical deployment. We observe that when the
+                                                                            predicted trajectories converge across consecutive iterations,
+                          Ltotal = Ll + λLtraj ,                      (2)   the corresponding generated future images would become
+                                                                            increasingly similar, yielding diminishing returns. Motivated
+where λ is a weighting factor. This unified decoding frame-
+                                                                            by this, we design an early stopping metric named Trajectory
+work enables the VLMs to reason holistically over both
+                                                                            Convergence Ratio (TCR), which enables us to adaptively
+textual intent and spatiotemporal planning, producing inter-
+                                                                            terminate the iterative process once the trajectory change
+pretable commands and temporally structured trajectories.
+                                                                            diminishes. Specifically, TCR captures the normalized rate
+B. Imagination-and-planning loop                                            of change across different time steps of a trajectory, enabling
+   Taking advantage of world models [43], [5], [44], [45] in                stable and consistent evaluation regardless of the trajectory’s
+predicting future scene evolution from current observations,                scale or magnitude, formulated as:
+we propose to directly anticipate the future scenes, bypassing                                                        Nq      (i)       (j)
+the scene dynamics modeling as done in prior works.                                          (i)          (j)      1 X Ŷt − Ŷt    2
+                                                                                    TCR(Ŷ         , Ŷ         )=                    ,       (4)
+Scene imaginer. Existing generative approaches for au-                                                             Nq t=1 Ŷt
+                                                                                                                             (j)
+                                                                                                                                 +ε
+tonomous driving can be broadly categorized into diffusion-                                                                         2
+based [14] and GPT-based methods[33], [46]. Diffusion-
+                                                                            where Ŷ (0) and Ŷ (i) denote the initial and the predicted
+based methods focus on generating future frames conditioned
+                                                                            trajectories at iteration i, respectively. Nq is the number
+on reference images, and rely on future-motion-consistent
+                                                                            of predicted waypoints and ε is a small constant added
+frames to derive future driving plans via inverse kinematics
+                                                                            for numerical stability to avoid division by zero. At each
+modeling. In contrast, GPT-based methods decouple image
+                                                                            iteration, we compute the TCR between Ŷ (i) and all previous
+and motion modeling, enabling the joint generation of future
+                                                                            predictions Ŷ (j) (j < i). The iterative process will terminate
+visual scenes and driving plans. However, both paradigms
+                                                                            once the TCR falls below a predefined threshold θ, indicating
+face challenges in producing precise and fine-grained future
+                                                                            sufficient convergence.
+trajectories due to limited capacity for comprehensive scene
+understanding [15]. Rather than directly addressing these                   Trajectory selection strategy. To obtain more robust trajec-
+limitations, we leverage the strong generative capabilities                 tories, we design a trajectory selection strategy based on the
+of both paradigms through our Scene Imaginer: given con-                    concept of modal directionality from directional statistics,
+ditional images and a continuous trajectory, it generates a                 emphasizing trend direction consistency. Given a set of
+temporally coherent sequence of future frames that reflect                  predicted trajectories {Ŷ (i) }N
+                                                                                                            i=1 , we first compute the unit
+plausible driving outcomes.                                                 average direction vector for each trajectory:
+Imagination and planning. Initialization of our method                                                    n−1      (i)    (i)
+                                                                                                      1 X        pt+1 − pt
+commences by generating a preliminary trajectory Ŷcurr ,                               v̂(i) =                               ,               (5)
+using the VLM-based driving agent conditioned on the                                                n − 1 t=1 ∥p(i) − p(i)
+                                                                                                                       t ∥+ε
+                                                                                                                       t+1
+current image frame. To enhance the quality and temporal
+                                                                            where pt is the waypoints at time t. The mean direction
+consistency of subsequent predictions by the scene imaginer,
+                                                                            vector across all predictions is:
+its generation process is conditioned on three preceding
+frames (spanning 0.25 seconds) alongside the current frame.                                                N
+                                                                                                                                 ˆ
+                                                                                                   1 X (i)                      v̄
+Subsequently, the scene imaginer (SI) utilizes the historical                            ˆ=
+                                                                                         v̄              v̂ ,          ˆ←
+                                                                                                                       v̄             .       (6)
+                                                                                                   N i=1                      ˆ
+                                                                                                                             ∥v̄∥ + ε
+image sequence Iobs and the conditional trajectory Ŷcurr to
+generate a short-term video prediction:
+                                                                               We then compute the angle between each predicted direc-
+                        V̂f ut = SI(Iobs , Ŷcurr )                   (3)   tion and the global mean. The final selected trajectory is the
+                                                             TABLE I
+  C LOSED - LOOP PLANNING RESULTS ON N EURO NCAP [47]. † C ORRESPONDS TO THE MODEL’ S ORIGINAL SETTING . AVG AND S TAT REPRESENT
+                                  AVERAGE AND STATIONARY, RESPECTIVELY. “-”: U NREPORTED RESULTS .
+
+                                                                NeuroNCAP score ↑                Collision rate (%) ↓
+                  Method
+                                                         Avg.     Stat. Frontal   Side   Avg.      Stat.    Frontal   Side
+                  UniAD [1]                              0.73     0.84   0.10     1.26   88.60     87.80     98.40    79.60
+                  VAD† [2]                               0.66     0.47   0.04     1.45   92.50     96.20     99.60    81.60
+                  SparseDrive† [3]                       0.92     1.16   0.63     0.96   93.90     93.40     98.40    90.00
+                  BridgeAD [4]                           1.60       -      -        -    72.60        -         -       -
+                  Impromptu VLA [48]                     2.15     1.77   2.31     1.75   65.50     70.00     59.00    65.00
+                  LLava-1.6 + ImagiDrive-A (Ours)        2.37     2.89    1.40    2.81   66.79     50.13    90.06    60.18
+                  LLava-1.6 + ImagiDrive-S (Ours)        2.99     3.63    1.88    3.47   59.45     45.72    82.15    50.49
+                  InternVL2.5 + ImagiDrive-A (Ours)      3.11     3.81    1.97    3.54   48.57     37.24    78.47    30.01
+                  InternVL2.5 + ImagiDrive-S (Ours)      3.49     4.15    2.45    3.88   44.90     33.80    74.00    26.80
+
+
+one most aligned with the average direction:                              C. Results analysis
+                                            
+          θ(i) = arccos clip v̂(i) · v̄
+                                     ˆ , −1, 1 ,                   (7)    Results on NeuroNCAP. We adopt NeuroNCAP [47] as
+             ∗              (i)      ∗       (i∗ )                        the closed-loop evaluation benchmark. As shown in Table I,
+            i = arg min θ ,        Ŷ = Ŷ           .             (8)
+                        i                                                 regardless of whether LLaVA-1.6 or InternVL 2.5 is used,
+                                                                          our ImagiDrive-A consistently and significantly outperforms
+                     IV. E XPERIMENTS                                     the existing state-of-the-art E2E method SparseDrive [3]. Our
+                                                                          method significantly outperforms ImpromptuVLA [48], a
+A. Datasets
+                                                                          model trained on extensive additional data, across all metrics
+   We evaluate our method on three datasets, including                    with the sole exception of a slightly higher Frontal collision
+both closed-loop and open-loop settings. NeuroNCAP [47]                   rate. This effectively demonstrates that our agent is capable
+simulator, a photorealistic platform built on nuScenes                    of understanding the current scene and taking appropriate
+that enables safety-critical closed-loop evaluation. Turning-             actions to avoid potential hazards. When using ImagiDrive-
+nuScenes [49], a smaller yet more challenging dataset. It                 S, thanks to our scene imaginer and the imagination-and-
+contains a challenging subset of turning scenes, including                planning loop, our method achieves improvements of 0.62
+17 scenes with 680 samples. NAVSIM [38] is a large-scale                  and 0.38 in NeuroNCAP score, along with collision rate
+real-world autonomous driving dataset designed for non-                   reductions of 7.34% and 3.67%, respectively. The improved
+reactive simulation and benchmarking. It is built upon Open-              performance of ImagiDrive-S compared to ImagiDrive-A
+Scene [50] and focuses on challenging scenarios involving                 indicates that incorporating generated future frames as input
+dynamic intention changes, while filtering out trivial cases              effectively helps the agent anticipate and avoid potential
+such as stationary scenes or constant-speed driving.                      hazards, fulfilling the goal of integrating imagination and
+B. Implementation details                                                 planning in a unified framework.
+   Since our driving agent is easily integrated into VLMs, we             Results on Turning-nuScenes. We conduct open-loop eval-
+select two representative VLM models, LLaVA-1.6-7B [18]                   uation on the Turning-nuScenes dataset [49]. Turning-
+and InternVL2.5-4B [7], to serve as our driving agents.                   nuScenes is a subset of nuScenes that focuses on turning
+Meanwhile, we adopt Vista [14] as the scene imaginer on                   scenarios. Since the majority of scenes in nuScenes involve
+the nuScenes dataset and Epona [15] as the scene imaginer                 straight driving, the turning subset presents greater chal-
+on the NAVSIM dataset.                                                    lenges for planning. A combination of LLaVA-1.6 [18] and
+   For our driving agent, we first train our driving agent with           ImagiDrive-A slightly underperforms UniAD [1]. With the
+OmniDrive [51] for 3 epochs, facilitating alignment between               integration of our scene imaginer, the performance exceeds
+vision and language in autonomous driving scenarios. We                   that of VAD [2], suggesting that incorporating imagined fu-
+then design a planning QA template with special trajectory                ture scenes introduces richer contextual information, leading
+tokens and train the model for 5 epochs. We use data                      to more accurate trajectory prediction and notably lower
+augmentation techniques for future frames to simulate the                 collision rates. Benefiting from the strong performance of
+distortion caused by the diffusion model during training. We              InternVL [7], our InternVL2.5-ImagiDrive-A achieves low
+set the number of trajectory queries as 6, λ1 and λ2 as 0.1               collision rates and trajectory deviation errors. Moreover, by
+and 0.5, respectively. The model is trained on 4 NVIDIA                   introducing the imagination-and-planning loop, InternVL2.5-
+H100 GPUs with a batch size of 1 for 12 hours.                            ImagiDrive-S further improves the performance, surpassing
+   For our Imagination-and-planning loop, we set θ as 0.05                MomAD and significantly reducing the collision rate. The
+empirically, and the maximum of iterations for the recurrent              results under challenging scenarios further demonstrate that
+loop as 5. Our ImagiDrive has two variants: ImagiDrive-A,                 our proposed imagination-and-planning framework effec-
+a VLM-based agent relying solely on the current frame, and                tively leverages the strengths of both the VLM and DWM,
+ImagiDrive-S, with a scene imaginer to generate and incor-                leading to more robust and efficient performance.
+porate two future frames, enabling more informed planning.                Results on NAVSIM. We conduct experiments on the
+                                                              TABLE II
+ O PEN - LOOP PLANNING RESULTS ON THE T URNING - NU S CENES VALIDATION DATASET [49]. W E FOLLOW THE ST-P3 [36] EVALUATION METRIC .
+                                                                       L2 (m) ↓                          Col. Rate (%) ↓
+                        Method
+                                                              1s       2s    3s          Avg.      1s      2s      3s    Avg.
+                        UniAD [1]                             0.52     0.88     1.64      1.01    0.16     0.51     1.41      0.69
+                        VAD [2]                               0.48     0.80     1.55      0.94    0.07     0.41     1.20      0.56
+                        SparseDrive [3]                       0.35     0.77     1.46      0.86    0.04     0.17     0.98      0.40
+                        MomAD [49]                            0.33     0.70     1.24      0.76    0.03     0.13     0.79      0.32
+                        LLava-1.6 + ImagiDrive-A (Ours)       0.62     1.06     1.71      1.13    0.17     0.41     1.37      0.65
+                        LLava-1.6 + ImagiDrive-S (Ours)       0.48     0.82     1.50      0.93    0.09     0.32     1.08      0.50
+                        InternVL2.5 + ImagiDrive-A (Ours)     0.40     0.81     1.35      0.85    0.00     0.28     0.89      0.39
+                        InternVL2.5 + ImagiDrive-S (Ours)     0.34     0.69     1.23      0.75    0.00     0.12     0.53      0.22
+                                                                     TABLE III
+ P LANNING PERFORMANCE ON THE NAVSIM [38] TEST SET EVALUATED WITH CLOSED - LOOP METRICS . NC: NO AT- FAULT COLLISION ; DAC:
+ DRIVABLE AREA COMPLIANCE ; TTC: TIME - TO - COLLISION ; C OMF.: COMFORT; EP: EGO PROGRESS ; PDMS: PREDICTIVE DRIVER MODEL SCORE .
+O UR WORLD MODEL OUTPERFORMS STRONG END - TO - END PLANNERS IN TERMS OF OVERALL PDMS. T HE UPPER SECTION PRESENTS END - TO - END
+METHODS TRAINED WITH DENSE SCENE ANNOTATIONS , WHILE THE LOWER SECTION INCLUDES METHODS THAT ARE ASSISTED BY A WORLD MODEL
+                                               WITHOUT RELYING ON DENSE SUPERVISION .
+
+               Method                                     Input          NC ↑      DAC ↑         TTC ↑     Comf. ↑     EP ↑          PDMS ↑
+               VADv2 [40]                            Camera & Lidar      97.2          89.1       91.9       100           76.0       80.9
+               TransFuser [52]                       Camera & Lidar      97.7          92.8       92.8       100           79.2       84.0
+               UniAD [1]                                Camera           97.8          91.9       92.9       100           78.8       83.4
+               PARA-Drive [53]                          Camera           97.9          92.4       93.0       99.8          79.3       84.6
+               DRAMA [54]                            Camera & Lidar      98.0          93.1       94.8       100           80.1       85.5
+               DrivingGPT [33]                            Camera         98.9          90.7       94.9       95.6          79.7       82.4
+               World4Drive [55]                           Camera         97.4          94.3       92.8      100.0          79.9       85.1
+               Epona [15]                                 Camera         97.9          95.1       93.8       99.9          80.4       86.2
+               LLava-1.6 + ImagiDrive-A (Ours)            Camera         97.7          95.3       93.0       99.9          80.4       86.0
+               LLava-1.6 + ImagiDrive-S (Ours)            Camera         97.9          95.5       93.1       99.9          80.7       86.4
+               InternVL2.5 + ImagiDrive-A (Ours)          Camera         98.1          96.2       94.4      100.0          80.1       86.9
+               InternVL2.5 + ImagiDrive-S (Ours)          Camera         98.6          96.2       94.5      100.0          80.5       87.4
+
+                          TABLE IV
+                                                                              D. Ablation study
+   A BLATIONS ON EARLY STOP STRATEGY (ESS) AND TRAJECTORY
+                   SELECTION STRETEGY (TSS).                                  Main ablation study. We conduct ablation studies to effect
+     ESS TSS Avg. Col. Rate (%) ↓ Avg. Iterations (steps) ↓                   of early stop strategy and trajectory selection strategy on the
+                                                                              Turning-nuScenes [49]. As shown in Table IV, We report
+                         0.39                       5
+      ✓                  0.28                      2.3                        the results in terms of collision rate and iteration steps per
+           ✓             0.22                       5                         trajectory. Without either strategy, the average collision rate
+      ✓    ✓             0.21                      2.3                        is 0.39%, and the average number of iterations per trajectory
+                                                                              is 5. While applying ESS alone reduces inference time
+                            TABLE V
+                                                                              significantly, it slightly increases collision rate. In contrast,
+     A BLATION S TUDY ON D IFFERENT T RAJECTORY S ELECTION
+                                                                              TSS alone improves collision avoidance without affecting
+                            S TRATEGIES .
+                                                                              runtime. Combining both strategies leads to a favorable
+                                  Col. Rate (%) ↓                             trade-off: achieving low collision rate while nearly halving
+               Method
+                           2.0s    2.5 s    3.0s  Avg.
+                                                                              the number of iterations. This validates the effectiveness of
+            SmoothSel      0.18     0.37    0.58   0.38
+             SoftMin       0.23     0.44    0.67   0.45
+                                                                              our design in balancing safety and efficiency.
+            MaxCons        0.18     0.37    0.61   0.39                       Ablation study on Trajectory Selection Strategies. We
+              Ours         0.14     0.33    0.55   0.34                       compare our trajectory selection strategy on Turning-
+                                                                              nuScene [49] with other strategies and the results are shown
+                                                                              in Table V. 1) Smoothness-Based Selection (MaxCons), this
+NAVSIM [38] dataset with closed-loop metrics, as shown                        method selects the trajectory with the lowest curvature vari-
+in Table III. We compare our ImagiDrive with some end-                        ation, encouraging smooth and continuous motion patterns.
+to-end methods [40], [1]. Leveraging the VLM’s superior                       2) Soft-Min Weighted Averaging (SoftMin), this approach
+scene understanding capabilities, ImagiDrive-A significantly                  performs a soft-min weighted average over all candidate tra-
+outperforms end-to-end methods on PDMS. Furthermore,                          jectories based on a predefined cost metric. 3) Trajectory with
+ImagiDrive-S fully exploits the generative capability of the                  Maximum Directional Consistency (MaxCons), this strategy
+scene imaginer and the reasoning strength of the VLM                          selects the trajectory that best aligns with the historical
+through the imagination-and-planning loop, leading to supe-                   motion direction, favoring smoother transitions. Our method
+rior performance on the EP edge cases compared to purely                      achieves the lowest collision rates across all time hori-
+world model-based approaches [15], [55].                                      zons, with an average of 0.34%, outperforming all baseline
+                                                                  ImagiDrive-A (Ours)
+
+
+
+
+Fig. 4. Qualitative results in the closed-loop evaluation demonstrate that our ImagiDrive effectively avoids collisions in intersection side-encounter scenario.
+   � = 0.0 �                         � = 0.5 �                        � = 1.0 �                          ImagiDrive-A      ImagiDrive-S           GT
+
+
+
+
+                Fig. 5.   Qualitative results from the open-loop evaluation show that our ImagiDrive can effectively correct the trajectory.
+
+
+
+strategies. While SmoothSel and MaxCons offer relatively                                           VI. ACKNOWLEDGEMENTS
+stable performance, SoftMin lags behind. This highlights the                         This work was supported in part by New Generation Arti-
+effectiveness of our selection strategy in enhancing safety                       ficial Intelligence-National Science and Technology Major
+under long-term prediction.                                                       Project (2025ZD0123004), Ningbo grant (2025Z038) and
+E. Qualitative analysis                                                           National Natural Science Foundation of China (Grant No.
+                                                                                  62376060).
+  We illustrate the closed-loop results for a safety-critical
+scenario. As shown in Fig 4, our ImagiDrive is capable                                                          R EFERENCES
+of timely deceleration to avoid obstacles upon detecting                           [1] Y. Hu, J. Yang, L. Chen, K. Li, C. Sima, X. Zhu, S. Chai, S. Du,
+other vehicles, and gradually accelerates back to normal                               T. Lin, W. Wang, et al., “Planning-oriented autonomous driving,” in
+                                                                                       CVPR, 2023.
+speed after completing the passing maneuver. We also                               [2] B. Jiang, S. Chen, Q. Xu, B. Liao, J. Chen, H. Zhou, Q. Zhang, W. Liu,
+present qualitative results in open-loop scenarios, as shown in                        C. Huang, and X. Wang, “Vad: Vectorized scene representation for
+Fig 5, ImagiDrive-A exhibits a significant deviation from the                          efficient autonomous driving,” in ICCV, 2023.
+                                                                                   [3] W. Sun, X. Lin, Y. Shi, C. Zhang, H. Wu, and S. Zheng, “Sparsedrive:
+ground-truth trajectory when predicting a right turn, which                            End-to-end autonomous driving via sparse scene representation,” in
+may lead to a potential collision. In contrast, ImagiDrive-S,                          ICRA, 2025.
+with the aid of the world model to generate future visual                          [4] B. Zhang, N. Song, X. Jin, and L. Zhang, “Bridging past and
+                                                                                       future: End-to-end autonomous driving with historical prediction and
+context, effectively corrects the trajectory.                                          planning,” in CVPR, 2025.
+                                                                                   [5] B. Liao, S. Chen, H. Yin, B. Jiang, C. Wang, S. Yan, X. Zhang,
+                           V. C ONCLUSION                                              X. Li, Y. Zhang, Q. Zhang, and X. Wang, “Diffusiondrive: Truncated
+   We propose ImagiDrive, a novel end-to-end autonomous                                diffusion model for end-to-end autonomous driving,” in CVPR, 2025.
+                                                                                   [6] J.-J. Hwang, R. Xu, H. Lin, W.-C. Hung, J. Ji, K. Choi, D. Huang,
+driving framework that unifies a driving agent and a scene                             T. He, P. Covington, B. Sapp, et al., “Emma: End-to-end multimodal
+imaginer into an imagination-and-planning paradigm. The                                model for autonomous driving,” arXiv preprint arXiv:2410.23262,
+system forms a recurrent loop: it predicts trajectories from                           2024.
+                                                                                   [7] Z. Chen, J. Wu, W. Wang, W. Su, G. Chen, S. Xing, M. Zhong,
+a single image, generates future images conditioned on the                             Q. Zhang, X. Zhu, L. Lu, et al., “Internvl: Scaling up vision foundation
+trajectory, and refines the trajectory using these imagined                            models and aligning for generic visual-linguistic tasks,” in CVPR,
+frames. To enhance efficiency, we introduce an early stop-                             2024.
+                                                                                   [8] P. Wang, S. Bai, S. Tan, S. Wang, Z. Fan, J. Bai, K. Chen,
+ping strategy and a trajectory selection strategy. ImagiDrive                          X. Liu, J. Wang, W. Ge, et al., “Qwen2-vl: Enhancing vision-language
+achieves compelling results in closed-loop evaluations and                             model’s perception of the world at any resolution,” arXiv preprint
+outperforms previous methods on the challenging Turning-                               arXiv:2409.12191, 2024.
+                                                                                   [9] H. Shao, Y. Hu, L. Wang, G. Song, S. L. Waslander, Y. Liu, and
+nuScenes and NAVSIM dataset, reflecting its strength in                                H. Li, “Lmdrive: Closed-loop end-to-end driving with large language
+complex scenarios.                                                                     models,” in CVPR, 2024.
+[10] J. Lu, Z. Huang, Z. Yang, J. Zhang, and L. Zhang, “Wovogen: World         [34] Y. Yang, J. Mei, Y. Ma, S. Du, W. Chen, Y. Qian, Y. Feng, and
+     volume-aware diffusion for controllable multi-camera driving scene             Y. Liu, “Driving in the occupancy world: Vision-centric 4d occupancy
+     generation,” in ECCV, 2024.                                                    forecasting and planning via world models for autonomous driving,”
+[11] X. Wang, Z. Zhu, G. Huang, X. Chen, J. Zhu, and J. Lu, “Drive-                 in AAAI, 2025.
+     dreamer: Towards real-world-drive world models for autonomous             [35] X. Yang, L. Wen, Y. Ma, J. Mei, X. Li, T. Wei, W. Lei, D. Fu, P. Cai,
+     driving,” in ECCV, 2024.                                                       M. Dou, B. Shi, L. He, Y. Liu, and Y. Qiao, “Drivearena: A closed-
+[12] W. Zheng, W. Chen, Y. Huang, B. Zhang, Y. Duan, and J. Lu,                     loop generative simulation platform for autonomous driving,” arXiv
+     “Occworld: Learning a 3d occupancy world model for autonomous                  preprint arXiv:2408.00415, 2024.
+     driving,” in ECCV, 2024.                                                  [36] S. Hu, L. Chen, P. Wu, H. Li, J. Yan, and D. Tao, “St-p3: End-
+[13] L. Zhang, Y. Xiong, Z. Yang, S. C. ROMERO, and R. Urtasun,                     to-end vision-based autonomous driving via spatial-temporal feature
+     “Learning unsupervised world models for autonomous driving via                 learning,” in ECCV, 2022.
+     discrete diffusion,” in ICLR, 2024.                                       [37] D. Zhang, G. Wang, R. Zhu, J. Zhao, X. Chen, S. Zhang, J. Gong,
+[14] S. Gao, J. Yang, L. Chen, K. Chitta, Y. Qiu, A. Geiger, J. Zhang, and          Q. Zhou, W. Zhang, N. Wang, et al., “Sparsead: Sparse query-centric
+     H. Li, “Vista: A generalizable driving world model with high fidelity          paradigm for efficient end-to-end autonomous driving,” arXiv preprint
+     and versatile controllability,” in NeurIPS, 2024.                              arXiv:2404.06892, 2024.
+[15] K. Zhang, Z. Tang, X. Hu, X. Pan, X. Guo, Y. Liu, J. Huang, L. Yuan,      [38] D. Dauner, M. Hallgarten, T. Li, X. Weng, Z. Huang, Z. Yang, H. Li,
+     Q. Zhang, X.-X. Long, et al., “Epona: Autoregressive diffusion world           I. Gilitschenski, B. Ivanovic, M. Pavone, et al., “Navsim: Data-driven
+     model for autonomous driving,” arXiv preprint arXiv:2506.24113,                non-reactive autonomous vehicle simulation and benchmarking,” in
+     2025.                                                                          NeurIPS, 2024.
+[16] J. Yang, S. Gao, Y. Qiu, L. Chen, T. Li, B. Dai, K. Chitta, P. Wu,        [39] X. Jia, Z. Yang, Q. Li, Z. Zhang, and J. Yan, “Bench2drive: Towards
+     J. Zeng, P. Luo, et al., “Generalized predictive model for autonomous          multi-ability benchmarking of closed-loop end-to-end autonomous
+     driving,” in CVPR, 2024.                                                       driving,” in NeurIPS, 2024.
+                                                                               [40] S. Chen, B. Jiang, H. Gao, B. Liao, Q. Xu, Q. Zhang, C. Huang,
+[17] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,” in
+                                                                                    W. Liu, and X. Wang, “Vadv2: End-to-end vectorized autonomous
+     NeurIPS, 2024.
+                                                                                    driving via probabilistic planning,” arXiv preprint arXiv:2402.13243,
+[18] H. Liu, C. Li, Y. Li, B. Li, Y. Zhang, S. Shen, and Y. J. Lee, “Llava-         2024.
+     next: Improved reasoning, ocr, and world knowledge,” 2024. [Online].      [41] X. Jia, Y. Gao, L. Chen, J. Yan, P. L. Liu, and H. Li, “Driveadapter:
+     Available: https://llava-vl.github.io/blog/2024-01-30-llava-next/              Breaking the coupling barrier of perception and planning in end-to-end
+[19] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman,            autonomous driving,” in ICCV, 2023.
+     D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat, et al., “Gpt-4        [42] X. Jia, P. Wu, L. Chen, J. Xie, C. He, J. Yan, and H. Li, “Think twice
+     technical report,” arXiv preprint arXiv:2303.08774, 2023.                      before driving: Towards scalable decoders for end-to-end autonomous
+[20] D. Zhu, J. Chen, X. Shen, X. Li, and M. Elhoseiny, “Minigpt-4: En-             driving,” in CVPR, 2023.
+     hancing vision-language understanding with advanced large language        [43] F. Jia, W. Mao, Y. Liu, Y. Zhao, Y. Wen, C. Zhang, X. Zhang, and
+     models,” arXiv preprint arXiv:2304.10592, 2023.                                T. Wang, “Adriver-i: A general world model for autonomous driving,”
+[21] M. Nie, R. Peng, C. Wang, X. Cai, J. Han, H. Xu, and L. Zhang,                 arXiv preprint arXiv:2311.13549, 2023.
+     “Reason2drive: Towards interpretable and chain-based reasoning for        [44] X. Guo, C. Ding, H. Dou, X. Zhang, W. Tang, and W. Wu, “Infinity-
+     autonomous driving,” in ECCV, 2024.                                            drive: Breaking time limits in driving world models,” arXiv preprint
+[22] T. Qian, J. Chen, L. Zhuo, Y. Jiao, and Y.-G. Jiang, “Nuscenes-qa:             arXiv:2412.01522, 2024.
+     A multi-modal visual question answering benchmark for autonomous          [45] X. Li, Y. Zhang, and X. Ye, “Drivingdiffusion: Layout-guided multi-
+     driving scenario,” in AAAI, 2024.                                              view driving scenarios video generation with latent diffusion model,”
+[23] J. Mao, Y. Qian, J. Ye, H. Zhao, and Y. Wang, “Gpt-driver: Learning            in ECCV, 2025.
+     to drive with gpt,” arXiv preprint arXiv:2310.01415, 2023.                [46] X. Hu, W. Yin, M. Jia, J. Deng, X. Guo, Q. Zhang, X. Long, and P. Tan,
+[24] L. Wen, D. Fu, X. Li, X. Cai, T. Ma, P. Cai, M. Dou, B. Shi, L. He, and        “Drivingworld: Constructing world model for autonomous driving via
+     Y. Qiao, “Dilu: A knowledge-driven approach to autonomous driving              video gpt,” arXiv preprint arXiv:2412.19505, 2024.
+     with large language models,” in ICLR, 2024.                               [47] W. Ljungbergh, A. Tonderski, J. Johnander, H. Caesar, K. Åström,
+[25] C. Sima, K. Renz, K. Chitta, L. Chen, H. Zhang, C. Xie, P. Luo,                M. Felsberg, and C. Petersson, “Neuroncap: Photorealistic closed-loop
+     A. Geiger, and H. Li, “Drivelm: Driving with graph visual question             safety testing for autonomous driving,” in ECCV, 2024.
+     answering,” in ECCV, 2024.                                                [48] H. Chi, H. ang Gao, Z. Liu, J. Liu, C. Liu, J. Li, K. Yang,
+[26] Z. Huang, C. Feng, F. Yan, B. Xiao, Z. Jie, Y. Zhong, X. Liang, and            Y. Yu, Z. Wang, W. Li, L. Wang, X. Hu, H. Sun, H. Zhao,
+     L. Ma, “Drivemm: All-in-one large multimodal model for autonomous              and H. Zhao, “Impromptu vla: Open weights and open data for
+     driving,” arXiv preprint arXiv:2412.07689, 2024.                               driving vision-language-action models,” 2025. [Online]. Available:
+[27] M. Kim, K. Pertsch, S. Karamcheti, T. Xiao, A. Balakrishna, S. Nair,           https://arxiv.org/abs/2505.23757
+     R. Rafailov, E. Foster, G. Lam, P. Sanketi, Q. Vuong, T. Kollar,          [49] Z. Song, C. Jia, L. Liu, H. Pan, Y. Zhang, J. Wang, X. Zhang, S. Xu,
+     B. Burchfiel, R. Tedrake, D. Sadigh, S. Levine, P. Liang, and                  L. Yang, and Y. Luo, “Don’t shake the wheel: Momentum-aware
+     C. Finn, “Openvla: An open-source vision-language-action model,”               planning in end-to-end autonomous driving,” in CVPR, 2025.
+     arXiv preprint arXiv:2406.09246, 2024.                                    [50] O. Contributors, “Openscene: The largest up-to-date 3d occupancy
+[28] K. Renz, L. Chen, E. Arani, and O. Sinavski, “Simlingo: Vision-only            prediction benchmark in autonomous driving,” https://github.com/
+     closed-loop autonomous driving with language-action alignment,” in             OpenDriveLab/OpenScene, 2023.
+     CVPR, 2025.                                                               [51] S. Wang, Z. Yu, X. Jiang, S. Lan, M. Shi, N. Chang, J. Kautz, Y. Li,
+[29] H. Fu, D. Zhang, Z. Zhao, J. Cui, D. Liang, C. Zhang, D. Zhang,                and J. M. Alvarez, “Omnidrive: A holistic vision-language dataset for
+     H. Xie, B. Wang, and X. Bai, “Orion: A holistic end-to-end au-                 autonomous driving with counterfactual reasoning,” in CVPR, 2025.
+     tonomous driving framework by vision-language instructed action           [52] A. Prakash, K. Chitta, and A. Geiger, “Multi-modal fusion transformer
+     generation,” arXiv preprint arXiv:2503.19755, 2025.                            for end-to-end autonomous driving,” in CVPR, 2021.
+                                                                               [53] X. Weng, B. Ivanovic, Y. Wang, Y. Wang, and M. Pavone, “Para-drive:
+[30] A. Hu, L. Russell, H. Yeo, Z. Murez, G. Fedoseev, A. Kendall,
+                                                                                    Parallelized architecture for real-time autonomous driving,” in CVPR,
+     J. Shotton, and G. Corrado, “Gaia-1: A generative world model for
+                                                                                    2024.
+     autonomous driving,” arXiv preprint arXiv:2309.17080, 2023.
+                                                                               [54] C. Yuan, Z. Zhang, J. Sun, S. Sun, Z. Huang, C. D. W. Lee, D. Li,
+[31] Y. Wang, J. He, L. Fan, H. Li, Y. Chen, and Z. Zhang, “Driving into the
+                                                                                    Y. Han, A. Wong, K. P. Tee, et al., “Drama: An efficient end-to-end
+     future: Multiview visual forecasting and planning with world model
+                                                                                    motion planner for autonomous driving with mamba,” arXiv preprint,
+     for autonomous driving,” in CVPR, 2024.
+                                                                                    2024.
+[32] R. Gao, K. Chen, E. Xie, H. Lanqing, Z. Li, D.-Y. Yeung, and              [55] Y. Zheng, P. Yang, Z. Xing, Q. Zhang, Y. Zheng, Y. Gao, P. Li,
+     Q. Xu, “Magicdrive: Street view generation with diverse 3d geometry            T. Zhang, Z. Xia, P. Jia, et al., “World4drive: End-to-end autonomous
+     control,” in ICLR, 2024.                                                       driving via intention-aware physical latent world model,” arXiv
+[33] Y. Chen, Y. Wang, and Z. Zhang, “Drivinggpt: Unifying driving world            preprint, 2025.
+     modeling and planning with multi-modal autoregressive transformers,”
+     arXiv preprint, 2024.
+

@@ -1,0 +1,1279 @@
+                                                  AgentThink : A Unified Framework for Tool-Augmented
+                                                  Chain-of-Thought Reasoning in Vision-Language Models for
+                                                                    Autonomous Driving
+
+                                                       Kangan Qian 1,3,*,‡ , Sicong Jiang2,* , Yang Zhong3,* , Ziang Luo1,3,* , Zilin Huang4 ,
+                                                    Tianze Zhu1 , Kun Jiang1, † , Mengmeng Yang1, † , Zheng Fu1 , Jinyu Miao1 , Yining Shi1 ,
+                                                        He Zhe Lim1 , Li Liu3 , Tianbao Zhou3 , Hongyi Wang3 , Huang Yu3 , Yifei Hu3 ,
+arXiv:2505.15298v4 [cs.RO] 28 Sep 2025
+
+
+
+
+                                                             Guang Li3 , Guang Chen3 , Hao Ye3,†, ‡ , Lijun Sun2 , Diange Yang1,†
+                                                             Project website: AgentThink Web Project code: AgentThink Github
+                                                                         1
+                                                                   School of Vehicle and Mobility, Tsinghua University, 2 McGill University,
+                                                             3
+                                                               Automotive and Robotics, Xiaomi Corporation, 4 University of Wisconsin-Madison
+                                                                                              Correspondence: jiangkun@tsinghua.edu.cn, ydg@tsinghua.edu.cn
+
+                                                           Inference                                                                                                                                                      AgentThink
+                                                                                                                                                                               Radius represents model size      GPT-4o
+                                                                                                     tool-      Structured Data Generation w/Tool & CoT                                                                       DriveLMM-o1
+                                                                                                  augmented                                                                            Mulberry-7B
+                                                                                                                                     AD Tool Library
+                                                                                                     data                                                                                            LLamaV-o1
+                                                                                                                                                                                 Ovis1.5-                 InternVL2.5-8B
+                                           <Question>                                                           Vision   Occupancy      Mapping       Prediction   Detection   Gemma2-9B         LLaVA-CoT
+                                                                                                    tool-use
+                                           What actions could the ego vehicle take based
+                                           on object at back right camera? Why?                      ability                     Training                                             Qwen2.5-VL-7B
+
+                                           <Think> Need to find the exact nature and                                Supervised                          GRPO
+                                           position of object mentioned around the ego                             Fine-Tuning
+                                           vehicle.
+                                                                                                dynamic                                      Final Answer Reward
+                                                                                                                                                                                                                     53.91%
+                                                                                                  tool-
+                                                                                                                Vision Encoder                                                                                                  33.54%
+                                                   <Tool>[Get_Surrounding_Detections]
+                                                                                               invocation                                    Step-Reason Reward
+                                                                                                                Language Model
+                                           <Think> I found obj “o1” (Truck). The
+                                                                                                                   (w/ LoRA)                      Tool-Use Reward
+                                           predicted future trajectory of o1 to ego vehicle
+                                           is needed.
+
+                                                   <Tool>[[Get_Trajectories_for_Objects]
+                                                                                                    tool-use                   Evaluation
+                                                                                                   evaluation
+                                           <Answer>: The ego vehicle should maintain its
+                                           speed or slightly increase it to avoid potential
+                                           collisions with the truck.
+
+
+
+
+                                                                                      Abstract                                                           innovations include: (i) Structured Data Generation, by
+                                                                                                                                                         establishing an autonomous driving tool library to automati-
+                                         Vision-Language Models (VLMs) show promise for au-                                                              cally construct structured, self-verified reasoning data explic-
+                                         tonomous driving, yet their struggle with hallucinations,                                                       itly incorporating tool usage for diverse driving scenarios;
+                                         inefficient reasoning, and limited real-world validation hin-                                                   (ii) A Two-stage Training Pipeline, employing Supervised
+                                         ders accurate perception and robust step-by-step reasoning.                                                     Fine-Tuning (SFT) with Group Relative Policy Optimization
+                                         To overcome this, we introduce AgentThink, a pioneering                                                         (GRPO) to equip VLMs with the capability for autonomous
+                                         unified framework that, for the first time, integrates Chain-                                                   tool invocation; and (iii) Agent-style Tool-Usage Evaluation,
+                                         of-Thought (CoT) reasoning with dynamic, agent-style tool                                                       introducing a novel multi-tool assessment protocol to rigor-
+                                         invocation for autonomous driving tasks. AgentThink’s core                                                      ously evaluate the model’s tool invocation and utilization.
+                                                                                                                                                         Experiments on the DriveLMM-o1 benchmark demonstrate
+                                              Kangan Qian and Ziang Luo pursued this work during his master’s
+                                         degree at the School of Vehicle and Mobility, Tsinghua University, and                                          AgentThink significantly boosts overall reasoning scores by
+                                         finalized it during an internship at Xiaomi.                                                                    53.91% and enhances answer accuracy by 33.54%, while
+                                              Zilin Huang did not receive any funding for this work.                                                     markedly improving reasoning quality and consistency. Fur-
+                                              * The authors contribute equally to this work.
+                                                                                                                                                         thermore, ablation studies and robust zero-shot/few-shot
+                                              †Corresponding author. ‡Project leader.
+
+
+                                                                                                                                                  1
+generalization experiments across various benchmarks un-                         To improve robustness and transparency, recent works
+derscore its powerful capabilities. These findings highlight                 have explored incorporating chain-of-thought (CoT) reason-
+a promising trajectory for developing trustworthy and tool-                  ing into VLMs, as shown in Fig. 2 (b). Some approaches
+aware autonomous driving models. Code is available at                        adopt rigid CoT templates [14, 37], promoting structured
+https://github.com/curryqka/AgentThink.                                      logic at the expense of flexibility. Others use open-ended
+                                                                             reasoning formats [15, 26], but may overfit to token pat-
+                                                                             terns and exhibit shallow or redundant reasoning. More-
+1. Introduction                                                              over, most existing methods rely purely on imitation learn-
+                                                                             ing from curated trajectories, lacking the ability to detect
+     "A gentleman is not different by nature, he is good                     knowledge uncertainty or invoke tools for intermediate veri-
+     at making use of things around him." - Hsun Tzu                         fication [28, 29, 48].
+                                                                                 These challenges lead to a pivotal question: How can a
+    Recent advances in foundation models have opened                         VLM truly function as a decision-making agent—cognizant
+new opportunities for autonomous driving [18], where pre-                    of its knowledge boundaries, proficient in verification, and
+trained Large Language Models (LLMs) [2, 10] and Vision-                     capable of learning from tool-guided feedback? Inspiration
+Language Models (VLMs) [28, 37, 49] are increasingly em-                     comes from experienced human drivers who will consult aids
+ployed to enable high-level scene understanding, common-                     like mirrors or GPS to refine their judgment when uncertain.
+sense reasoning, and decision making. These models aim                       Similarly, a capable autonomous agent must not only reason
+to transcend traditional perception pipelines, which rely on                 explicitly but also recognize its limitations and dynamically
+hand-crafted components such as object detection [31, 34],                   employ tools, such as object detectors or motion predictors,
+motion prediction [30, 42], and rule-based planning [5] by                   to steer its reasoning and decision-making.
+providing richer semantic representations and broader gener-                     Therefore, we present AgentThink, a unified framework
+alization grounded in web-scale knowledge.                                   for VLMs in autonomous driving that models reasoning not
+    Many recent approaches recast autonomous driving tasks                   as a static output, but as an agent-style process—in which
+as visual question answering (VQA) problems, applying                        the model learns to utilize tools to generate Tool-Augmented
+supervised fine-tuning (SFT) to foundation VLMs with task-                   reasoning chains, verify intermediate steps, and refine its
+specific prompts for object identification, risk prediction,                 conclusions. As illustrated in Fig.2 (c), rather than blindly
+or motion planning [8, 25, 35, 38, 46]. This paradigm are                    mapping inputs to outputs, AgentThink dynamically decides
+widely used in offline pipelines to mine rare driving scenar-                when and how to use tools during inference to support or
+ios, such as identifying intersections with a typical traffic                revise reasoning paths. To enable this behavior, we create a
+signals or dense pedestrian activities. However, as shown in                 data-training-evaluation pipeline. First, we construct a struc-
+Fig.2 (a), these models typically treat reasoning as a static                tured dataset of Tool-Augmented reasoning traces. Then, we
+input-to-output mapping, neglecting the uncertainty, and                     introduce a two-stage training pipeline: (i) SFT to warm up
+verifiability essential to real-world decision making. Conse-                reasoning capabilities, and (ii) GRPO [33], a reinforcement
+quently, they often suffer from poor generalization, halluci-                learning (RL)-based strategy that refines reasoning depth and
+nated outputs, and limited interpretability [44].                            tool-use behavior through structured rewards. Finally, we
+                                                                             propose a comprehensive evaluation protocol beyond answer
+                                                                             correctness to assess tool selection, integration quality, and
+          The radius of the circle                    AgentThink
+          represents model size
+                                                                             reasoning-tool alignment.
+                                                           DriveLMM-o1           As shown in Fig. 1, experiments on the advanced
+                                              GPT-4o
+                                                                             DriveLMM-o1 benchmark [15] demonstrate that Agent-
+                                                                             Think achieves new state-of-the-art performance in both
+                    Mulberry-7B
+           Ovis1.5-                  InternVL2.5-8B                          answer accuracy and reasoning score, surpassing existing
+         Gemma2-9B                                                           models. The effectiveness of our approach in cultivating
+                                      LLamaV-o1                              dynamic, tool-aware reasoning is further substantiated by
+                         LLaVA-CoT                                           comprehensive ablation studies and robust generalization
+        Qwen2.5-VL-7B
+                                                                             capabilities across multiple benchmarks. These collective
+                                                                             results strongly suggest that empowering vision-language
+                                                                             agents with learned, dynamically invoked tool use is pivotal
+                                                                             for creating more robust, interpretable, and generalizable
+                                                                             systems for autonomous driving.
+Figure 1. The performance of proposed AgentThink framework on
+                                                                                Generally, our contributions are as follows:
+the DriveLMM-o1 benchmark.
+                                                                             • Propose AgentThink, the first framework to integrate dy-
+
+
+                                                                         2
+  (a) Base Vison-Language Model                         (b) VLM + CoT Reasoning                                          (c) VLM + Tool-Augmented CoT (Ours)
+     Visual Input      VLMs               Output   Visual Input      VLMs               CoT           Output         Visual Input    VLMs            Tool Libs              CoT           Output
+
+                                                                                                                                            Calling              Validate         Knowledge
+
+                              Knowledge                                     Knowledge         Reasoning                                      Tools               Enhance          Reasoning
+
+                                                      Question:                                                  Question:
+                                                      Describe the 2 most important objects in                   Describe the 2 most important objects in the current scene that the ego
+                                                      the current scene that the ego vehicle                     vehicle must take into consideration.
+                                                      must take into consideration.
+                                                                                                                  <tool>function: "get_current_shoulder", output: "The road shoulder is on
+                                                      <think>The image shows a scene                              the right."</tool>
+     Question:                                        from inside the ego vehicle that is                         <think>Knowing the road shoulder is on the right helps determine
+     Describe the 2 most important objects in         positioned near the road shoulder.                          egovehicle's position. Then I can make detections.</think>
+     the current scene that the ego vehicle           The road shoulder is on the right
+     must take into consideration.                                                                                <tool>function: "get_object_detections", parameters: {"range": [20, 20]}
+                                                      side of the image, there is a yellow                        output: "A red SUV is detected ahead of the ego vehicle."</tool>
+                                                      SUV ahead of the vehicle. </think>                          <think>Combined with the earlier tool result, we confirm the relevant
+      <answer>                                        <answer>                                                    objects are the red SUV ahead and the road shoulder on the right.</think>
+                                                      1. The Yellow SUV ahead.                                    <answer>
+      1. The Yellow Car on the right.
+                                                      2. The road shoulder and the
+      2. The crosswalk area.                                                                                      1. The Red SUV ahead of the vehicle.
+                                                      Vegetation.
+      </answer>                                                                                                   2. The road shoulder on the right side of the ego vehicle.
+                                                      </answer>                                                   </answer>
+
+            Knowledge Base                                    Higher Answer Accuracy                                  Highest Answer Accuracy                           Tool-Augmented CoT
+             Low Answer Accuracy                                  Reasoning Inconsistency
+                                                                                                                      Reasoning Consistency                             Less Hallucinations
+             Hallucinations                                       Hallucinations in Reasoning
+
+
+Figure 2. Illustration of the motivation and key highlights of our proposed framework. (a) Base VLMs use static input-output mapping
+with no reasoning, leading to low accuracy and frequent hallucinations. (b) VLM + CoT introduces structured reasoning, improving
+interpretability, but still suffers from inconsistencies and lack of verification. (c) AgentThink (Ours) augments CoT with dynamic tool use,
+enhancing accuracy, reducing hallucinations, and improving reasoning consistency through external verification.
+
+  namic, agent-style tool invocation into vision-language                                                 out-of-distribution scenarios [41].
+  reasoning for autonomous driving tasks. It significantly                                                   Recent works have augmented LLMs with prompting
+  reduces hallucination in VQA and improves overall rea-                                                  strategies, memory-based context construction, or vision in-
+  soning consistency by grounding each reasoning step in                                                  puts [12]. For instance, DriveVLM [28, 37] introduces a CoT
+  reliable tool outputs.                                                                                  approach and dual system with modules for scene descrip-
+• Develop a scalable data generation pipeline that produces                                               tion, analysis, and hierarchical planning, while DriveLM
+  structured, self-verified data with integrated tool usage                                               [35] focuses on graph-structured visual question answering.
+  and reasoning chains.                                                                                   EMMA [13] demonstrates how multimodal models can di-
+• Introduce a two-stage training pipeline that combines SFT                                               rectly map raw camera inputs to driving outputs, including
+  with GRPO, enabling models to learn when and how to                                                     trajectories and perception objects. Despite these advance-
+  invoke tools to enhance reasoning performance.                                                          ments, both LLM-centric and VLM-based methods often
+• Design new evaluation metrics tailored to autonomous                                                    treat reasoning as a static input-output mapping, with limited
+  driving tool invocation, capturing tool selection, integra-                                             ability to detect uncertainty, perform intermediate verifica-
+  tion quality, and reasoning-tool alignment.                                                             tion, or incorporate physical constraints [15]. Challenges
+                                                                                                          such as hallucinations, over-reliance on rigid templates, and a
+2. Related Works                                                                                          lack of domain-specific reward feedback persist. To address
+                                                                                                          these limitations, our work introduces a Tool-Augmented,
+2.1. Language Models in Autonomous Driving                                                                RL-based reasoning framework that enables dynamic and
+Recent advancements in language modeling have opened up                                                   verifiable decision-making for autonomous driving.
+new opportunities for autonomous driving, particularly in en-
+                                                                                                          2.2. Visual Question Answering in Autonomous
+abling interpretable reasoning, commonsense understanding,
+                                                                                                               Driving
+and decision-making [6]. Early efforts integrated LLMs such
+as GPT series [27] by recasting driving tasks—e.g., scene                                                 Visual Question Answering (VQA) for autonomous driv-
+description [23, 46], decision-making [9, 43], and risk pre-                                              ing has emerged as a benchmark paradigm to evaluate per-
+diction [3, 22]—into textual prompts, allowing for zero-shot                                              ception, prediction, and planning capabilities. Benchmarks
+or few-shot inference. While these approaches showcased                                                   such as BDD-X [19], DriveBench [44], DriveMLLM [11],
+the reasoning potential of LLMs, they often lacked step-                                                  Nuscenes-QA [32], and DriveLMM-o1 [15] provide struc-
+by-step interpretability and struggled with generalization in                                             tured QA tasks covering complex reasoning scenarios in
+
+
+                                                                                                    3
+  Structured Data                                         Two-Stage Training Pipeline                                    Inference
+     Generation                                                                                                         & Evaluation
+                                    Stage1: Supervised Fine-Tuning        Stage2: RL-based Enhancement
+        Tool-Augmented
+                                                                                               Multimodal                   Inference
+      Raw Data
+       w/ CoT                                                                                    Input
+                                       Structured Tool-Augmented                                                        Find Correct Tool
+              AD Tool
+              Library                         Data w/ CoT                  Finetuned-VLM                                     AD Tool
+                                                                                                  Reward                     Library
+
+                                                                           Sampled Answers       Calulation
+   Visual info, occupancy,
+                                         Supervised                                                                    Reasoning & Answer
+                                                                             Generation
+   mapping, detection, prediction       Fine-Tuning
+                                                                                                  Final Answer               Evaluation
+                                                                                                     Reward                  Metrics
+       Tool-
+    Augmented
+    Data w/CoT                                                                                                                   Answer
+                                         Pretrained VLM                                           Step-Reason
+                                                                                                                                Accuracy
+        Filter
+                                                                                                                              Completeness
+                                                                                                    Reward
+                                                                                                                              of Reasoning
+  Filter Factual Error
+  & Structuring                            Vision Encoder
+                                                                                                                               Reasoning
+                                                                                                                               Alignment
+                                          Language Model                    GRPO                    Tool-Use
+                                                                                                                               Reasoning
+     Structured                              (w/ LoRA)                                               Reward                     Quality
+   Tool-Augmented
+    Data w/ CoT                                                           Answers Evaluation                                   Tool Usage
+                                                                            Update Policy                                      Evaluation
+                                             Frozen       Trainable
+
+
+Figure 3. AgentThink Framework Architecture. (i) Structured and scalable data generation pipeline that constructs tool-augmented reasoning;
+(ii) Two-stage training pipeline that first performs SFT and then applies GRPO to improve reasoning and tool-use behavior; and (iii) Unified
+inference and evaluation protocol that dynamically invokes tools and assesses final answers based on reasoning completeness, consistency,
+and tool-use effectiveness.
+
+urban and highway environments. For VQA tasks, recent                     a scalable pipeline for generating structured, tool-augmented
+approaches such as Reason2Drive [26], Alphadrive [17],                    reasoning data; (ii) a two-stage training pipeline with SFT
+OmniDrive [39], and DriveCoT [40] introduce COT reason-                   and GRPO to improve reasoning and tool-use abilities; and
+ing to enhance model interpretability.                                    (iii) a new evaluation methodology focused on assessing the
+    However, many adopt rigid reasoning templates or rely                 model’s effective tool utilization and its impact on reasoning.
+solely on imitation learning, making them prone to over-
+fitting and hallucination. These methods often overlook                   3.1. Data Generation Pipeline
+dynamic reasoning processes and fail to verify intermedi-
+                                                                          While prior studies [26, 38] have explored reasoning in
+ate steps using external tools. In contrast, our framework
+                                                                          VLMs, persistent hallucinations remain a challenge. We
+combines structured data generation with step-level rewards
+                                                                          contend that reliable autonomous driving reasoning, akin
+and tool-verification during inference. By employing RL
+                                                                          to human decision-making, necessitates not only internal
+via GRPO, we optimize the model’s reasoning trajectory
+                                                                          knowledge but also the ability to invoke external tools when
+to align with correctness, efficiency, and real-world appli-
+                                                                          needed. Addressing this, we introduce a Tool-Augmented
+cability, setting a new direction for VQA in autonomous
+                                                                          data generation pipeline. Unlike existing datasets [15, 41]
+driving.
+                                                                          focused solely on reasoning steps and final answers, our
+                                                                          pipeline uniquely integrates explicit tool usage into the rea-
+3. Methodology
+                                                                          soning process.
+Our framework is designed to address three key challenges:                   Tool library. We developed a specialized tool library
+(1) How to generate reasoning data that incorporates tool                 inspired by Agent-Driver [24], featuring core modules for
+usage? (2) How to equip the VLM with the capability to                    five driving-centric modules—visual info, detection, pre-
+effectively utilize tools? and (3) How to enable reasoning-               diction, occupancy, and mapping, plus single-view vision
+driven tool invocation during inference, and how to evaluate              utilities (open-vocabulary detection, depth, cropping, resiz-
+the model’s ability to leverage tools for solving driving-                ing). This is augmented by fundamental single-view vision
+related vision-question-answering tasks?                                  tools like open-vocabulary object detectors and depth estima-
+   Fig. 3 illustrates AgentThink’s three key components: (i)              tors. Together, these enable comprehensive environmental
+
+
+                                                                      4
+information extraction for diverse perception and prediction           from environment responses (e.g., tool returns) are masked
+tasks. Details can be found in the Appendix A.1.                       out during loss computation. This phase teaches the model
+   Prompt Design. Initial tool-integrated reasoning steps              what tools to use and how to configure them based on the
+and answers are automatically generated using GPT-4o,                  driving context.
+guided by a prompt template (as shown in Fig. 3) designed                 In the second phase, we refine the model with full con-
+to elicit a tool-augmented reasoning chain for instruction L           text exposure, including actual tool outputs in the reasoning
+rather than a direct answer.                                           chain. Training samples now include observed environment
+   Specifically, for a pretrained VLM πθ , an input image              feedback O (e.g., API results, detected objects, or retrieved
+V, and a task instruction L, the reasoning step at time t is           text), forming an enhanced tuple (V, L, TR ∪O, A). The loss
+generated as:                                                          remains maximum likelihood but now covers both action
+                                                                       generation and observation grounding:
+               Rt = πθ (V, L, [R1 , . . . , Rt−1 ])          (1)
+                                                                                                          ′
+                                                                                                      T
+where Rt denotes the t-th reasoning step, and                                   (2)
+                                                                                                      X
+[R1 , . . . , Rt−1 ] represents the previously generated                       LSFT = −Eτ ∼D                  log πθ (zt | V, L, z<t ),       (3)
+                                                                                                      t=1
+steps in the trajectory. The complete reasoning trajectory is
+denoted as TR = (R1 , . . . , RM ), where M is the maximum             where zt denotes tokens in the extended sequence contain-
+number of reasoning steps.                                             ing reasoning, actions, and observed outcomes. This joint
+    Each reasoning step Rt includes five key elements: the             modeling of actions and observations enables the model to
+chosen tool (T ooli ), a generated sub-question (Subi ), an            learn an implicit understanding of expected tool outputs,
+uncertainty flag (U Fi ), a guessed answer (Ai ), and the next         thereby grounding subsequent reasoning in real-world feed-
+action choice (ACi ) such as continue reasoning or conclude.           back. This two-phase warm-up prepares the model for ro-
+If internal knowledge suffices for Subi , Ai is outputted and          bust reasoning and effective tool integration prior to RL
+U Fi = False; otherwise, U Fi = True and Ai is left blank.             fine-tuning.
+This process is repeated to sample N structured reasoning
+trajectories per QA pair.
+                                                                       3.2.2   RLFT-based Reasoning Enhancement
+    Data Assessment. A separate LLM audits each data for
+factual accuracy and logical consistency, pruning samples              To further optimize the model beyond imitation learning,
+with mismatched steps or unsupported conclusions. The                  we adopt Reinforcement Learning Fine-Tuning (RLFT) us-
+result is a high-quality corpus that couples explicit tool use         ing GRPO, which effectively leverages structured rewards
+with coherent, verifiable reasoning.                                   without relying on a learned critic.
+3.2. Two-stage Training Pipeline                                          GRPO Overview. GRPO avoids the need for a value
+                                                                       function by computing the relative advantage of each sample
+After constructing the structured dataset, we design a two-            within a group. Given a question q and G responses {oi }G
+                                                                                                                               i=1
+stage training pipeline to progressively enhance the model’s           sampled from the old policy πθold , the GRPO objective is
+reasoning capabilities and proficiency in tool usage.                  [33]:
+
+3.2.1   SFT-based Reasoning Warm-up                                                                   "        G
+                                                                                                                                          #
+                                                                                                          1 X
+                                                                          JGRPO (θ) = Eq,{oi }∼πold             Li − β DKL (πθ ∥πref )        (4)
+In the first phase, we perform SFT on the Tool-Augmented                                                  G i=1
+CoT dataset to warm up the model’s ability to generate struc-
+tured reasoning chains and appropriate tool calls. Each train-         where the group-wise clipped loss is defined as:
+ing sample is represented as τ = (V, L, TR , A), where V
+is the visual input, L is the language instruction, TR is the                  Li = min (wi Ai , clip(wi , 1 − ϵ, 1 + ϵ)Ai )                  (5)
+step-by-step reasoning trace including both reasoning steps
+and explicit tool invocation (e.g., Tool(name, params)),                  and the importance weight wi and normalized advantage
+and A is the final answer. The objective is to maximize                Ai are given by:
+the likelihood of generating correct reasoning and action
+                                                                                                  πθ (oi | q)
+sequences:                                                                                  wi =                                              (6)
+                                                                                                 πθold (oi | q)
+                           T
+         (1)
+                           X                                                                     ri − mean(r)
+        LSFT = −Eτ ∼D            log πθ (Rt | V, L, R<t ),   (2)                            Ai =                                              (7)
+                                                                                                      std(r)
+                           t=1
+
+where only the generation of reasoning steps and tool calls            where ri denotes the reward assigned to output oi , and β and
+(action type and parameters) is optimized, while outputs               ϵ are tunable hyperparameters.
+
+
+                                                                   5
+   Reward Type                 Description                                                       3.3. Inference and Evaluation
+   Final Answer                Verifies final answer against ground truth;                       During inference, as illustrated in Fig. 4, the VLM dynam-
+   Reward                      promotes task-level correctness.                                  ically accesses tools from a predefined library to acquire
+   Step Reasoning              Evaluates intermediate step logic & struc-                        relevant information, enabling step-by-step reasoning. This
+   Reward                      ture. Sub-rewards for:                                            dynamic tool-calling mechanism not only improves answer
+                               (i) Step Matching: Align with reference                           accuracy but also mirrors the structure of our tool-augmented
+                               steps and penalize incorrect ordering.                            training data. However, existing benchmarks [11, 15] do not
+                               (ii) Coherence: Smooth, logical transi-                           evaluate tool-usage capabilities. To bridge this gap, we in-
+                               tions between steps.                                              troduce three metrics (Table 2) that assess the model’s tool
+   Tool Use Re-                Promotes appropriate & meaningful tool                            utilization during reasoning, leveraging the LLM-as-Judge
+   ward                        usage. Sub-rewards for:                                           paradigm [18].
+                               (i) Format Compliance: Adherence to
+                               expected output structure (e.g., "Tool",                             Metric             Description
+                               "Step Reasoning").
+                               (ii) Integration Quality: Effective coher-                           Tool Usage Ap-     Assesses whether tools are logically se-
+                               ent incorporation of tool outputs into rea-                          propriateness      lected and meaningfully used to support
+                               soning.                                                                                 individual reasoning steps.
+
+       Table 1. GRPO reward for tool-augmented reasoning                                            Tool Chain Co-     Evaluates whether the sequence of tool
+                                                                                                    herence            invocations is clear, logically ordered,
+                                                                                                                       and efficiently contributes to reasoning.
+                                                                                                    Perception-        Measures how well tool usage aligns
+                                                                                                    Guided Tool        with multimodal inputs, including visual
+                                                                                                    Alignment          observations and scene context.
+
+                                                                                                       Table 2. Evaluation metrics for tool-use in reasoning
+
+
+    Question:                                                                                    4. Experiments
+    What actions could the ego vehicle take based on object at back right camera? Why?
+
+                  Need to find what is the exact nature and position   [Get_Surrounding_Ob
+                                                                                                         In this section, we conduct extensive experiments to vali-
+      Step 1
+                     of object mentioned around the ego vehicle.         ject_Detections]
+    continue reasoning
+                                                                                                         date the effectiveness of AgentThink. Our experiments are
+      Step 2
+                        I found obj “o1” (Truck). The predicted future            [Get_Future_Trajecto   designed to answer the following core questions:
+                      trajectory of o1 relative to ego vehicle is needed.           ries_for_Objects]
+    continue reasoning                                                                                 Q1. Can dynamic Tool-Augmented reasoning improve both
+                       What is the lane positioning of ego vehicle that           [Get_Current_Lane_D
+      Step 3
+                      affects possible maneuvers regarding object o1?                     ivider]           final answer accuracy and reasoning consistency over ex-
+    continue reasoning                                                                                      isting VLM baselines?
+                      I can then decide what action ego vehicle should
+      Step 4
+                     take based on the position and action of object o1.
+                                                                                                       Q2. Does our structured reward design (Final Answer, Step-
+    conclude                                                                                               wise Reason, Tool-use) contribute meaningfully to reason-
+          Final answer: The ego vehicle should maintain its speed or slightly increase it to ensure a
+          safe distance from the object detected behind in the back right view (likely a truck) to          ing behavior?
+          avoid potential collisions.
+                                                                                                       Q3. How well does AgentThink generalize to unseen datasets
+                                                                                                            under zero-shot and one-shot settings?
+                                                                                                             Evaluation Metrics. We leverage DriveLMM-o1’s eval-
+Figure 4. The model generates structured reasoning chains, dynam-                                        uation   metrics, specifically utilizing the overall reasoning
+ically invokes external tools to resolve uncertainties (e.g., object                                     score  to gauge the reasoning of VLMs, and employing multi-
+detection, trajectory prediction, lane width), and concludes with an                                     ple  choice quality (MCQ) to assess the accuracy of the final
+interpretable action recommendation.                                                                     answers, with further details provided in the Appendix C.
+                                                                                                         Additionally, we introduce new metrics to evaluate tool-use
+                                                                                                         capability as described in Table 2.
+    Reward Design. To guide the model toward accurate, in-                                                   Model and Implementation. We employ Qwen2.5-VL-
+terpretable, and tool-aware reasoning, we design a structured                                            7B as our base model and keep its vision encoder frozen.
+reward function with three major components:                                                             Supervised fine-tuning (SFT) is applied via LoRA for 20
+    This structured reward design provides more targeted and                                             epochs with a learning rate of 1 × 10−4 , followed by GRPO
+interpretable supervision than generic similarity metrics. It                                            fine-tuning for 8 epochs with a learning rate of 1 × 10−5 .
+enables GRPO to optimize both the quality of the reasoning                                               The training batch size is set to 1 per device. We use the
+process and the model’s ability to invoke tools when needed.                                             bfloat16 data type to improve computational efficiency. All
+
+
+                                                                                             6
+                                                  Driving Metrics (%) ↑       Scene Detail (%) ↑ Overall(%) ↑
+ Vision Language Models
+                                          Risk Assess. Rule Adh. Scene Aware. Relevance Missing Reason. MCQ
+ GPT-4o [16]                                71.32             80.72                72.96           76.65        71.43        72.52     57.84
+ Ovis1.5-Gemma2-9B [21]                     51.34             66.36                54.74           55.72        55.74        55.62     48.85
+ Mulberry-7B [47]                           51.89             63.66                56.68           57.27        57.45        57.65     52.86
+ LLaVA-CoT [45]                             57.62             69.01                60.84           62.72        60.67        61.41     49.27
+ LlamaV-o1 [36]                             60.20             73.52                62.67           64.66        63.41        63.13     50.02
+ InternVL2.5-8B [4]                         69.02             78.43                71.52           75.80        70.54        71.62     54.87
+ Qwen2.5-VL-7B [1]                          46.44             60.45                51.02           50.15        52.19        51.77     37.81
+ DriveLMM-o1 [15]                           73.01             81.56                75.39           79.42        74.49        75.24     62.36
+ AgentThink (Ours)                          80.51             84.98                82.11           84.99        79.56        79.68     71.35
+Table 3. Evaluation results on the DriveLMM-o1 benchmark. AgentThink significantly improves reasoning and answer accuracy across all
+categories by leveraging dynamic Tool-Augmented reasoning.
+
+                          SFT      GRPO Reward Setting         Driving Metrics (%) ↑     Scene Detail (%) ↑ Overall (%) ↑
+ Model Variant
+                         Setting Answer Step R. Tool Use Risk Assess. Rule Adh. Obj Und. Relevance Missing Reason. MCQ
+ Base Model                ✗         ✗         ✗         ✗              46.44         60.45     51.02      50.15     52.19     51.77   37.81
+ + SFT                     ✓         ✗         ✗         ✗              70.25         79.83     75.41      81.45     71.68     72.54   62.95
+ + GRPO                    ✗         ✓         ✗         ✗              69.25         75.41     71.58      75.86     68.05     69.41   61.41
+ + GRPO†                   ✗         ✗         ✓         ✗              69.29         75.43     72.66      76.77     69.03     69.43   57.19
+ + SFT + GRPO              ✓         ✓         ✓         ✗              71.00         77.35     73.23      78.13     69.08     70.83   64.58
+ AgentThink (Ours)         ✓         ✓         ✓         ✓              80.51         84.98     82.11      84.99     79.56     79.68   71.35
+
+Table 4. Ablation study of AgentThink on reward design and training strategy. The full model (bottom row) benefits from the combination
+of SFT, GRPO, and structured tool-use rewards. Ablation models here trained with 8 epochs.
+
+ Model
+                     Tool Usage Tool Chain Percep-Guided Overall Tool           already integrates some reasoning abilities, AgentThink fur-
+                       Appro.     Coh.      Tool Align.    Score
+                                                                                ther improves by +5.9% in reasoning and +9.0% in final
+ Base + DirectTool     59.61      73.29        69.71         67.54              answer accuracy—demonstrating the advantage of learned
+ Base + SFT            62.38      78.19        75.78         72.12
+ Base + GRPO           68.44      80.73        80.82         76.66              tool-use over static CoT or imitation-based methods.
+ AgentThink (Ours)     70.92      82.16        84.25         79.11                 Performance Breakdown. In addition to reasoning and
+                                                                                accuracy, AgentThink consistently outperforms others in
+Table 5. Tool Evaluation Results of Different Qwen2.5-VL-7B
+Variants.                                                                       driving-specific metrics (risk assessment, traffic rule adher-
+                                                                                ence, and scene understanding), as well as perception-related
+experiments are conducted on 16× NVIDIA A800 GPUs.                              categories (relevance and missing detail detection). These
+During the GRPO phase, we perform 2 rollouts per ques-                          gains reflect its ability to leverage dynamic tool invocation
+tion. Additional implementation details are provided in Ap-                     and feedback to ground its reasoning more effectively in
+pendix B.                                                                       visual context.
+                                                                                   Key Insight. Unlike traditional CoT or prompt-based
+4.1. Main Experiment Results                                                    methods, AgentThink learns when and why to invoke exter-
+Comparison with Open-Source VLMs. Table 3 presents                              nal tools, enabling more adaptive and context-aware reason-
+the main results on the DriveLMM-o1 benchmark, compar-                          ing. This leads to better decision quality, fewer hallucina-
+ing AgentThink with a range of strong open-source VLM                           tions, and improved trustworthiness in safety-critical driving
+models, including DriveLMM-o1[15], InternVL2.5 [4],                             scenarios. We provide the case in the Appendix D.
+LLaVA-CoT [45], and Qwen2.5-VL variants.
+                                                                                4.2. Tool-Use Analysis
+   Our full model, AgentThink, achieves state-of-the-art per-
+formance across all categories. It surpasses the baseline                       As mentioned above, we analyze how different training
+Qwen2.5-VL-7B by a wide margin, improving the overall                           strategies influence tool-use behavior during reasoning. Ta-
+reasoning score from 51.77 to 79.68 (+53.91%), and final                        ble 5 reports results on these three dimensions: (1) Tool
+answer accuracy from 37.81% to 71.35% (+33.54%). Com-                           usage appropriateness, (2) Tool chain coherence, and (3)
+pared to the strongest prior system, DriveLMM-o1, which                         Perception-guided alignment.
+
+
+                                                                          7
+                            BBD-X                                                                      Navsim                                                            DriveBench                                                                   DriveMLLM
+
+
+
+
+       User                                                                     User                                                                  User                                                                         User
+   What driving strategy will the ego car adopt and give the                  Question: What driving strategy will the ego vehicel adopt and        Question: What driving strategy will the ego vehicel adopt and give
+   reasons. Choose: A) Go Straight; B) Turn Right; C) Turn Left;              give the reasons. Choose: A) Go Straight; B) Turn Right; C)                                                                                   Question: Is pedestrian wearing black clothes in front of red
+                                                                                                                                                    the reasons. Choose: A) Go Straight; B) Turn Right; C) Turn Left; D)
+   D) Decelerate; E) Emergency stop; F) Accelerate                            Turn Left; D) Decelerate; E) Emergency stop; F) Accelerate            Decelerate; E) Emergency stop; F) Accelerate
+                                                                                                                                                                                                                            and white bus?
+
+                 7B                                                                      7B                                                                    7B                                                                            7B
+
+   A) Go Straight.                                                                                                                                   A) Go Straight
+                                                                              A) Go Straight                                                         1. The ego vehicle is currently on a straight road with no
+   1. The traffic light ahead is green, indicating it's safe
+                                                                              The ego vehicle is in the right lane.                                  visible obstacles indicating a need to change direction. 2. The        Given that there is no red and white bus,
+   to proceed straight.
+                                                                              The left lane appears clear.                                           traffic light ahead shows a green signal for straight traffic,
+   2. There are no immediate obstacles or signs                                                                                                      allowing the vehicle to proceed without stopping or changing           Answer is No.
+                                                                              Going straight or turning right is blocked.
+   requiring a turn in front of the vehicle.                                                                                                         lanes.3. There are no immediate signs of an emergency or
+                                                                              Turning left is the viable option to avoid the barriers.
+                                                                                                                                                     sudden maneuver required by the driver.
+
+       AgentThink                                                                 AgentThink                                                             AgentThink                                                                AgentThink
+   D) Decelerate
+                                                                              D) Decelerate                                                         D) Decelerate                                                               Answer is Yes.
+   <Tool>: get_current_lane_divider_info
+                                                                              <Tool>:get_current_lane_divider                                       <Tool>:get_current_lane_divider                                             <Step>: To determine if the pedestrian wearing black clothes is in
+   <Step>: What does the ego vehicle's lane positioning indicate about its
+                                                                              <Step>: What is the the ego vehicle's position? The ego vehicle       <Step>: What is the ego vehicle's current position and are there any        front of the red and white bus, we need to compare their z-values
+   intended path?
+                                                                              is in the leftmost lane.                                              crossings nearby?The ego vehicle is in the middle of an intersection.       (depth positions).
+   The ego vehicle is in the leftmost lane, indicating a straight path or a
+                                                                                                                                                    <Tool>: get open world vocabulary detector                                  <Tool>:get_depth_estimator, get_open_vocabulary_detector
+   turn left if the light turns green.                                        <Tool>:get_surrounding_object_detections
+                                                                                                                                                    What might be the traffic light status based on the scene?                  - The pedestrian's 3D location is approximately [-5.45, 0.483,
+   <Tool>: get_traffic_light_status                                           <Step>: What is the traffic situation？There are vehicles on the       <Step>:The traffic light is likely red or yellow for pedestrians, as
+   <Step>: "What is the current status of the traffic light in front of the                                                                                                                                                     13.422].
+                                                                              right lanes and a white truck ahead.                                  suggested by their active crossing.
+   ego vehicle?",The traffic light is red.                                                                                                                                                                                      - The bus's 3D location is approximately [17.394, -1.811, 39.696].
+                                                                              <Tool>:get_nearest_pedestrian_crossing                                <Tool>:get_surrounding_object_detections                                    <Step>: Since the z-value of the pedestrian (-5.45) is less than the
+   <Tool>: get_surrounding_object_detections                                  <Step>: Are there any pedestrian crossing? The construction           <Step>: How are surrounding vehicles behaving? Vehicle ahead is             z-value of the bus (39.696), the pedestrian is indeed positioned in
+   <Step>What are the objects like in the lanes around the ego vehicle?
+                                                                              worker is actively setting up barriers.                               stopped or moving slowly.                                                   front of the bus.
+   The lane to the right, and the car ahead is stopped at the red light.
+
+
+
+
+                  Figure 5. Zero-shot qualitative comparison with Qwen2.5VL-7B on BDD-X, Navsim, DriveBench and DriveMLLM.
+
+                                                                                                                                                    Metric Scores (%) ↑
+                            Type                       Model                                                                                                                                                                                            Overall
+                                                                                                       L/R            F/B           RHD             RD              PPos BBox CVD                                          CD          AccS
+                                      GPT-4o [16]                                                    91.72 67.60 9.58 14.69                                         40.90           4.07             46.11 70.65                      43.16                25.63
+                                      GPT-4o-mini                                                    67.67 50.13 70.44 0.00                                         29.28           3.78              0.00 46.40                      33.46                16.68
+                                      LLaVA-ov-72B [20]                                              85.42 49.48 13.76 45.27                                        16.46           0.00             42.97 27.09                      35.06                21.10
+                            Zero-shot Qwen2.5-VL-7B [1]                                              76.55 55.24 7.14 17.11                                         55.97          38.31             55.94 51.52                      44.72                13.36
+                                      Qwen + CoT                                                     87.06 63.09 16.69 22.56                                        52.51          38.87             76.90 38.71                      49.55                19.31
+                                      Qwen + DirectTool                                              78.95 48.96 58.43 67.57                                        58.20          42.22             51.76 51.38                      57.18                24.05
+                                      AgentThink (Ours)                                              82.33 54.40 56.14 61.45                                        70.45          56.23             23.09 51.60                      56.96                26.52
+                                     GPT-4o                                                          91.08 69.37 36.51 71.17                                        42.44           5.10              0.00 63.88                      47.44                33.17
+                                     GPT-4o-mini                                                     66.00 48.95 83.02 58.47                                        25.71           3.97             52.73 55.23                      49.26                22.13
+                                     LLaVA-ov-72B[20]                                                79.12 62.97 49.26 68.04                                        28.57           2.20             53.12 60.90                      50.52                36.66
+                            One-shot Qwen2.5-VL-7B [1]                                               80.30 53.14 36.96 39.13                                        62.69          22.63             49.88 48.32                      49.13                33.53
+                                     Qwen + CoT                                                      86.35 59.95 43.29 31.81                                        53.64          26.93             51.02 42.30                      49.41                32.06
+                                     Qwen + DirectTool                                               84.57 55.50 67.32 59.54                                        85.58          26.07             52.34 53.25                      60.52                42.27
+                                     AgentThink (Ours)                                               78.71 48.46 60.64 60.71                                        72.36          64.46             52.26 52.04                      61.21                47.24
+
+                      Table 6. Zero-shot and one-shot performance comparison across multiple metrics on the DriveMLLM benchmark.
+
+    The DirectTool baseline, which enforces tool invoca-                                                                                             4.3. Ablation Study
+tion via prompt without reasoning structure, shows mod-
+erate chain coherence but lower appropriateness and align-                                                                                           In Table 4, we conduct comprehensive ablations to examine
+ment—indicating that forced tool use often lacks purpose.                                                                                            the effect of different reward signals and training stages in
+Adding SFT improves both appropriateness and alignment,                                                                                              AgentThink. Using SFT or GRPO alone with either final-
+but lacks feedback on tool quality, limiting further gains.                                                                                          answer or step-reasoning reward provides moderate gains
+GRPO with structured rewards leads to significant improve-                                                                                           over the base model, improving task accuracy and reasoning
+ments, teaching the model to invoke tools selectively and                                                                                            coherence respectively. However, their effects are limited
+integrate outputs coherently. Our full model, combining                                                                                              when applied in isolation.
+SFT and GRPO with full reward, achieves the best perfor-                                                                                                 We find that combining SFT with GRPO (without the
+mance across all metrics. This demonstrates that both super-                                                                                         tool-use reward) delivers better performance, which shows
+vision and reward shaping are essential for learning effective,                                                                                      that warm-up reasoning is crucial before reinforcement tun-
+context-aware tool use. We also evaluate the impact of the                                                                                           ing. Our complete AgentThink model, which incorporates
+training data scale, as detailed in Appendix E.                                                                                                      all three reward components, attains the optimal results. It
+
+
+                                                                                                                                                8
+                                                                               BenchDrive Scores (%) ↑
+                 Model                  Size    Type
+                                                               Weather      External   Sensor   Motion   Transmission
+                 GPT-4o [16]            —       Commercial        57.2        29.3      44.3     34.3        36.8
+                 LLaVA-1.5 [20]         7B      Open              69.7        26.5      18.8     71.3        10.2
+                 LLaVA-1.5              13 B    Open              61.6        15.5      24.1     79.8        15.5
+                 LLaVA-NeXT             7B      Open              69.7        48.5      21.8     66.0        11.8
+                 InternVL2 [4]          8B      Open              59.9        50.8      29.9     68.3        30.0
+                 Phi-3                  4.2 B   Open              40.0        25.0      16.8     31.3        27.7
+                 Phi-3.5                4.2 B   Open              60.6        21.3      25.6     33.0        39.7
+                 Qwen2-VL [1]           7B      Open              76.7        37.5      22.8     57.0        35.8
+                 Qwen2-VL               72 B    Open              59.8        45.5      52.3     58.3        44.8
+                 DriveLM [35]           7B      Specialist        21.2        21.3       9.0     22.3        17.5
+                 Dolphins [22]          7B      Specialist        54.3        30.0       9.4      9.3        21.5
+                 AgentThink (Ours)      7B      Ours              64.8        68.2      56.8     71.8        61.2
+
+Table 7. DriveBench results. AgentThink achieves SOTA on 3/5 tasks (External, Sensor, Transmission), and ranks top-3 on the remaining 2
+(Weather, Motion), indicating strong generalization.
+
+
+greatly enhances both reasoning quality and answer accu-                 lucinates during reasoning, leading to incorrect outputs. In
+racy, thus emphasizing the importance of using tools and                 contrast, AgentThink adeptly invokes tools to acquire critical
+grounding reasoning in visual context.                                   decision-making information, thereby correctly answering
+                                                                         these difficult questions. This further highlights the prac-
+4.4. Generalization Evaluation                                           tical benefits of its dynamic, tool-augmented reasoning in
+We assessed AgentThink’s generalization ability on a new                 unfamiliar contexts.
+DriveMLLM benchmark under zero-shot and one-shot set-
+tings against a range of strong baselines, including prominent           5. Conclusion
+VLMs and task-specific variants (details in Table 6). The                We present AgentThink, the first unified framework that
+evaluation metrics are detailed in Appendix F.                           tightly fuses CoT reasoning with agent-style tool invocation
+   AgentThink achieves state-of-the-art performance with                 for autonomous driving. With a scalable tool-augmented
+zero-shot (26.52) and one-shot (47.24) scores, surpass-                  dataset and a two-stage SFT with GRPO pipeline, Agent-
+ing GPT-4o and LLaVA-72B. While baseline methods like                    Think raises DriveLMM-o1 reasoning score from 51.77 to
+DirectTool demonstrate strong perception task results (e.g.,             79.68 and answer accuracy from 37.81% to 71.35%, out-
+RHD 89.2 vs. 86.1, BBox precision 92.4% vs. 91.7%) through               performing the strongest prior model by +5.9% and +9.0%.
+hard-coded tool prompts, they suffer from contextual rigidity            Beyond improved performance, AgentThink demonstrates
+and fragmented reasoning-perception alignment. Our model                 stronger interpretability by making each reasoning step
+demonstrates a superior balance by effectively coordinating              grounded in tool outputs. Notably, as a driving-scene VQA
+explicit reasoning with learned, adaptive tool use grounded              system, AgentThink aligns with industrial practices where
+in perceptual context. This underscores the advantages of its            such models are used off the control loop, for example, for
+learned tool-use mechanism over static prompting or sheer                mining corner cases or providing high-level feedback in
+model scale for robust generalization.                                   a dual-system setup, and thus operating under relaxed la-
+   Shown in Table 7, in the zero-shot experiments on                     tency constraints compared to real-time planning. Results
+DriveBench [44], AgentThink achieved state-of-the-art per-               validate that coupling explicit reasoning with learned tool
+formance on 3 out of 5 tasks (External, Sensor, and Trans-               use is a promising path toward safer, more robust language-
+mission) and ranked within the top 3 on the remaining two                model-centric driving tasks. We believe this framework lays
+(Weather and Motion). This demonstrates its strong general-              the foundation for building trustworthy VLM-based agents
+ization ability, showing that it can maintain high performance           capable of generalizing to complex, dynamic real-world driv-
+across diverse unseen tasks and scenarios, surpassing both               ing environments.
+general-purpose and specialist models in Driving VQA.
+   Qualitatively, as illustrated in Fig. 5, AgentThink success-          Acknowledgement
+fully navigates challenging zero-shot corner cases on diverse
+benchmarks (BDD-X [19], Navsim [7], DriveBench [44],                     This work was supported in part by the National Natural Sci-
+DriveMLLM [11]). In these cases, the base Qwen model                     ence Foundation of China (52372414, 52394264, 52472449).
+often fails to gather sufficient information or generates hal-           Zilin Huang did not receive any funding for this work. We
+
+
+                                                                   9
+extend our gratitude to Xiaomi for their contribution to this            [2] Paweł Budzianowski and Ivan Vulić. Hello, it’s gpt-2–how
+work. Xiaomi generously provided computational resources                     can i help you? towards the use of pretrained language
+that significantly accelerated our experiments and model                     models for task-oriented dialogue systems. arXiv preprint
+training. Additionally, their supportive internship environ-                 arXiv:1907.05774, 2019.
+                                                                         [3] Long Chen, Oleg Sinavski, Jan Hünermann, Alice Karnsund,
+ment enabled close collaboration between academic and
+                                                                             Andrew James Willmott, Danny Birch, Daniel Maund, and
+industrial researchers, fostering innovation in real-world au-
+                                                                             Jamie Shotton. Driving with llms: Fusing object-level vec-
+tonomous driving challenges.                                                 tor modality for explainable autonomous driving. In 2024
+                                                                             IEEE International Conference on Robotics and Automation
+Limitations                                                                  (ICRA), pages 14093–14100. IEEE, 2024.
+                                                                         [4] Zhe Chen, Weiyun Wang, Yue Cao, Yangzhou Liu, Zhang-
+Data scale. Our tool-augmented corpus totals 18k anno-                       wei Gao, Erfei Cui, Jinguo Zhu, Shenglong Ye, Hao Tian,
+tated instances, limiting exposure to long-tail or rare driving              Zhaoyang Liu, et al. Expanding performance boundaries
+events. A substantially larger and more diverse dataset is                   of open-source multimodal models with model, data, and
+required for the model to internalize a broader spectrum of                  test-time scaling. arXiv preprint arXiv:2412.05271, 2024.
+real-world scenarios.                                                    [5] Jie Cheng, Yingbing Chen, and Qifeng Chen. Pluto: Pushing
+   Model size.       Ours relies on qwen2.5-VL-7B; the                       the limit of imitation learning-based planning for autonomous
+                                                                             driving. arXiv preprint arXiv:2404.14327, 2024.
+7B-parameter footprint incurs non-trivial memory and la-
+                                                                         [6] Can Cui, Yunsheng Ma, Xu Cao, Wenqian Ye, Yang Zhou,
+tency overhead on embedded automotive hardware. Future                       Kaizhao Liang, Jintai Chen, Juanwu Lu, Zichong Yang, Kuei-
+work should investigate lighter backbones (e.g., ~3B) that                   Da Liao, et al. A survey on multimodal large language models
+preserve reasoning capability while easing on-board resource                 for autonomous driving. In Proceedings of the IEEE/CVF
+constraints.                                                                 Winter Conference on Applications of Computer Vision, pages
+   Lack of temporal context. The model under discus-                         958–979, 2024.
+sion processes single-frame, multi-view images as inputs.                [7] Daniel Dauner, Marcel Hallgarten, Tianyu Li, Xinshuo Weng,
+However, in the absence of sequential information, it may                    Zhiyu Huang, Zetong Yang, Hongyang Li, Igor Gilitschenski,
+misinterpret scenarios that rely on temporal cues, such as                   Boris Ivanovic, Marco Pavone, et al. Navsim: Data-driven
+                                                                             non-reactive autonomous vehicle simulation and benchmark-
+changing traffic lights. To address this issue, incorporat-
+                                                                             ing. Advances in Neural Information Processing Systems,
+ing video tokens or employing recurrent memory could be                      37:28706–28719, 2024.
+effective solutions.                                                     [8] Xinpeng Ding, Jianhua Han, Hang Xu, Xiaodan Liang, Wei
+   Missing 3-D modalities. The absence of LiDAR or                           Zhang, and Xiaomeng Li. Holistic autonomous driving un-
+point-cloud data deprives the model of precise spatial geom-                 derstanding by bird’s-eye-view injected multi-modal large
+etry, introducing uncertainty in distance-related reasoning.                 models. In Proceedings of the IEEE/CVF Conference on Com-
+Fusing additional modalities is expected to enhance robust-                  puter Vision and Pattern Recognition, pages 13668–13677,
+ness.                                                                        2024.
+                                                                         [9] Daocheng Fu, Xin Li, Licheng Wen, Min Dou, Pinlong Cai,
+                                                                             Botian Shi, and Yu Qiao. Drive like a human: Rethinking
+Ethics Statement                                                             autonomous driving with large language models. In 2024
+All data come from publicly released driving datasets that                   IEEE/CVF Winter Conference on Applications of Computer
+                                                                             Vision Workshops (WACVW), pages 910–919. IEEE, 2024.
+anonymise personally identifiable information; no private               [10] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song,
+or crowd-sourced data were collected. The study involves                     Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi
+no human subjects, and every experiment is run offline                       Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning
+or in simulation. Model checkpoints are released under                       capability in llms via reinforcement learning. arXiv preprint
+a non-commercial licence that prohibits deployment in                        arXiv:2501.12948, 2025.
+safety-critical vehicles without additional validation. The             [11] Xianda Guo, Ruijun Zhang, Yiqun Duan, Yuhang He, Chen-
+work follows the ACL Code of Ethics and does not rely on                     ming Zhang, Shuai Liu, and Long Chen. Drivemllm: A
+sensitive data or models.                                                    benchmark for spatial understanding with multimodal large
+                                                                             language models in autonomous driving. arXiv preprint
+                                                                             arXiv:2411.13112, 2024.
+References                                                              [12] Zilin Huang, Zihao Sheng, Yansong Qu, Junwei You, and
+ [1] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge,             Sikai Chen. Vlm-rl: A unified vision language models and re-
+     Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang,                  inforcement learning framework for safe autonomous driving.
+     Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li,                     arXiv preprint arXiv:2412.15544, 2024.
+     Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng           [13] JJ Hwang, R Xu, H Lin, WC Hung, J Ji, K Choi, D Huang,
+     Xu, Jiabo Ye, Xi Zhang, Tianbao Xie, Zesen Cheng, Hang                  T He, P Covington, B Sapp, et al. Emma: End-to-end mul-
+     Zhang, Zhibo Yang, Haiyang Xu, and Junyang Lin. Qwen2.5-                timodal model for autonomous driving. arxiv 2024. arXiv
+     vl technical report, 2025.                                              preprint arXiv:2410.23262, 2024.
+
+
+                                                                   10
+[14] Jyh-Jing Hwang, Runsheng Xu, Hubert Lin, Wei-Chih Hung,                   Miao, Zhikun Ma, Tianze Zhu, Jiayin Li, Yangfan He, Zheng
+     Jingwei Ji, Kristy Choi, Di Huang, Tong He, Paul Covington,               Fu, et al. Fasionad++: Integrating high-level instruction
+     Benjamin Sapp, et al. Emma: End-to-end multimodal model                   and information bottleneck in fat-slow fusion systems for en-
+     for autonomous driving. arXiv preprint arXiv:2410.23262,                  hanced safety in autonomous driving with adaptive feedback.
+     2024.                                                                     arXiv preprint arXiv:2503.08162, 2025.
+[15] Ayesha Ishaq, Jean Lahoud, Ketan More, Omkar Thawakar,               [29] Kangan Qian, Ziang Luo, Sicong Jiang, Zilin Huang, Jinyu
+     Ritesh Thawkar, Dinura Dissanayake, Noor Ahsan, Yuhao Li,                 Miao, Zhikun Ma, Tianze Zhu, Jiayin Li, Yangfan He, Zheng
+     Fahad Shahbaz Khan, Hisham Cholakkal, et al. Drivelmm-                    Fu, et al. Fasionad++: Integrating high-level instruction
+     o1: A step-by-step reasoning dataset and large multimodal                 and information bottleneck in fat-slow fusion systems for en-
+     model for driving scenario understanding. arXiv preprint                  hanced safety in autonomous driving with adaptive feedback.
+     arXiv:2503.10621, 2025.                                                   arXiv preprint arXiv:2503.08162, 2025.
+[16] Raisa Islam and Owana Marzia Moushi. Gpt-4o: The cutting-            [30] Kangan Qian, Jinyu Miao, Xinyu Jiao, Ziang Luo, Zheng
+     edge advancement in multimodal llm. Authorea Preprints,                   Fu, Yining Shi, Yunlong Wang, Kun Jiang, and Diange
+     2024.                                                                     Yang. Priormotion: Generative class-agnostic motion pre-
+[17] Bo Jiang, Shaoyu Chen, Qian Zhang, Wenyu Liu, and Xing-                   diction with raster-vector motion field priors. arXiv preprint
+     gang Wang. Alphadrive: Unleashing the power of vlms in                    arXiv:2412.04020, 2024.
+     autonomous driving via reinforcement learning and reasoning.         [31] Kangan Qian, Jinyu Miao, Ziang Luo, Zheng Fu, Yining Shi,
+     arXiv preprint arXiv:2503.07608, 2025.                                    Yunlong Wang, Kun Jiang, Mengmeng Yang, Diange Yang,
+[18] Sicong Jiang, Zilin Huang, Kangan Qian, Ziang Luo, Tianze                 et al. Lego-motion: Learning-enhanced grids with occupancy
+     Zhu, Yang Zhong, Yihong Tang, Menglin Kong, Yunlong                       instance modeling for class-agnostic motion prediction. arXiv
+     Wang, Siwen Jiao, et al. A survey on vision-language-                     preprint arXiv:2503.07367, 2025.
+     action models for autonomous driving. arXiv preprint                 [32] Tianwen Qian, Jingjing Chen, Linhai Zhuo, Yang Jiao, and
+     arXiv:2506.24044, 2025.                                                   Yu-Gang Jiang. Nuscenes-qa: A multi-modal visual question
+[19] Jinkyu Kim, Anna Rohrbach, Trevor Darrell, John Canny, and                answering benchmark for autonomous driving scenario. In
+     Zeynep Akata. Textual explanations for self-driving vehicles.             Proceedings of the AAAI Conference on Artificial Intelligence,
+     Proceedings of the European Conference on Computer Vision                 volume 38, pages 4542–4550, 2024.
+     (ECCV), 2018.                                                        [33] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao
+[20] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li,                    Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li,
+     Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Zi-                   Y Wu, et al. Deepseekmath: Pushing the limits of mathe-
+     wei Liu, et al. Llava-onevision: Easy visual task transfer.               matical reasoning in open language models. arXiv preprint
+     arXiv preprint arXiv:2408.03326, 2024.                                    arXiv:2402.03300, 2024.
+[21] Shiyin Lu, Yang Li, Qing-Guo Chen, Zhao Xu, Weihua                   [34] Yining Shi, Kun Jiang, Ke Wang, Jiusi Li, Yunlong Wang,
+     Luo, Kaifu Zhang, and Han-Jia Ye. Ovis: Structural embed-                 Mengmeng Yang, and Diange Yang. Streamingflow: Stream-
+     ding alignment for multimodal large language model. arXiv                 ing occupancy forecasting with asynchronous multi-modal
+     preprint arXiv:2405.20797, 2024.                                          data streams via neural ordinary differential equation. In
+[22] Yingzi Ma, Yulong Cao, Jiachen Sun, Marco Pavone, and                     2024 IEEE/CVF Conference on Computer Vision and Pattern
+     Chaowei Xiao. Dolphins: Multimodal language model for                     Recognition (CVPR), pages 14833–14842, 2024.
+     driving. In European Conference on Computer Vision, pages            [35] Chonghao Sima, Katrin Renz, Kashyap Chitta, Li Chen,
+     403–420. Springer, 2024.                                                  Hanxue Zhang, Chengen Xie, Jens Beißwenger, Ping Luo,
+[23] Jiageng Mao, Yuxi Qian, Junjie Ye, Hang Zhao, and Yue                     Andreas Geiger, and Hongyang Li. Drivelm: Driving with
+     Wang. Gpt-driver: Learning to drive with gpt. arXiv preprint              graph visual question answering. In European Conference on
+     arXiv:2310.01415, 2023.                                                   Computer Vision, pages 256–274. Springer, 2024.
+[24] Jiageng Mao, Junjie Ye, Yuxi Qian, Marco Pavone, and Yue             [36] Omkar Thawakar, Dinura Dissanayake, Ketan More, Ritesh
+     Wang. A language agent for autonomous driving. arXiv                      Thawkar, Ahmed Heakl, Noor Ahsan, Yuhao Li, Mohammed
+     preprint arXiv:2311.10813, 2023.                                          Zumri, Jean Lahoud, Rao Muhammad Anwer, et al. Llamav-
+[25] Ana-Maria Marcu, Long Chen, Jan Hünermann, Alice Karn-                    o1: Rethinking step-by-step visual reasoning in llms. arXiv
+     sund, Benoit Hanotte, Prajwal Chidananda, Saurabh Nair,                   preprint arXiv:2501.06186, 2025.
+     Vijay Badrinarayanan, Alex Kendall, Jamie Shotton, et al.            [37] Xiaoyu Tian, Junru Gu, Bailin Li, Yicheng Liu, Yang Wang,
+     Lingoqa: Visual question answering for autonomous driving.                Zhiyong Zhao, Kun Zhan, Peng Jia, Xianpeng Lang, and
+     In European Conference on Computer Vision, pages 252–269.                 Hang Zhao. Drivevlm: The convergence of autonomous
+     Springer, 2024.                                                           driving and large vision-language models. arXiv preprint
+[26] Ming Nie, Renyuan Peng, Chunwei Wang, Xinyue Cai, Jian-                   arXiv:2402.12289, 2024.
+     hua Han, Hang Xu, and Li Zhang. Reason2drive: Towards                [38] Shihao Wang, Zhiding Yu, Xiaohui Jiang, Shiyi Lan, Min
+     interpretable and chain-based reasoning for autonomous driv-              Shi, Nadine Chang, Jan Kautz, Ying Li, and Jose M Alvarez.
+     ing. In European Conference on Computer Vision, pages                     Omnidrive: A holistic llm-agent framework for autonomous
+     292–308. Springer, 2024.                                                  driving with 3d perception, reasoning and planning. arXiv
+[27] OpenAI. Gpt-4 technical report. https://arxiv.org/abs/                    preprint arXiv:2405.01533, 2024.
+     2303.08774, 2023.                                                    [39] Shihao Wang, Zhiding Yu, Xiaohui Jiang, Shiyi Lan, Min
+[28] Kangan Qian, Ziang Luo, Sicong Jiang, Zilin Huang, Jinyu                  Shi, Nadine Chang, Jan Kautz, Ying Li, and Jose M Al-
+
+
+                                                                     11
+     varez. Omnidrive: A holistic vision-language dataset for
+     autonomous driving with counterfactual reasoning. arXiv
+     preprint arXiv:2504.04348, 2025.
+[40] Tianqi Wang, Enze Xie, Ruihang Chu, Zhenguo Li, and Ping
+     Luo. Drivecot: Integrating chain-of-thought reasoning with
+     end-to-end driving. arXiv preprint arXiv:2403.16996, 2024.
+[41] Wenhai Wang, Jiangwei Xie, ChuanYang Hu, Haoming Zou,
+     Jianan Fan, Wenwen Tong, Yang Wen, Silei Wu, Hanming
+     Deng, Zhiqi Li, et al. Drivemlm: Aligning multi-modal
+     large language models with behavioral planning states for
+     autonomous driving. arXiv preprint arXiv:2312.09245, 2023.
+[42] Yunlong Wang, Hongyu Pan, Jun Zhu, Yu-Huan Wu, Xin
+     Zhan, Kun Jiang, and Diange Yang. Be-sti: Spatial-temporal
+     integrated network for class-agnostic motion prediction with
+     bidirectional enhancement. In Proceedings of the IEEE/CVF
+     Conference on Computer Vision and Pattern Recognition,
+     pages 17093–17102, 2022.
+[43] Licheng Wen, Daocheng Fu, Xin Li, Xinyu Cai, Tao Ma,
+     Pinlong Cai, Min Dou, Botian Shi, Liang He, and Yu Qiao.
+     Dilu: A knowledge-driven approach to autonomous driving
+     with large language models. arXiv preprint arXiv:2309.16292,
+     2023.
+[44] Shaoyuan Xie, Lingdong Kong, Yuhao Dong, Chonghao
+     Sima, Wenwei Zhang, Qi Alfred Chen, Ziwei Liu, and Liang
+     Pan. Are vlms ready for autonomous driving? an empirical
+     study from the reliability, data, and metric perspectives. arXiv
+     preprint arXiv:2501.04003, 2025.
+[45] Guowei Xu, Peng Jin, Li Hao, Yibing Song, Lichao Sun,
+     and Li Yuan. Llava-o1: Let vision language models reason
+     step-by-step. arXiv preprint arXiv:2411.10440, 2024.
+[46] Zhenhua Xu, Yujia Zhang, Enze Xie, Zhen Zhao, Yong Guo,
+     Kwan-Yee K Wong, Zhenguo Li, and Hengshuang Zhao.
+     Drivegpt4: Interpretable end-to-end autonomous driving via
+     large language model. IEEE Robotics and Automation Letters,
+     2024.
+[47] Huanjin Yao, Jiaxing Huang, Wenhao Wu, Jingyi Zhang, Yibo
+     Wang, Shunyu Liu, Yingjie Wang, Yuxin Song, Haocheng
+     Feng, Li Shen, et al. Mulberry: Empowering mllm with o1-
+     like reasoning and reflection via collective monte carlo tree
+     search. arXiv preprint arXiv:2412.18319, 2024.
+[48] Jingyi Zhang, Jiaxing Huang, Huanjin Yao, Shunyu Liu,
+     Xikun Zhang, Shijian Lu, and Dacheng Tao. R1-vl: Learn-
+     ing to reason with multimodal large language models via
+     step-wise group relative policy optimization. arXiv preprint
+     arXiv:2503.12937, 2025.
+[49] Wenwen Zhuang, Xin Huang, Xiantao Zhang, and Jin Zeng.
+     Math-puma: Progressive upward multimodal alignment to
+     enhance mathematical reasoning. In Proceedings of the
+     AAAI Conference on Artificial Intelligence, volume 39, pages
+     26183–26191, 2025.
+
+
+
+
+                                                                        12
+Appendix                                                              Prediction Functions
+                                                                      • get_leading_object_future_trajectory: Provides the pre-
+A. Data Generation Pipeline                                             dicted future trajectory of the leading object. If no leading
+                                                                        object exists, it returns None.
+A.1. Tool Library
+                                                                      • get_future_trajectories_for_specific_objects: Returns
+This tool library is designed to support autonomous driving             the future trajectories for specific objects identified by
+function calls by providing a comprehensive set of tools for            their object IDs. If no such objects exist, it returns None.
+various tasks including visual detection, object detection,           • get_future_trajectories_in_range: Retrieves future tra-
+trajectory prediction, map information querying, and more.              jectories where any waypoint falls within a given range
+Below is an introduction to the main categories and specific            (x_start, x_end)×(y_start, y_end)m². Returns None if no
+tools available in the library:                                         trajectories meet the criteria.
+                                                                      • get_future_waypoint_of_specific_objects_
+                                                                        at_timestep: Obtains the future waypoints of specific
+Visual info Functions                                                   objects at a particular timestep. If an object does not have
+• get_open_world_vocabulary_detection: Given a list of                  a waypoint at the specified timestep or if no such object
+  object words, this function detects the objects in the image          exists, it returns None.
+  and returns their 2D positions and sizes within the camera          • get_all_future_trajectories: Provides the predicted fu-
+  coordinate system. If no related object is found, it returns          ture trajectories for all objects in the scene. Similar to
+  None.                                                                 get_all_object_detections, it is advisable to use more spe-
+• get_3d_loc_in_cam: Given an input image and object-                   cific functions if possible.
+  related keywords, this function calculates the depth value
+  for each pixel and determines the 3D locations of the
+  specified objects within the camera coordinate system.              Occupancy Functions
+• Resize_image_info: defines a function to resize an image            • get_occupancy_at_locations_for_timestep: Determines
+  to specified dimensions, supporting various interpolation             the probability of occupancy for a list of locations at a
+  methods. It requires the input image path, output path,               specific timestep. Returns None if a location is outside the
+  and target size with, interpolation method as an optional             occupancy prediction scope.
+  parameter.                                                          • check_occupancy_for_planned_trajectory: Evaluates
+• Crop_image_info: defines a function to crop a rectangular             whether a planned trajectory collides with other objects.
+  region from an image. It requires the input image path,
+  output path, and the coordinates of the crop region.
+                                                                      Map Functions
+                                                                      • get_drivable_at_locations: Checks the drivability of spe-
+Detection Functions                                                     cific locations. Returns None if a location is outside the
+• get_leading_object_detection: Detects the leading object,             map scope.
+  returning its ID, position, and size. If no leading object          • get_lane_category_at_locations: Retrieves the lane cat-
+  exists, it returns None.                                              egory for specific locations. If the location is outside the
+• get_surrounding_object_detections: Detects surround-                  map scope, it returns None.
+  ing objects within a 20m×20m range, providing a list of             • get_distance_to_shoulder_at_locations: Calculates the
+  object IDs along with their positions and sizes. Returns              distance to both sides of road shoulders for specific lo-
+  None if no surrounding objects are present.                           cations. Returns None if a location is outside the map
+• get_front_object_detections: Identifies objects within a              scope.
+  10m×20m range in front of the vehicle, returning their IDs,         • get_current_shoulder: Provides the distance to both sides
+  positions, and sizes. Returns None if no such objects exist.          of road shoulders for the current ego-vehicle location.
+• get_object_detections_in_range: Detects objects within              • get_distance_to_lane_divider_at_locations: Computes
+  a specified range (x_start, x_end)×(y_start, y_end)m², re-            the distance to both sides of road lane dividers for specific
+  turning a list of object IDs and their corresponding posi-            locations. Returns None if a location is outside the map
+  tions and sizes. Returns None if no objects are found in              scope.
+  the range.                                                          • get_current_lane_divider: Returns the distance to both
+• get_all_object_detections: Retrieves detections for all               sides of road lane dividers for the current ego-vehicle
+  objects in the entire scene, providing a list of object IDs           location.
+  and their positions and sizes. However, it is recommended           • get_nearest_pedestrian_crossing: Identifies the location
+  to avoid using this function if more specific alternatives            of the nearest pedestrian crossing to the ego-vehicle. Re-
+  are available.                                                        turns None if no pedestrian crossing exists.
+
+
+                                                                 13
+B. Implementation Details                                              C. Evaluation Metric in the DriveLMM-o1
+                                                                          Benchmark
+In our experiments, we utilized the MS-SWIFT framework
+to finish our experiment with the following parameter con-             To comprehensively evaluate both quantitative performance
+figuration.                                                            and qualitative decision-making capabilities in autonomous
+                                                                       driving scenarios, we adopt the evaluation metrics proposed
+B.1. SFT Phase                                                         by [15].
+                                                                           Risk Assessment examines the model’s capacity to pri-
+We trained the model for 20 epochs using the LoRA (Low-                oritize high-risk objects or scenarios, ensuring critical situ-
+Rank Adaptation) fine-tuning method, setting the LoRA rank             ations receive appropriate urgency in decision-making pro-
+to 8 and the LoRA alpha to 32. To manage GPU memory                    cesses. Accuracy quantifies the precision of environmental
+usage, the per-device training and evaluation batch sizes              perception through correct identification and classification
+were both set to 2, with gradient accumulation enabled over            of relevant elements.
+16 steps. The learning rate was set to 1 × 10−4 , and we used              Traffic Rule Adherence measures compliance with estab-
+the bfloat16 data type to enhance computational efficiency.            lished traffic regulations and domain-specific best practices,
+In order to constrain GPU memory consumption, we froze                 reflecting real-world operational fidelity.
+the parameters of the Vision Transformer (ViT) and set the
+                                                                           Scene Awareness and Object Understanding jointly as-
+maximum sequence length to 4096. During training, model
+                                                                       sess contextual interpretation depth, encompassing accurate
+evaluation and saving were performed every 1000 steps,
+                                                                       perception of spatial relationships, dynamic object behaviors,
+with a limit of 5 saved models. Logging was conducted
+                                                                       and complex environmental interactions.
+every 5 steps to monitor the training process closely. We
+                                                                           Relevance evaluates alignment between model outputs
+employed the DeepSpeed ZeRO-2 optimizer to optimize
+                                                                       and scenario-specific requirements relative to ground truth
+training performance and disabled the reentrancy of gradient
+                                                                       annotations, ensuring contextually appropriate responses.
+checkpointing for efficiency. Additionally, we configured
+the warm-up ratio to 0.05 and allocated 4 worker processes                 Missing Details identifies critical information gaps
+for both the data loader and dataset processing.                       through systematic analysis of perceptual blind spots in situ-
+                                                                       ational understanding. These complementary metrics collec-
+                                                                       tively establish a holistic framework for evaluating system
+B.2. GRPO Phase                                                        reliability, safety margins, and environmental adaptability
+The RLHF type was designated as "grpo" to utilize the                  across diverse driving conditions.
+GRPO algorithm for reinforcement learning with human
+feedback. We activated LoRA training mode(same as SFT                      Metric                Description
+Phase in Sec. B.1) and set the PyTorch data type to "bfloat16"             Risk Assessment       Evaluates if the model correctly pri-
+for efficient computation. The maximum sequence length                     Accuracy              oritizes high-risk objects or scenar-
+was configured to 2048, with a maximum completion length                                         ios.
+of 1024. Training was conducted for 8 epoch, with per-
+                                                                           Traffic Rule Ad-      Scores how well the response fol-
+device training and evaluation batch sizes both set to 1. The
+                                                                           herence               lows traffic laws and driving best
+learning rate was set at 1 × 10−5 , and we employed 8 gra-                                       practices.
+dient accumulation steps. Model evaluation occurred every
+500 steps, with model saving every 100 steps, and we re-                   Scene Awareness       Measures how well the response in-
+                                                                           and Object Under-     terprets objects, their positions, and
+stricted the total number of saved models to 20. Logging
+                                                                           standing              actions.
+was performed at every step to closely monitor the training
+process. The warm-up ratio for the learning rate was config-               Relevance             Measures how well the response is
+ured to 0.01. We allocated 4 workers to the DataLoader to                                        specific to the given scenario and
+expedite data loading. For generation, we allowed 2 genera-                                      ground truth.
+tions with a temperature of 1.2 to enhance output diversity.               Missing Details       Evaluates the extent to which criti-
+The system was prompted with the instruction: "You are a                                         cal information is missing from the
+helpful assistant. You first think about the reasoning process                                   response.
+in the mind and then provide the user with the answer." We
+leveraged DeepSpeed’s ZeRO-3 stage optimizer to optimize               Table 8. Evaluation metrics for quantitative performance and quali-
+training performance and enabled logging of model comple-              tative decision-making capabilities
+tions for further analysis. The beta value was set to 0.001 for
+specific algorithmic adjustments, and the entire process was              DriveLMM-o1[15] utilize GPT-4o-mini to complete the
+conducted for 1 iteration.                                             evaluation steps. The prompt we employ is as follows:
+
+
+                                                                  14
+    You are an autonomous driving reasoning evaluator. Your               • 3-4: Frequent repetition that disrupts reasoning.
+task is to assess the alignment, coherence, and quality of                • 1-2: Excessive redundancy, making reasoning unclear.
+reasoning steps in text responses for safety-critical driving          7. Hallucination (1-10): Detects irrelevant or invented rea-
+scenarios.                                                                soning steps not aligned with ground truth.
+   You will evaluate the model-generated reasoning using                  • 9-10: No hallucinations, all reasoning is grounded.
+the following metrics:                                                    • 7-8: One or two minor hallucinations.
+                                                                          • 5-6: Some fabricated details.
+1. Faithfulness-Step (1-10): Measures how well the                        • 3-4: Frequent hallucinations.
+   model’s reasoning steps align with the ground truth.                   • 1-2: Majority of reasoning is hallucinated.
+   • 9-10: All steps correctly match or closely reflect the            8. Semantic Coverage-Step (1-10): Checks if the response
+      reference.                                                          fully covers the critical reasoning elements.
+   • 7-8: Most steps align, with minor deviations.                        • 9-10: Nearly complete semantic coverage.
+   • 5-6: Some steps align, but several are incorrect or miss-            • 7-8: Good coverage, some minor omissions.
+      ing.                                                                • 5-6: Partial coverage with key gaps.
+   • 3-4: Few steps align; most are inaccurate or missing.                • 3-4: Major gaps in reasoning.
+   • 1-2: Majority of steps are incorrect.                                • 1-2: Very poor semantic coverage.
+2. Informativeness-Step (1-10): Measures completeness of               9. Commonsense Reasoning (1-10): Assesses the use of
+   reasoning.                                                             intuitive driving logic in reasoning.
+   • 9-10: Captures almost all critical information.                      • 9-10: Displays strong commonsense understanding.
+   • 7-8: Covers most key points, with minor omissions.                   • 7-8: Mostly correct, with minor gaps.
+   • 5-6: Missing significant details.                                    • 5-6: Some commonsense errors.
+   • 3-4: Only partial reasoning present.                                 • 3-4: Frequent commonsense mistakes.
+   • 1-2: Poor extraction of relevant reasoning.                          • 1-2: Lacks basic driving commonsense.
+3. Risk Assessment Accuracy (1-10): Evaluates if the                  10. Missing Step (1-10): Evaluates if any necessary reason-
+   model correctly prioritizes high-risk objects or scenar-               ing steps are missing.
+   ios.                                                                   • 9-10: No critical steps missing.
+   • 9-10: Correctly identifies and prioritizes key dangers.              • 7-8: Minor missing steps, but answer is mostly intact.
+   • 7-8: Mostly accurate, with minor misprioritizations.                 • 5-6: Some important steps missing.
+   • 5-6: Some important risks are overlooked.                            • 3-4: Many critical reasoning gaps.
+   • 3-4: Significant misjudgments in risk prioritization.                • 1-2: Response is highly incomplete.
+   • 1-2: Misidentifies key risks or misses them entirely.            11. Relevance (1-10): Measures how well the response is
+4. Traffic Rule Adherence (1-10): Evaluates whether the                   specific to the given scenario and ground truth.
+   response follows traffic laws and driving best practices.              • 9-10: Highly specific and directly relevant to the driv-
+   • 9-10: Fully compliant with legal and safe driving prac-                ing scenario. Captures critical elements precisely, with
+      tices.                                                                no unnecessary generalization.
+   • 7-8: Minor deviations, but mostly correct.                           • 7-8: Mostly relevant, but some minor parts may be
+   • 5-6: Some inaccuracies in legal/safe driving recommen-                 overly generic or slightly off-focus.
+      dations.                                                            • 5-6: Somewhat relevant but lacks precision; response
+   • 3-4: Several rule violations or unsafe suggestions.                    contains vague or general reasoning without clear
+   • 1-2: Promotes highly unsafe driving behavior.                          scenario-based details.
+5. Scene Awareness & Object Understanding (1-10):                         • 3-4: Mostly generic or off-topic reasoning, with signif-
+   Measures how well the response interprets objects, their                 icant irrelevant content.
+   positions, and actions.                                                • 1-2: Largely irrelevant, missing key aspects of the sce-
+   • 9-10: Clearly understands all relevant objects and their               nario and failing to align with the ground truth.
+      relationships.                                                  12. Missing Details (1-10): Evaluates the extent to which
+   • 7-8: Minor misinterpretations but mostly correct.                    critical information is missing from the response, impact-
+   • 5-6: Some key objects misunderstood or ignored.                      ing the reasoning quality.
+   • 3-4: Many errors in object recognition and reasoning.                • 9-10: No significant details are missing; response is
+   • 1-2: Misidentifies or ignores key objects.                             comprehensive and complete.
+6. Repetition-Token (1-10): Identifies unnecessary repeti-                • 7-8: Covers most important details, with minor omis-
+   tion in reasoning.                                                       sions that do not severely impact reasoning.
+   • 9-10: No redundancy, very concise.                                   • 5-6: Some essential details are missing, affecting the
+   • 7-8: Minor repetition but still clear.                                 completeness of reasoning.
+   • 5-6: Noticeable redundancy.
+
+
+                                                                 15
+                                                                          D. Visualization of Main Experiment
+                                                                          Here we provide the visualizations for different scenarios
+        2.80%                                      2.04%                  (Fig 7, 8). Correct scene understanding outputs are high-
+                              2.73%
+                                                                          lighted in green, while erroneous interpretations are marked
+                                                                          in red for comparative analysis. Notably, AgentThink demon-
+                                                                          strates accurate analytical capabilities and avoid overly con-
+                                                                          servative decision-making tendencies (e.g. unnecessary brak-
+                                                                          ing), which compromise driving comfort despite maintaining
+                                                                          safety margins.
+
+                                                                          E. Impact of Data Size
+                                                                          To systematically evaluate the influence of training data scale,
+Figure 6. Our GRPO method with structured rewards setting and             we conduct ablation studies on Qwen2.5-VL-7B with fixed
+two-stage training strategy significantly boost final answer accu-        vision encoder parameters. The base model is first fine-
+racy. With just 6k samples, it outperforms SFT, showing strong            tuned via LoRA-based SFT, followed by policy optimization
+performance even with limited data. As data increase, AgentThink          through GRPO algorithm. All experiments are implemented
+consistently leads in MCQ performance.                                    on 16× NVIDIA A800 GPUs with unified hyperparameter
+                                                                          configurations. As presented in Tab. 9 and Fig. 6, reducing
+                                                                          training data size from 12k to 6k samples leads to a perfor-
+    • 3-4: Many critical reasoning steps or contextual details            mance decline across all metrics, with SFT-based training
+      are absent, making the response incomplete.                         exhibiting a more pronounced degradation. Notably, RLFT
+    • 1-2: Response is highly lacking in necessary details,               demonstrates superior robustness to data scarcity, achieving
+      leaving major gaps in understanding.                                statistically significant performance gains over SFT counter-
+                                                                          parts in low-data regimes (52.32% vs. 62.28% final accuracy
+Final Evaluation                                                          at 6k data scale). This suggests the inherent advantage of
+                                                                          reinforcement learning frameworks in leveraging limited
+Compute the Overall Score as the average of all metric                    training samples for vision-language policy learning.
+scores.
+                                                                          F. Evaluation Metric in the DriveMLLM
+{                                                                            Benchmark
+    "Faithfulness-Step": 6.0,
+    "Informativeness-Step": 6.5,                                          The eight metrics in the DriveMLLM benchmark [11] can
+    "Risk Assessment Accuracy": 7.0,                                      be described as follows:
+    "Traffic Rule Adherence": 7.5,
+    "Object Understanding": 8.0,
+                                                                          Left/Right (L/R) This metric evaluates the model’s abil-
+    "Repetition-Token": 7.0,
+                                                                          ity to identify which of two objects is positioned further
+    "Hallucination": 8.5,
+                                                                          to the left or right in the image based on their inferred x-
+    "Semantic Coverage-Step": 7.5,
+                                                                          coordinates.
+    "Commonsense Reasoning": 7.0,
+    "Missing Step": 8.5,
+    "Relevance": 8.5,                                                     Front/Back (F/B) This assesses whether the model can
+    "Missing Details": 7.0,                                               determine if one object is in front of or behind another us-
+    "Overall Score": 7.42                                                 ing depth cues, reflecting its understanding of z-coordinate
+}                                                                         relationships.
+                                                                                                    (
+Guidelines                                                                                             1, if pi = yi
+                                                                                            acci =                                 (8)
+                                                                                                       0, if pi ̸= yi
+• Avoid subjective interpretation and adhere to the given
+  thresholds.                                                                where: - pi is the model’s predicted label for sample i. -
+• Always strictly follow these scoring guidelines.                        yi is the ground truth label for sample i.
+• Do not add any additional explanations beyond the struc-
+                                                                             The overall accuracy acc is calculated as the mean of the
+  tured JSON output.
+                                                                          individual accuracies.
+
+
+                                                                     16
+                                               Driving Metrics (%) ↑                   Scene Detail (%) ↑            Overall (%) ↑
+  ID     Amount of Data
+                                        Risk Ass.   Rule Adh. Obj. Und.               Relevance    Missing          Reason. MCQ
+  (a)    GRPO w/ 6k data                  68.79          74.93            71.12           75.44         67.80        69.09      64.02
+  (b)    GRPO w/ 12k data                 69.26          75.44            71.68           75.85         68.13        69.48      64.19
+  (c)    SFT w/ 6k data                   74.47          80.58            75.82           80.66         72.02        74.08      62.28
+  (d)    SFT w/ 12k data                  74.81          80.88            76.21           80.90         72.42        74.33      62.36
+  (e)    SFT-GRPO w/ 6kdata               75.60          81.40            76.97           81.74         72.51        74.92      64.38
+  (f)    SFT-GRPO w/ 12kdata              75.69          82.29            76.98           82.58         72.39        75.08      64.94
+                 Table 9. Impact of training data amount on key evaluation metrics (reordered by driving metrics first).
+
+Relative Height Difference (RHD) It tests the model’s ca-                Camera-Object Euclidean Distance (CD) This metric
+pability to calculate the vertical distance between the camera           evaluates the model’s skill in computing the Euclidean dis-
+and an object based on the object’s z-coordinate.                        tance between the camera and an object using inferred spatial
+                                                                         information. The computation of the CVD and CD metrics
+Relative Distance (RD) This metric examines the model’s                  follows the same methodology as that of the RVD and RD
+ability to estimate the Euclidean distance from the camera to            metrics.
+a specified object using inferred spatial information.
+                                                                         Overall Accuracy Score (AccS) This provides a compre-
+                                1                                        hensive measure of the model’s performance across all the
+                 acci =                                       (9)
+                        1 + αd ∥di − dgt
+                                      i ∥1                               aforementioned tasks, reflecting its overall spatial under-
+                                                                         standing capabilities.
+    where: - di is the model’s predicted distance for sample
+i. - dgt
+      i is the ground truth distance for sample i. - αd is a                                  N                        8
+                                                                                          1 X                      1X
+scaling factor controlling the penalty for deviation, set to                      acc =         acci     AccS =          accj      (12)
+αd = 0.05.                                                                                N i=1                    8 j=1
+
+
+Positional Precision (PPos) It evaluates the model’s accu-
+racy in identifying the exact coordinates [x, y] of a specified
+object within an image.
+                                 1
+                acci =                                      (10)
+                         1 + αp ∥xi − xgt
+                                       i ∥2
+
+   where: - xi = (xi , yi ) are the model’s predicted coordi-
+nates for sample i. - xgt         gt gt
+                        i = (xi , yi ) are the ground truth
+coordinates for sample i. - αp is a scaling factor, set to
+αp = 0.005.
+
+Bounding Box (BBox) This metric assesses the model’s
+capability to determine the bounding box coordinates
+[min_x, min_y, max_x, max_y] of a specific object.
+
+                                       |Bi ∩ Bigt |
+            acci = IoU(Bi , Bigt ) =                        (11)
+                                       |Bi ∪ Bigt |
+
+    where: - Bi is the model’s predicted bounding box for
+sample i. - Bigt is the ground truth bounding box for sample
+i. - | · | denotes the area of the bounding box.
+
+Camera-Object Vertical Distance (CVD) It tests the
+model’s ability to calculate the vertical distance from the
+camera to an object based on the object’s z-coordinate.
+
+
+                                                                    17
+                Question:                                                 Ground-Truth:
+                <image>                                                   Identify hazards: The front right image shows a white car moving
+                What is the best way to avoid a collision?
+                                                                          near the curb of the road, indicating potential for collision if
+                Choose from the following answers only
+                                                                          another vehicle is approaching.
+                 A) Come to a complete stop.
+                 B) Brake suddenly.                                       Analyze options: Given the visible surroundings, change in speed
+                 C) Speed up.                                             (options A, B, C) or sudden braking (option B) might not be ideal.
+                 D) Change lane to right.                                 Changing lanes (option D or E) could bypass the obstacle.
+                 E) Change lane to left.                                  Final Answer: D) Change lane to right.
+                 F) None of the options.
+
+
+                              Baseline                                  SFT+RLFT                                       AgentThink
+                1.Identify the scenario: The image shows         1.In the 'front' image, there       1.Identify Hazards:
+                a street scene with a car in motion, trees,      are pedestrians visible on the      <Tool name>: get_surrounding_object,
+                buildings, and road signs. There is no           sidewalk near the road. This        get_drivable_lane
+                visible indication of an immediate threat        indicates that there may be         <Reason>:The front right image shows a white car
+                or collision.
+                                                                 potential obstacles or the          moving near the curb of the road, which indicates
+                2.Analyze the options:                                                               a potential hazard. This suggests that there is a risk
+                   A) Come to a complete stop: This could
+                                                                 need to yield, which requires
+                                                                 immediate attention to avoid        of collision if another vehicle approaches from
+                be risky if there's a need to continue                                               behind.
+                driving.                                         a collision.
+                                                                                                     2. Analyze Options:
+                   B) Brake suddenly: This can be                                                       Option A (Come to a complete stop): This could
+                dangerous and may cause a loss of                2.The 'front right' image           be risky because it might not allow enough time
+                control.                                         shows the road ahead with           for the other vehicle to react, especially if it's
+                   C) Speed up: This increases the risk of a     pedestrians crossing. The           approaching at high speed.
+                collision.                                       presence of pedestrians                 Option B (Brake suddenly): Sudden braking can
+                    D) Change lane to right: This might
+                                                                 suggests that the ego vehicle       be dangerous and might cause the vehicle to skid,
+                not be safe if there's traffic coming from                                           increasing the risk of a collision.
+                the right.
+                                                                 should slow down or stop to
+                                                                 ensure their safety.                    Option C (Speed up): Speeding up would
+                    E) Change lane to left: This could be                                            increase the likelihood of a collision with the white
+                safer if there's clear space on the left side.                                       car.
+                    F) None of the options: This would           3.Considering the current
+                                                                                                         Option D (Change lane to right): Changing to
+                mean no action is needed, which isn't            speed of the ego vehicle is         the right lane could help bypass the obstacle
+                always the case.                                 9.08 km/h and the presence              Option E (Change lane to left): Changing to the
+                                                                 of pedestrians, the safest          left lane might not be possible if the left lane is
+                Consider the safest option: Given the lack       option to avoid a collision is to   occupied or if it's not safe to change lanes.
+                of immediate danger and the need for
+                                                                 come to a complete stop.                 Option F (None of the options): This option is
+                caution, changing lanes to the left                                                  not applicable since we have identified viable
+                (option E) seems like the safest choice if                                           options.
+                there's clear space available.                   Final Answer: A) Come to a
+                                                                 complete stop.
+                                                                                                     Final Answer: D) Change lane to right.
+                Final Answer: E) Change lane to left.
+
+
+
+
+Figure 7. Visulization of Results. Correct scene understanding outputs are highlighted in green, while erroneous interpretations are
+marked in red for comparative analysis. Notably, AgentThink demonstrates accurate analytical capabilities and avoid overly conservative
+decision-making tendencies (e.g. unnecessary braking), which compromise driving comfort despite maintaining safety margins.
+
+
+
+
+                                                                                  18
+                Question:                                             Ground-Truth:
+                What is the best way to avoid a
+                                                                      1. The motorcycle is directly ahead, and altering speed
+                collision? Choose from the following
+                answers only                                          suddenly could be unsafe.
+                 A) Come to a complete stop.
+                 B) Brake suddenly.                                   2. Coming to a complete stop could prevent a collision with
+                 C) Speed up.                                         the motorcycle.
+                 D) Change lane to right.
+                 E) Change lane to left.                              Final Answer: A) Come to a complete stop.
+                 F) None of the options.
+
+                             Baseline                                SFT+RLFT                                     AgentThink
+                1.Identify the scenario: The image shows      1.Front-view images show          1.<Tool name>: get_surrounding_detection
+                a nighttime road scene with vehicles in       vehicles moving toward the        There is a motorcycle directly ahead, which poses a
+                motion. There are no visible signs of an      ego vehicle, indicating           potential collision risk.
+                immediate threat or collision.
+                2.Analyze the options:
+                                                              potential collision risks if it
+                                                              continues without                 2.Evaluate the Options:
+                  A) Come to a complete stop: This could
+                                                              intervention.                       A) Come to a complete stop: This option is safe
+                be dangerous if there's traffic behind you,
+                                                                                                and can prevent a collision if the motorcycle is too
+                as it might cause a chain reaction.
+                                                                                                close or if there is not enough time to react safely.
+                  B) Brake suddenly: This can be risky if     2.The wet road surface              B) Brake suddenly: This could be unsafe because it
+                you're not sure what's ahead, as it might     increases stopping distances      might cause the vehicle to skid, especially at night
+                cause a rear-end collision.
+                  C) Speed up: This is generally unsafe
+                                                              and reduces traction.             when visibility is low.
+                                                                                                  C) Speed up: This would increase the risk of a
+                and increases the risk of accidents.
+                                                              3.Nighttime conditions            collision and is not a safe option.
+                  D) Change lane to right: If there's clear
+                                                                                                  D) Change lane to right: This could be risky if the
+                space and no oncoming traffic, this           lower visibility, and road        motorcycle is in the same lane and changing lanes
+                could be a safe option.                       signs suggest caution,            could lead to a collision.
+                  E) Change lane to left: If there's clear    implying a complete stop            E) Change lane to left: This could also be risky for
+                space and no oncoming traffic, this could
+                also be a safe option.
+                                                              may be safest.                    the same reasons as changing to the right.
+                                                                                                  F) None of the options: This is not applicable since
+                  F) None of the options: This would
+                                                              4.Given the oncoming traffic      we have identified a safe option.
+                mean none of the given options are
+                suitable.                                     and hazards, stopping is the      Conclusion: The safest option is to come to a
+                                                              best option to prevent            complete stop to ensure that the motorcycle has
+                Consider the context: The image does not      collisions, as sudden braking     enough space to pass or to allow the driver to react
+                show any immediate danger, but the
+                question asks for the best way to avoid a
+                                                              might cause skidding and          safely without the risk of sudden braking causing a
+                                                              lane changes could risk           skid.
+                collision. Given the options, changing
+                lanes to either side (D or E) seems like      other dangers.
+                                                                                                Final Answer: A) Come to a complete stop.
+                the safest choice if there's clear space
+                and no oncoming traffic.                      Final Answer: A) Come to a
+                Final Answer: D) Change lane to right.        complete stop.
+
+
+
+
+Figure 8. Visulization of AgentThink. Correct scene understanding outputs are highlighted in green, while erroneous interpretations are
+marked in red for comparative analysis.
+
+
+
+
+                                                                               19
+

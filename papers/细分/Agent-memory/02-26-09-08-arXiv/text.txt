@@ -1,0 +1,1365 @@
+                                           Drive by Hindsight and Foresight: Tool-Grounded Synergistic Reasoning over
+                                                         Hierarchical Memory for Autonomous Driving
+                                                                                   Baojie Chen1∗ , Zijun Jia1 , Jing Zhong2
+                                                                                                   1
+                                                                                                       Beihang University
+                                                                                                   2
+                                                                                                       Tsinghua University
+
+
+
+                                                                       Abstract                                                          (a) Base Vison-Language Model                                                                      (b) VLM + CoT Reasoning
+arXiv:2609.08217v1 [cs.CV] 8 Sep 2026
+
+
+
+
+                                                                                                                                                                    Conclude                                                                                 Reasoning                 Conclude
+                                          Vision-language models (VLMs) have shown promise for au-                             Visual Input             VLMs                       Output                             Visual Input                 VLMs                     CoT                    Output
+
+                                          tonomous driving tasks, yet still suffer from hallucination,
+                                                                                                                                    (c) Retrieval-Based Context Augmentation                                                 (d) Pre-computed Tool-Output Augmentation Methods
+                                          weak spatio-temporal perception, and limited generalization.                                                  Query
+                                                                                                                                                                                                                                       Pre-computed
+                                                                                                                             Retriever                                   Knowledge Base                                                                                             Tool Libs
+                                          Recent methods improve reasoning and decision-making ca-                                                                                                                                     Tool-Outputs
+                                                                                                                                                       Results
+                                                                                                                                                Retrieved Context                                                                                    Injection
+                                          pabilities through chain-of-thought explanations, retrieval-                                                 Reasoning                   Conclude                                                                 Reasoning                  Conclude
+
+                                          augmented generation or the static incorporation of external              Visual Input              VLMs                    CoT                         Output              Visual Input                 VLMs                     CoT                    Output
+
+
+                                          tool outputs. Although these mechanisms enrich the initial                                            (e) Tool-Grounded Synergistic Reasoning over Hierarchical Memory for Autonomous Driving
+                                          context, the model neither proactively perceives scene infor-
+                                                                                                                                                                                                    Experience Memory
+                                          mation nor accumulates experience after answering. To over-                                                                    Utilize                                                     Consolidate
+                                                                                                                                                                                                  Temporal-Spatial Memory
+                                          come these limitations, we present, to our knowledge, the
+                                                                                                                                                                                                     Synthetic Reasoning                                                 Conclude
+                                                                                                                     Visual Input                      VLMs                                                                                        CoT                                    Output
+                                          first synergistic framework that tightly couples hierarchical                                                                              Tool Calls
+                                                                                                                                                                                                    Tool Libs
+                                          memory with proactive tool invocation in a closed reason-                                                                       Response
+
+
+                                          ing loop. Our contributions are threefold. (i) Hierarchical
+                                          Driving Memory: a scene-level short-term memory main-
+                                          tains the dynamic scene state, and an evolving long-term                Figure 1: Comparison of reasoning paradigms for au-
+                                          memory retrieves reusable experience and tool strategies by             tonomous driving: (a) A base VLM directly maps visual
+                                          similarity. (ii) Memory-Tool Synergistic Reasoning Frame-               inputs to answers; (b) CoT unfolds direct prediction into
+                                          work: guided by the scene state and retrieved experience,               guided intermediate reasoning steps; (c) RAG augments rea-
+                                          the model adaptively invokes tools to refine its reasoning at           soning with retrieved external context; (d) Previous tool-
+                                          inference time and consolidates reusable experience into a              augmented methods inject pre-computed tool outputs into
+                                          long-term memory pool offline. (iii) Data Generation and                single-pass reasoning; and (e) Our framework couples hi-
+                                          Two-stage Training Pipeline: verified memory-tool trajecto-             erarchical memory with online tool interaction and offline
+                                          ries built by multi-step teacher rollout are used to train with         experience consolidation.
+                                          stepwise supervised fine-tuning (SFT) and group relative pol-
+                                          icy optimization (GRPO). Our 7B model reaches an overall
+                                          reasoning score of 80.03 and MCQ accuracy of 79.09% on
+                                          DriveLMM-o1 benchmark, surpassing the strongest baseline                plications, autonomous driving reasoning benchmarks pro-
+                                          by 7.74 MCQ points and generalizes strongly across DriveM-              vide a natural testbed for evaluating whether VLMs can
+                                          LLM and STRIDE-QA benchmarks. Notably, ablation and                     transform visual observations into interpretable scene un-
+                                          analysis studies validate the effectiveness of each component
+                                          and further reveal the complementary roles of hierarchical
+                                                                                                                  derstanding and driving decisions. (Marcu et al. 2024; Xie
+                                          memory. Short-term memory strengthens spatiotemporal un-                et al. 2025; Ishaq et al. 2025).
+                                          derstanding, improving STSBench accuracy by 24.2 points,                   Existing efforts proceed largely along three routes: un-
+                                          while offline long-term memory consolidation yields an addi-            folding the observation into step-by-step explanations via
+                                          tional 3.57-point MCQ gain with all model parameters frozen,            chain-of-thought (CoT) for better transparency and inter-
+                                          demonstrating continual self-evolution through accumulated              pretability (Ishaq et al. 2025; Zeng et al. 2025); splicing
+                                          driving experience.                                                     the outputs of driving tools into the prompt or context to
+                                                                                                                  supplement external observations (Qian et al. 2025; Zheng
+                                                               1   Introduction                                   et al. 2025); or injecting knowledge via retrieval-augmented
+                                        Pretrained vision-language models have enabled their grow-                generation (RAG) (Yuan et al. 2024; Ye et al. 2025; Wang
+                                        ing adoption in autonomous driving (Tian et al. 2024; Hwang               et al. 2025a). In all three, the model is either made to produce
+                                        et al. 2025; Jiang et al. 2024; Fu et al. 2025; Wang et al.               more elaborate explanations from templates or to passively
+                                        2025b), and are increasingly used for driving scene under-                receive more information, the answers it produces and the
+                                        standing, high-level behavior decisions, and decision expla-              information it receives keep growing, while its understand-
+                                        nation (Jiang et al. 2024; Mao et al. 2024). Among these ap-              ing does not evolve accordingly. Human driving follows a
+                                           ∗                                                                      different pattern: a driving decision is not a one-shot recog-
+                                               Corresponding author.
+nition of a static frame but a unified process of active per-     et al. 2024; Fu et al. 2025; Tao et al. 2026). In parallel,
+ception, spatio-temporal understanding, and experience ac-        the benchmarks have progressed from perception-oriented
+cumulation. A driver relies on foresight to keep track of the     and free-form question answering to risk assessment, explicit
+motion trends of the ego vehicle and key objects over time,       reasoning, and spatial-temporal understanding as well (Sima
+and on hindsight to draw on transferable experience accu-         et al. 2024; Qian et al. 2024; Marcu et al. 2024; Gao et al.
+mulated through long-term driving, judging which risks to         2025; Ishihara et al. 2025; Gholami et al. 2025).DriveM-
+prioritize and which actions to take in the current situation.    LLM evaluates spatial understanding (Guo et al. 2024), and
+Against this reference, what current methods lack becomes         STSBench emphasizes spatio-temporal scenario understand-
+clear: no dynamic scene state that evolves with observations,     ing (Fruhwirth-Reisinger et al. 2025). These benchmarks,
+no driving experience consolidated across scenes, and no          together with reliability studies (Xie et al. 2025; Yu et al.
+active evidence-seeking driven by evidence gaps. This gap         2025), show persistent weaknesses in motion trends, object
+motivates the central question of this paper: Can a reasoning     interactions, grounding, and safety-critical reasoning.
+model for autonomous driving capture the key characteris-
+tics of human driving foresight and hindsight by integrating      2.2   External Augmentation in Reasoning for
+spatio-temporal awareness, proactive perception, and expe-              Autonomous Driving
+rience accumulation within a unified closed-loop reasoning        Chain-of-thought (CoT) methods make intermediate driving
+framework?                                                        judgments more explicit. DriveLMM-o1 supervises step-
+   To this end, we propose a tool-grounded synergistic rea-       by-step reasoning for scene understanding (Ishaq et al.
+soning framework over hierarchical memory. Scene-level            2025), FutureSightDrive introduces spatio-temporal visual
+short-term memory maintains the current spatio-temporal           CoT (Zeng et al. 2025), and reinforcement- and critic-based
+state, while cross-scene long-term memory retrieves expe-         approaches improve reasoning for planning and safety as-
+rience as transferable priors. Conditioned on hierarchical        sessment (Zhang et al. 2026; Yang et al. 2026; Liu et al.
+memory, the model proactively invokes tools to acquire in-        2026). External augmentation provides complementary in-
+formation. Across three driving benchmarks, our 7B model          formation: SafeDriveRAG, RAG-Driver, and RAD retrieve
+outperforms the strongest baseline and generalizes robustly       knowledge or driving cases for safety reasoning, explana-
+without further training. Controlled studies further show that    tion, and decision making (Ye et al. 2025; Yuan et al. 2024;
+short-term memory improves STSBench accuracy by 24.2              Wang et al. 2025a). AgentThink takes a step further through
+points, while offline long-term memory consolidation pro-         adding tool-outputs into context to improve performance and
+vides an additional 3.57-point MCQ gain without updating          alleviate hallucinations (Qian et al. 2025). However, all the
+model parameters. More broadly, these results point to a shift    methods above still rely on a one-way, passive intake process
+in autonomous-driving VLM research: from scaling static           rather than understanding that evolves with evidence, which
+perception and isolated reasoning toward persistent, interac-     motivates us to propose our framework.
+tive driving intelligence that can evolve with evidence and
+experience.Our contributions are summarized as follows:                               3    Methodology
+ • (1) We develop a hierarchical driving memory combing           3.1   Overview
+   scene-level short-term memory for maintaining spatio-
+   temporal states with cross-scene long-term memory for          As shown in Figure 2, given a question q and the current
+   retrieving reusable driving experience and strategies.         six-view observation It = {Itv }6v=1 , our framework condi-
+                                                                  tions the vision-language policy πθ on scene-level short-term
+ • (2) We propose a memory-tool synergistic reasoning             memory Ms , the top-K entries EK retrieved from cross-
+   (MTSR) framework which unifies foresight and hind-             scene long-term memory Ml , and the driving tool set T :
+   sight by coupling adaptive tool use with hierarchical
+   memory at inference time and consolidates verified expe-                        y ∼ πθ (q, It , Ms , EK , T ).            (1)
+   rience into long-term memory offline.
+                                                                  Here, Ms represents the current spatio-temporal state,
+ • (3) We build a data-generation and two-stage post-             whereas EK provides reusable experience. The policy it-
+   training pipeline that produces verified memory-tool tra-      eratively identifies missing evidence, invokes tools, accumu-
+   jectories through multi-step teacher rollouts and trains the   lates the returned observations in its reasoning context, until
+   model with stepwise supervised fine-tuning (SFT) and           it judges the evidence sufficient and answers.
+   group relative policy optimization (GRPO).
+                                                                  3.2   Hierarchical Driving Memory
+                   2    Related Work                              Our framework maintains a hierarchical driving memory
+2.1   VLMs and Benchmarks for Autonomous                          consisting of Ms and Ml . The former provides a compact
+      Driving                                                     spatio-temporal representation of the current scene, whereas
+                                                                  the latter supplies reusable reasoning and tool-use experience
+Vision-language models (VLMs) increasingly connect vi-            from past scenes.
+sual perception with language-based reasoning and plan-
+ning in autonomous driving, with systems such as Senna,           Scene-Level Short-Term Memory. A single-timestamp
+ORION, and NaviDriveVLM exploring different interfaces            multi-view observation provides rich appearance informa-
+between high-level reasoning and motion planning (Jiang           tion but cannot explicitly reveal how the ego vehicle and
+        1            Input                                                                           2          Retrieve Memory                                                                3    Synergistic Reasoning                                             4   Final Answer
+                               Question: What behavior is least
+                               likely to cause a traffic incident?                                                                 Stage1:Obtain                                                                       1.Think
+                                                                                                                                   Temporal Context                                                                                                  Answer
+                                                                                     Look Up                                                                                      Reasoning
+
+                                                                                                                                                                                                   4. Update                     2.Action                                    Final Answer
+                                                                                                                                   Stage2:Obtain                                                                                                                             A) Slow Down. ✓
+                                                                                                                                   Driving Experience
+                                                                                                                                                                                                                 3.Observation
+
+
+
+                                                                         Short-Term Memory                                                                                                           Tool Box                                                      MTSR
+                                                                                                                                                                                                   Driving Tool Set              Step 1                                   Step 2
+
+                                                                                                                                                                                                         Motion State                   Think                                  Think
+       𝑰𝒎𝒂𝒈𝒆𝒔𝒕−𝟏                        𝑰𝒎𝒂𝒈𝒆𝒔𝒕                                                                                                                                                                                     The current scene contains
+                                                                   BEV Encoder                 Language Decoder                                 Temporal Spatial Graph                                                                                                         Confirm the obstacle to
+                                                                                                                                                                                                                                    potential risks, but the ego
+                                                                                                                                                                                                                                                                           distinguish slowing down from
+                                                                                                                                                                                                          Occupancy                 motion state must first be
+                                                                                                                                                                                                                                                                                 maintaining speed.
+                                                                                                                                                                                                                                             verified.
+                                                                         Long-Term Memory
+                      1       Construct Long-Term Memory Bank                                               4    Verified Episodes from Reasoning                                                        3D Geometry                    Action                                 Action
+             A                    Driving
+                                                                                                                                                                                                                                         get_ego_states                    get_front_object_detections
+                                                    Traffic               Safety         ...        Successful Cases           ✓                           Failed Cases           ×
+                                  Common
+      2 General                    Sense
+                                                    Rules                 Priors                   Save Correct Analysis and                         Eliminate Incorrect Analysis or
+                                                                                                                                                                                                            Object
+       Knowledge                                                                                    Safe Decision/Tool-Use                                                                                 Detection
+                                                                                                                                                       Unsafe Decision/Tool-Use
+                                                                                                                                                                                                                                        Observation                            Observation
+             B
+                                 Successful         Safe                 Tool-Use
+                                                               S                   ...   ...                                                                                                              Trajectory
+       Successful                 Patterns        Behaviors              Strategies
+                                                                                                                     5        Offline Consolidation                                                                                  Heading speed ≈ 5.73 m/s;                 Lead car detected
+        Patterns                                                                                                                                                                                          Prediction                                                         approximately 16.32 m
+                                                                                                                                                                                                                                 forward acceleration ≈ −0.96 m/s².
+                     Persistent experience repository for cross-scene reuse
+                                                                                                                                   𝐶𝑢𝑟𝑟𝑒𝑛𝑡 𝑀𝑙𝑛
+                                   2     Query Embedding                                                                                                                                                 Depth Estimate
+
+            Question          Context                                         ...                                                                                                                                                       Update                                 Update
+
+                                                                                                                                                                                                          Front-Region            Maintaining or increasing speed            slowing down provides the
+                 3    Scene-level and Task-level Similarity Retrieval                           Pattern                                                   Conflict
+                                                                                                                                                                                                           Perception              requires further verification.
+                                                                                               Extraction       Abstraction          Deduplication        Checking            Merge                                                                                            safest reaction margin.
+                          !                   !               Memory_0
+                 Relevant Strategies
+                                                              Memory_1                                                                                                                                    Map / Lane
+                 Useful Experience                                                                                             𝑈𝑝𝑑𝑎𝑡𝑒𝑑 𝑀𝑙𝑛+1
+                                                               ⋮                                                                                                                                           Query
+                 Similar Scenarios                            Memory_N                                              Long-Term Memory Self-Evolution
+
+
+
+
+Figure 2: Overview of our framework. Given a question and a multi-view image, the model conditions on a scene-level short-
+term memory Ms and experience retrieved from a cross-scene long-term memory Ml , then performs Memory-Tool Synergistic
+Reasoning: it identifies the current evidence gap, invokes a driving tool, grounds the observation, and updates the scene belief,
+looping until it answers.
+
+
+nearby traffic participants evolve over time. Directly feeding                                                                                                                          , where ci describes the applicable scene and task conditions,
+multiple six-view frames into the VLM would substantially                                                                                                                               ri summarizes relevant risk factors, p+   i denotes a reusable
+increase the visual context and require the language model to                                                                                                                           successful reasoning pattern, πitool records an effective tool-
+perform cross-view alignment and temporal correspondence                                                                                                                                use strategy, and wi denotes its retrieval utility. For a question
+implicitly. We therefore construct Ms from two adjacent six-                                                                                                                            q, we jointly encode the question and Ms into a query rep-
+view observations It−1 and It .                                                                                                                                                         resentation, ranking each entry by semantic relevance and
+   For each timestamp τ ∈ {t − 1, t}, a pretrained bird’s-eye                                                                                                                           normalized utility:
+view (BEV) perception model (Zhou et al. 2025) encodes the
+surround-view images into an ego-centric BEV representa-                                                                                                                                      S(ei | q, Ms ) = sim (Em ([q; Ms ]), Em (ei )) + λw̄i ,
+                                                                                                                                                                                                                                                      (4)
+tion and predicts both a structured semantic description and                                                                                                                                             EK = TopKei ∈Ml S(ei | q, Ms ).
+scene attributes:
+                                                                                                                                                                                        where w̄i is the normalized utility and λ controls its contribu-
+                    (dτ , nτ ) = FBEV (Iτ ),               (2)                                                                                                                          tion. After filtering and deduplication, EK provides transfer-
+where dτ describes traffic participants, road elements, nτ                                                                                                                              able reasoning and tool-use priors rather than direct answer
+contains locations, qualitative relations and motion trends.                                                                                                                            hints.
+Then we organize them into a scene graph:
+                                                                                                                                                                                        Offline consolidation. The long-term memory remains
+        Ms = Φgraph (dt−1 , dt , nt−1 , nt ) = (V, R),     (3)                                                                                                                          read-only during online reasoning. Let C denote a completed
+where V contains the ego vehicle, traffic participants, and                                                                                                                             memory–tool trajectory, formally defined in Sec. 3.3, and let
+                                                                                                                                                                                           (n)
+relevant road elements; R represents their spatial, temporal,                                                                                                                           Ml denote the LTM before the n-th consolidation round.
+and interaction relations. Notably, the short-term memory is                                                                                                                            We first extract reusable experience from trajectories that
+refreshed only when the input scene advances and remains a                                                                                                                              pass verification and then consolidate the resulting experi-
+read-only scene prior within a trajectory.                                                                                                                                              ence buffer:
+                                                                                                                                                                                                                                                                   (n+1)                             (n)
+Cross-Scene Long-Term Memory. Reliable reasoning                                                                                                                                         Bn+ = Ext(C) | Vrf(C) = 1 ,                                                                                       , Bn+ .
+                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                            Ml              = Φcon Ml
+also requires hindsight. To maintain a persistent long-term                                                                                                                                                                                                                                                     (5)
+memory Ml containing driving commonsense, traffic rules                                                                                                                                 Ext(·) maps a completed trajectory to the experience schema
+and reusable experience distilled from verified successful tra-                                                                                                                         defined above, while Vrf(·) verifies final-answer correct-
+jectories, we define each entry as ei = (ci , ri , p+    tool
+                                                    i , πi    , wi )                                                                                                                    ness, tool-call validity, and reasoning–observation consis-
+                                                                              Unified Data Generation
+      Pre-construct                                             E.g. Question: What
+                                                                behavior is least likely……                                                          Filtering
+
+                                                                   Input                                                                                         SFT data pool
+                                                                Teacher                  Teacher                 Teacher
+   Knowledge Base               Visual Input                    Qwen3.6                  Qwen3.6                 Qwen3.6                                           Cross-Scene
+                                                                                                   ×n                                                           Long-Term Memory
+                                                                                   < Think >
+                                                             < Think >
+                                                                                                   …      < Think >
+                                                                                                                                                                       traffic rules
+             LTM                    STM
+                                                             < Tool >               < Tool >             < Answer>                                                     driving knowledge
+
+         •   Traffic Rules      •   Ego state                                                                                                                          successful patterns
+         •   Knowledge          •   Motion trends                                                                             Verification       Initialize
+                                •   Relations                                                      Re-generate                                   LTM                   tool strategies
+
+
+
+                                                                            Two-Stage Training Pipeline
+  Stage1: Supervised Fine-Tuning                                                                           Stage2: RLFT                                         Reward Calulation
+                                                                         Pretrained VLM
+                                                                                                                                                                   Final Answer Reward
+                                                                                Student                                                      GRPO
+                                                                                                           Finetuned-VLM
+                                                                                                                                                                   Memory Use Reward
+                                                                        Vision Encoder                             Student
+                                                                                                                                                                   Step-ReasonReward
+                                               Supervised
+                                                                                                            Sampled Answers
+                                               Fine-Tuning              Language Model                                                                              Tool-Use Reward
+  Stepwise Trajectory Samples                                           (W/LoRA)                                 Generation               Answers
+    w/ Masked Observations                                                                                                               Evaluation
+                                                                     Frozen        Trainable                                            Update Policy             Assigned in 6 Tiers
+
+
+
+Figure 3: Data generation and two-stage post-training. A teacher VLM generates verified memory-tool trajectories via tool
+executors; stepwise SFT provides a tool-use cold start, followed by GRPO.
+
+
+tency. The resulting verified experiences are filtered, ab-                                         strategies, and each observation narrows the remaining un-
+stracted, deduplicated, and merged by the offline consoli-                                          certainty. Tool interfaces are detailed in Appendix A.3.
+dation operator Φcon . For an existing entry ei , we assign a
+utility credit gi (C) ∈ {0, 1} to each verified trajectory and                                      3.4          Data Generation and Two-Stage Post-Training
+update its retrieval utility as
+                                                                                                    We construct verified memory-tool trajectories and train
+                             wi ← wi + η gi (C),                                          (6)       the policy using stepwise SFT followed by trajectory-level
+where η is the utility-update rate, and gi (C) = 1 only when                                        GRPO, as shown in Fig. 3.
+ei ∈ EK and the verifier determines that it provided useful                                         Multi-Step Teacher Rollout and Validation. To expose
+guidance to C; otherwise, gi (C) = 0. The complete offline                                          the student to the same memory-conditioned tool-use pro-
+consolidation procedure is summarized in Appendix A.2.                                              cess, a teacher policy πϕ starts from the initial context x0 ,
+                                                                                                    retrieves relevant entries from an initialized long-term mem-
+3.3      Memory-Tool Synergistic Reasoning                                                                 (0)
+                                                                                                    ory Ml , and generates multi-step trajectories through the
+Conditioned on Ms and EK , the model evolves a transient                                            MTSR loop. Each trajectory is validated for final-answer cor-
+scene belief through tool interaction. Starting from x0 =                                           rectness, tool-call validity, and reasoning-observation con-
+(q, I, Ms , EK ), a complete trajectory is                                                          sistency. Verified ones form the training set DMTSR , which
+      C = (x0 , s1 , . . . , sT , y),               st = (ht , at , ot , ut ),            (7)                                      (0)
+                                                                                                    is also consolidated into Ml (Algorithm 1) to yield the
+where ht , at , ot , and ut denote the reasoning state, action,                                     student’s initial long-term memory.
+tool observation, and revised scene belief, respectively, with
+                                                                                                    Stepwise Supervised Fine-Tuning Warm-up. We per-
+u0 = (Ms , EK ).
+                                                                                                    form stepwise SFT in two phases to progressively estab-
+  At step t, the policy generates the next reasoning state and
+                                                                                                    lish memory-tool interaction. Phase 1 removes executor-
+action from the interaction history:
+                                                                                                    returned observations and trains the model to select tools
+  (ht , at ) ∼ πθ (· | x0 , H<t ),                    at ∈ T ∪ {finish},                  (8)       and generate arguments. Phase 2 continues from the Phase-
+where H<t = (s1 , . . . , st−1 ). Both memories remain fixed                                        1 checkpoint with complete memory and tool feedback to
+within a query; only the transient scene belief evolves as                                          learn observation-grounded reasoning. Let D(p) and Y (p) (C)
+observations are incorporated. Once sufficient evidence has                                         denote the training data and supervised token positions for
+been collected, the model emits finish and generates                                                phase p ∈ {1, 2}. The unified SFT objective is
+                             y ∼ πθ (· | x0 , H≤T ).
+                                                                                                                                                           
+                                                                                          (9)                                                            
+                                                                                                        (p)                                      (p)  (p)
+                                                                                                                                 X
+  Thus, reasoning follows a Think–Action–Observation–                                                 LSFT (θ) = −EC∼D(p)             log πθ zj | z<j  .
+Update loop without a predefined tool sequence: Ms de-                                                                                 j∈Y (p) (C)
+scribes the current scene, EK suggests relevant risks and                                                                                                                                (10)
+Here, Y (1) contains tool-call tokens, whereas Y (2) contains             model retrieves the top-4 LTM entries and performs at most
+model-generated reasoning, actions, belief updates, and fi-               eight Think-Action-Observation-Update turns with tool exe-
+nal answers. Executor-returned observations are provided as               cution. All experiments are conducted on 4×NVIDIA RTX
+context but excluded from the training loss. The two-phase                PRO 6000 Blackwell GPUs (96GB memory), data construc-
+SFT warm-up prepares the model for memory-conditioned                     tion and implementation details are given in Appendix B.
+reasoning and effective tool integration prior to GRPO.
+Trajectory-Level GRPO. Starting from the Phase-2
+                                                                          4.2   Main Results
+checkpoint, GRPO samples G trajectories per input. A                      Results on DriveLMM-o1. Table 1 answers Q1. Our
+correctness-gated reward jointly evaluates final-answer cor-              framework achieves the best reasoning score of 80.03 and
+rectness, relevant memory use, valid tool interaction, and                MCQ accuracy of 79.09%, improving the Qwen2.5-VL-7B
+output format; auxiliary rewards activate only for correct                backbone by 28.26 and 41.28 points, respectively. It also ex-
+answers. We optimize                                                      ceeds the same-scale AgentThink (Qian et al. 2025) by 7.74
+                 "       G
+                                                                      #   MCQ points and ranks first on Rule Adherence and Scene
+               1 X      1           X                                     Awareness. DriveAgent-R1 (Zheng et al. 2025) is the closest
+LGRPO (θ) = −E                               ℓclip
+                                              i,j −βDKL (πθ ∥πref )   .
+               G i=1 |Y(Ci )|                                             concurrent method in active perception. However, its check-
+                                  j∈Y(Ci )
+                                                              (11)        points and evaluation assets have not been fully released,
+where ℓclip
+        i,j uses the trajectory-level group-relative advantage
+                                                                          preventing a faithful comparison under the same protocol.
+and πref is initialized from the Phase-2 policy. Reward tiers             Among reproducible tool-augmented baselines, AgentThink
+and full optimization details are provided in Appendix B.3.               injects pre-computed tool outputs into single-pass genera-
+                                                                          tion, whereas our framework selects and executes tools online
+                                                                          within a memory-conditioned interaction loop. This compar-
+                     4       Experiments                                  ison demonstrates a favorable accuracy-reasoning trade-off,
+We conduct experiments to answer the following four ques-                 while the effects of components are examined in §4.3.
+tions:
+   Q1. Can our framework improve both answer accuracy and                 Cross-Benchmark Generalization. Turning to Q2, we
+reasoning quality over strong general-purpose and reasoning-              evaluate all models without additional training or memory
+enhanced VLM baselines? (§4.2)                                            updates. On DriveMLLM, Table 2 shows that our frame-
+   Q2. How well does our framework generalize across                      work obtains zero-/one-shot AccS scores of 74.36/80.59
+benchmarks and challenge other tasks without further train-               on DriveMLLM, versus 56.96/61.21 for AgentThink and
+ing? (§4.2)                                                               57.18/60.52 for direct tool injection (Table 2). Gains con-
+   Q3. How do hierarchical driving memory, two-stage post-                centrate on grounding and metric-geometry tasks. On un-
+training, and memory-guided proactive tool invocation con-                seen STRIDE-QA, it achieves the best open-model MLSR of
+tribute to model performance? (§4.3)                                      3.9 and the strongest longer-horizon results, reaching 5.6/4.4
+   Q4. Can offline consolidation of LTM yield cumulative                  LSR at 2/3 s (Table 3). These results support the transfer of
+improvements without updating model parameters? (§4.4)                    STM scene states and LTM tool-use experience.
+
+4.1   Experimental Setup                                                  Qualitative Analysis. We additionally test our framework
+                                                                          on DriveBench (Xie et al. 2025) solely to examine robustness
+Benchmarks and Evaluation Metrics. DriveLMM-                              under visual corruption. As shown in Figure 4, on long-range
+o1 (Ishaq et al. 2025) is the primary benchmark; we report                distance estimation, future-state prediction, adverse-weather
+its overall reasoning score, five driving-specific dimensions,            decision making, and ego-object spatial reasoning, including
+and MCQ accuracy. DriveMLLM (Guo et al. 2024) eval-                       degraded low-visibility scenes, our model actively grounds
+uates zero-/one-shot generalization over eight fine-grained               its answer in tool evidence and reuses retrieved experience,
+tasks using their mean accuracy (AccS). STRIDE-QA (Ishi-                  rather than guessing from appearance as Qwen3-VL-32B
+hara et al. 2025) reports localization success at 0–3 s, its mean         does (e.g., 41.0 m vs. 12.5 m against a 45.22 m ground truth).
+(MLSR), and temporal localization consistency (TLC). STS-
+Bench (Fruhwirth-Reisinger et al. 2025) evaluates spatio-                 4.3   Ablation Study
+temporal understanding over 971 questions using category
+accuracy and a question-weighted micro average. Full proto-               Turning to Q3, we examine how post-training, hierarchical
+cols are provided in Appendix C.                                          memory, and structured temporal context contribute to the
+                                                                          final performance.
+Training, Inference and Implementation. We adapt
+Qwen2.5-VL-7B-Instruct (Bai et al. 2025) using LoRA (r =                  Post-training stages. Turning to Q3, Table 5 shows two-
+16, α = 32) while freezing the vision encoder. Qwen3.6-Plus               stage SFT raises reasoning/MCQ from 51.77/37.81 to
+generates 7,000 tool-executing trajectories, of which 6,383               73.91/67.06, and adding GRPO yields our full model
+pass answer verification and trajectory-quality filtering. Two-           at 80.03/79.09. GRPO on the base alone reaches only
+phase stepwise SFT first learns valid tool selection and argu-            73.85/64.49, even below SFT in MCQ, showing the SFT
+ment generation for 3 epochs, and then observation-grounded               cold start is a necessary prerequisite. SFT establishes valid
+reasoning for 20 epochs, followed by trajectory-level GRPO                interaction, while GRPO refines complete trajectories once
+which samples G = 8 responses per prompt. At inference, the               that foundation is in place.
+                             DriveMLLM                                                                   DriveLMM                                                                     DriveBench                                                                     STRIDE-QA
+
+
+
+
+        Question: Object A = the black truck; Object B = the white car.            Question: What is the future state of object (o_1) in                         Question: What actions could the ego vehicle take based on <c1,                Question: Can you confirm if the ego vehicle is positioned to the
+        What is the straight-line 3D distance, in meters, between Object A         CAM_BACK?                                                                     CAM_FRONT, 0.4137, 0.6890> under snowy conditions? Why                         right of Region [0]?
+        and Object B?                                                              Ground Truth: A) Going Straight.                                              take this action and what's the probability?                                   Ground Truth: Yes. The ego vehicle is positioned on the right
+        Ground Truth: 45.22                                                                                                                                      Ground Truth: The ego vehicle should remain stationary because                 side of Region [0].
+                                                                                                                                                                 there is no safety issue, and visibility is reduced due to snow.
+        Qwen3-VL-32B                                                               Qwen3-VL-32B                                                                                                                                                 Qwen3-VL-32B
+   The visible gap appears to be about 2-3 car lengths, and each car length   The target vehicle appears to be braking, so it may stop.
+                                                                                                                                                                 Qwen3-VL-32B                                                             Region [0] appears to be the orange car directly ahead of the ego vehicle.
+   is roughly 4--5 meters. Therefore, a conservative estimate is around 10-   Final Answer: B) Stopped ✗                                                                                                                                  The road markings do not clearly show that the ego vehicle is offset to the
+   15 meters, and a reasonable final estimate is about 12-13 meters.                                                                                        Heavy snow reduces visibility, the vehicle ahead has brake lights on , so     right, so I infer that the ego vehicle is directly behind Region [0].
+   Final Answer : 12.5 m                                                                                                                                    I should brake and slow down.                                                 Final Answer: No ✗
+
+         Ours                                                                       Ours                                                                          Ours                                                                           Ours
+   Step1                      Query Hierarchical Memory                       Step1                      Query Hierarchical Memory                          Step1                      Query Hierarchical Memory                           Step1                      Query Hierarchical Memory
+
+                Scene-Level Short-Term Memory: Daytime urban scene.                        STM: Night-time urban scene. The vehicle behind the ego                       STM: Heavy-snow scene. Ego remains stationary with 0.0                         STM: Night-time urban scene. vehicles in the forward
+                The white car is in the near left foreground and continues                 vehicle is traveling in the opposite direction.                               m/s speed. Front traffic appears stationary, with brake                        lanes are temporarily stationary.
+                moving forward, while the black truck is farther ahead near                Retrieved LTM: For future-state questions, ground the                         lights visible through the snow-obscured view.                                 Retrieved LTM: For ego-to-object location predicate
+                the road center and waiting at the red light.                              queried object first, then retrieve its target-specific future                Retrieved LTM: No similar experience retrieved.                                questions, ground same-class candidates with OVD, select
+                Retrieved Cross-Scene Long-Term Memory: For far-                           trajectory to classify the maneuver.                                                                                                                         the referred instance, then use camera-frame lateral
+                range pairwise-distance questions, first ground the queried                                                                                                                                                                             position to determine the relation.
+                objects with OVD tool, then measure depth with MDE tool.      Step2                      Object Grounding                                   Step2                      Object Grounding
+                                                                                                                                                                                                                                           Step2                      Object Grounding
+                                                                                           get_object_detections_in_range grounds the queried target                     get_ego_states confirms zero ego velocity, zero yaw
+   Step2                      Object Grounding                                                                                                                           velocity, near-zero acceleration, and heading speed 0.0 m/s.
+                                                                                           as car object ID 1 at position ((2.38,-13.09)).                                                                                                               detect_objects_2d_open_vocab detects five orange-car
+                Open-vocab detector tool returns Black Truck Bbox                                                                                                                                                                                        candidates. The referred Region [0] candidate has bbox =
+                =[170.4, 406.2, 246.7, 469.6]，                                                                                                                                                                                                           [1125.1, 807.2, 1465.3, 1070.6] and center = [1295.2,
+                White Car Bbox [0.0, 432.0, 103.5, 541.6]                     Step3                      3D Distance Measurement                            Step3                     3D Distance Measurement                                            938.9].
+
+                                                                                            get_future_trajectories_for_specific_objects returns a 3-                    get_front_object_detections detects two cars directly ahead
+   Step3                     3D Distance Measurement                                                                                                                     at approximately 8.9 m and 15.4 m, occupying the forward
+                                                                                                                                                                                                                                           Step3                      3D Distance Measurement
+                                                                                            second trajectory:(2.33,-15.40)     …      (4.00,-25.08)
+                                                                                            The trajectory is dominated by longitudinal displacement                     driving corridor.
+                MDE tool estimates the black truck at ([-26.89,-0.49,58.3])                                                                                              Final Answer: Remain stopped when conditions allow.                             estimate_object_3d_location_camera estimates Region [0]
+                m and the white car at ([-11.84,0.81,20.14]) m, giving a                    without sharp lateral deviation, indicating the vehicle will                                                                                                 at ((x=-0.9, y=0.3, z=13.7)) m. Since the target is on the
+                                                                                            keep going straight.                                                         ✓
+                straight-line 3D distance of about 41.0 m                                                                                                                                                                                                camera-left side, the ego vehicle is to its right.
+                Final Answer : 41.0 m                                                       Final Answer: A) Going Straight ✓                                                                                                                            Final Answer: Yes ✓
+                                                                                                                                                            Step4                      Sleep-Time Consolidation
+   Step4                      Sleep-Time Consolidation                        Step4                      Sleep-Time Consolidation                                         Add a new experience: for low-visibility front-traffic cases,    Step4                      Sleep-Time Consolidation
+                                                                                                                                                                          first verify ego motion state, then check front-object
+                Increases the utility weight of the retrieved far-range                    Increases the utility weight of the retrieved object-                          occupancy. If the ego vehicle is already stationary and                       Increases the utility weight of the retrieved ego-to-object
+                distance-estimation strategy for pair-wise 3D                              grounding-to-trajectory strategy for future-state prediction                   vehicles occupy the forward corridor, remaining stopped is                    relative-position strategy for left/right predicate tasks.
+                measurement tasks.                                                         tasks.                                                                         preferred
+
+
+
+
+Figure 4: Qualitative Comparison with Qwen3-VL-32B on DriveMLLM, DriveLMM-o1, DriveBench and STRIDE-QA. All
+results are zero-shot except for DriveLMM.
+
+                                                                                                               Driving Metrics (%) ↑                                                        Scene Detail (%) ↑                                 Overall (%) ↑
+                               Vision-Language Models
+                                                                                        Risk Assess. Rule Adh. Scene Aware. Relevance Missing Reason. MCQ
+                               GPT-4o                                                            71.32                              80.72                    72.96                              76.65                       71.43              72.52                 57.84
+                               Ovis1.5-Gemma2-9B                                                 51.34                              66.36                    54.74                              55.72                       55.74              55.62                 48.85
+                               LLaVA-CoT                                                         57.62                              69.01                    60.84                              62.72                       60.67              61.41                 49.27
+                               InternVL2.5-8B                                                    69.02                              78.43                    71.52                              75.80                       70.54              71.62                 54.87
+                               Qwen2.5-VL-72B                                                    64.40                              72.81                    60.29                              65.13                       62.81              65.73                 61.27
+                               Qwen3-VL-8B                                                       79.50                              84.32                    80.41                              84.43                       75.32              77.76                 55.54
+                               Qwen2.5-VL-7B (base)                                              46.44                              60.45                    51.02                              50.15                       52.19              51.77                 37.81
+                               DriveLMM-o1                                                       73.01                              81.56                    75.39                              79.42                       74.49              75.24                 62.36
+                               AgentThink                                                        80.51                              84.98                    82.11                              84.99                       79.56              79.68                 71.35
+                               Ours                                                              76.95                              86.28                    84.05                              77.38                       76.39              80.03                 79.09
+
+                   Table 1: Performance comparison on the DriveLMM-o1 benchmark. Bold is best, underline is second best.
+
+
+Hierarchical memory. We isolate the two memory levels                                                                                                       31.38%), whereas static and temporal STM reach 50.36%
+while retaining the trained model and tool executor. As shown                                                                                               and 55.61%, respectively. Explicit temporal-state organiza-
+in Table 5, the no-memory variant reaches 72.16% MCQ;                                                                                                       tion is therefore more effective than increasing visual context.
+adding LTM alone improves it to 75.20%, STM alone to
+76.91%, and combining both yields the best 79.09%. STM                                                                                                      4.4              Behavioral and Evolutionary Analysis
+contributes more, as most DriveLMM-o1 questions depend
+on the current scene state, while LTM adds a smaller but                                                                                                    Online tool behavior. Figures 5a and 5b characterize on-
+consistent gain from reusable experience; their combination                                                                                                 line evidence acquisition using benchmark-balanced macro
+confirms the complementary roles of the two memories.                                                                                                       averages. Overall, 97.4% of queries use one to three tools,
+                                                                                                                                                            with an average of 2.10 calls, while no-tool answering occurs
+Temporal Representation Ablation. Table 4 compares                                                                                                          in only 0.5% of cases. Within the admissible tool sets, metric-
+temporal representations on STSBench. Raw six-frame in-                                                                                                     distance, motion-forecasting, and driving-decision questions
+put provides a modest gain over the base model (35.64% vs.                                                                                                  predominantly invoke 3D geometry, trajectory, and ego/map
+                                                Zero-shot                                                   One-shot
+Model
+                     L/R    F/B   RHD     RD      PPos BBox CVD         CD   AccS   L/R    F/B   RHD   RD     PPos BBox CVD     CD    AccS
+GPT-4o            91.72 67.60 9.58 14.69 40.90 4.07 46.11 70.65 43.16 91.08 69.37 36.51 71.17 42.44 5.10 0.00 63.88 47.44
+GPT-4o-mini       67.67 50.13 70.44 0.00 29.28 3.78 0.00 46.40 33.46 66.00 48.95 83.02 58.47 25.71 3.97 52.73 55.23 49.26
+LLaVA-ov-72B      85.42 49.48 13.76 45.27 16.46 0.00 42.97 27.09 35.06 79.12 62.97 49.26 68.04 28.57 2.20 53.12 60.90 50.52
+Qwen2.5-VL-7B     76.55 55.24 7.14 17.11 55.97 38.31 55.94 51.52 44.72 80.30 53.14 36.96 39.13 62.69 22.63 49.88 48.32 49.13
+Qwen + CoT        87.06 63.09 16.69 22.56 52.51 38.87 76.90 38.71 49.55 86.35 59.95 43.29 31.81 53.64 26.93 51.02 42.30 49.41
+Qwen + DirectTool 78.95 48.96 58.43 67.57 58.20 42.22 51.76 51.38 57.18 84.57 55.50 67.32 59.54 85.58 26.07 52.34 53.25 60.52
+AgentThink        82.33 54.40 56.14 61.45 70.45 56.23 23.09 51.60 56.96 78.71 48.46 60.64 60.71 72.36 64.46 52.26 52.04 61.21
+Ours              89.28 78.02 73.94 70.50 67.15 63.27 77.47 75.26 74.36 87.16 83.12 80.89 74.29 76.27 67.92 87.86 87.19 80.59
+
+      Table 2: Zero-shot and one-shot results on DriveMLLM (%). Bold best, underline second best, within each setting.
+
+
+ Model                     LSR0s LSR1s LSR2s LSR3s MLSR TLC                  Method              Overall Ego Ego-Ag. Ag. Ag.-Ag.
+ GPT-4o                    18.1   6.6     6.1      7.6      9.6   0.7
+                                                                             GPT-4o               50.25 63.63      75.75   45.59   43.38
+ InternVL2.5-8B             2.4   1.0     1.7      0.7      1.5   0.0        InternVL3-8B         42.85 34.36      51.41   46.69   39.52
+ Qwen3-VL-8B                1.0   3.2     4.4      1.0      2.4   0.0
+ SpatialRGPT-VILA-1.5-8B    0.5   0.2     0.2      0.0      0.2   0.0        Qwen2.5-VL 7B        31.38   26.47    34.17   32.74   30.73
+ Cosmos-Reason1-7B          1.5   3.2     2.0      1.5      2.0   0.0         + 6 frames input    35.64   35.62    26.64   36.58   37.47
+ Ours                       2.0   3.4     5.6      4.4      3.9   0.2
+                                                                              + static STM        50.36   81.37    37.50   52.17   45.16
+                                                                              + STM               55.61   84.31    45.00   61.23   47.41
+Table 3: Zero-shot cross-dataset results on STRIDE-QA.
+GPT-4o is included as a proprietary reference; bold denotes
+the best result among the remaining models.                                  Table 4: Zero-shot effect of the short-term memory (STM)
+                                                                             on STSBench temporal-dynamic perception (%). Bold best,
+                                                                             underline second best. Rel. = Relation, Ag. = Agent.
+
+
+                                                                                 Variant    Reason. MCQ           Memory        MCQ
+                                                                                 Base         51.77 37.81       w/o memory    72.16
+                                                                                 + SFT        73.91 67.06        + LTM        75.20
+                                                                                 + GRPO 73.85 64.49              + STM        76.91
+                                                                                 Ours         80.03 79.09        + STM + LTM 79.09
+                                                                                  (a) Post-training stages.    (b) Memory components.
+
+                                                                             Table 5: Ablations on DriveLMM-o1 (%, ↑). Bold best.
+    (a) Tool-call depth.          (b) Conditional tool selection.            Memory components are added on the trained, tool-equipped
+                                                                             no-memory model.
+
+
+                                                                             than a fixed invocation schedule.
+                                                                             Offline LTM evolution. To answer Q4, we consolidate suc-
+                                                                             cessful trajectories while freezing all model parameters. Only
+                                                                             training-split and additional non-benchmark scenes are used;
+                (c) Long-term memory self-                                   no test information enters. Figure 5c shows MCQ increasing
+                evolution.                                                   from 79.09% to 82.66% by generation 9, a 3.57-point gain
+                                                                             without parameter updates. The slight generation-10 decline
+Figure 5: Behavioral and evolutionary analysis. (a) Distribu-                indicates saturation, demonstrating non-parametric improve-
+tion of interaction depth. (b) Task-conditioned tool selection.              ment through accumulated experience.
+(c) Test MCQ over sleep-time LTM consolidation rounds
+(frozen model).                                                                                   5    Conclusion
+                                                                             We presented a hierarchical memory-tool framework that
+                                                                             combines foresight with hindsight, and adaptive evidence ac-
+tools, respectively. Tool execution succeeds in 99.74% of                    quisition for autonomous driving reasoning. The experimen-
+calls, with only 0.45% exact duplicates. Moreover, 98.94%                    tal results highlight the importance of moving autonomous
+of trajectories terminate normally; 0.65% stop without a fur-                driving VLMs toward adaptive systems that can accumu-
+ther action, 0.39% terminate after a tool error, and only 0.02%              late experience and interact with external evidence. Future
+reach the maximum-turn limit. These results show task-                       work will explore more scalable consolidation and extension
+dependent, variable-length, and reliable interaction rather                  toward open-world closed-loop driving.
+                       References                               Kendall, A.; Shotton, J.; Arani, E.; and Sinavski, O. 2024.
+Bai, S.; Chen, K.; Liu, X.; Wang, J.; Ge, W.; Song, S.; Dang,   LingoQA: Visual Question Answering for Autonomous
+K.; Wang, P.; Wang, S.; Tang, J.; et al. 2025. Qwen2.5-VL       Driving. In Proceedings of the European Conference on
+Technical Report. arXiv:2502.13923.                             Computer Vision (ECCV). Cham: Springer.
+Fruhwirth-Reisinger, C.; Malić, D.; Lin, W.; Schinagl, D.;      Qian, K.; Jiang, S.; Zhong, Y.; Luo, Z.; Huang, Z.; Zhu, T.;
+Schulter, S.; and Possegger, H. 2025. STSBench: A Spatio-       Jiang, K.; Yang, M.; Fu, Z.; Miao, J.; Shi, Y.; Lim, H. Z.;
+Temporal Scenario Benchmark for Multi-Modal Large Lan-          Liu, L.; Zhou, T.; Yu, H.; Hu, Y.; Li, G.; Chen, G.; Ye,
+guage Models in Autonomous Driving. In Advances in Neu-         H.; Sun, L.; and Yang, D. 2025. AgentThink: A Unified
+ral Information Processing Systems 38 (NeurIPS), Datasets       Framework for Tool-Augmented Chain-of-Thought Reason-
+and Benchmarks Track.                                           ing in Vision-Language Models for Autonomous Driving.
+                                                                arXiv:2505.15298.
+Fu, H.; Zhang, D.; Zhao, Z.; Cui, J.; Liang, D.; Zhang, C.;
+Zhang, D.; Xie, H.; Wang, B.; and Bai, X. 2025. ORION:          Qian, T.; Chen, J.; Zhuo, L.; Jiao, Y.; and Jiang, Y.-G. 2024.
+A Holistic End-to-End Autonomous Driving Framework by           NuScenes-QA: A Multi-Modal Visual Question Answering
+Vision-Language Instructed Action Generation. In Proceed-       Benchmark for Autonomous Driving Scenario. In Proceed-
+ings of the IEEE/CVF International Conference on Computer       ings of the Thirty-Eighth AAAI Conference on Artificial In-
+Vision (ICCV).                                                  telligence, 4542–4550. Washington, DC: AAAI Press.
+Gao, Y.; Piccinini, M.; Brusnicki, R.; Zhang, Y.; and Betz,     Sima, C.; Renz, K.; Chitta, K.; Chen, L.; Zhang, H.; Xie,
+J. 2025. NuRisk: A Visual Question Answering Dataset            C.; Beißwenger, J.; Luo, P.; Geiger, A.; and Li, H. 2024.
+for Agent-Level Risk Assessment in Autonomous Driving.          DriveLM: Driving with Graph Visual Question Answering.
+arXiv:2509.25944.                                               In Proceedings of the European Conference on Computer
+Gholami, M.; Rezaei, A.; Weimin, Z.; Mao, S.; Zhou,             Vision (ECCV). Cham: Springer.
+S.; Zhang, Y.; and Akbari, M. 2025. Spatial Reasoning           Tao, X.; Taghavi, P.; Filev, D.; Langari, R.; and Pandey,
+with Vision-Language Models in Ego-Centric Multi-View           G. 2026. NaviDriveVLM: Decoupling High-Level Rea-
+Scenes. arXiv:2509.06266.                                       soning and Motion Planning for Autonomous Driving.
+Guo, X.; Zhang, R.; Duan, Y.; He, Y.; Zhang, C.; Liu, S.;       arXiv:2603.07901.
+and Chen, L. 2024. DriveMLLM: A Benchmark for Spatial           Tian, X.; Gu, J.; Li, B.; Liu, Y.; Wang, Y.; Zhao, Z.; Zhan, K.;
+Understanding with Multimodal Large Language Models in          Jia, P.; Lang, X.; and Zhao, H. 2024. DriveVLM: The Conver-
+Autonomous Driving. arXiv:2411.13112.                           gence of Autonomous Driving and Large Vision-Language
+Hwang, J.-J.; Xu, R.; Lin, H.; Hung, W.-C.; Ji, J.; Choi, K.;   Models. In Proceedings of the 8th Conference on Robot
+Huang, D.; He, T.; Covington, P.; Sapp, B.; Zhou, Y.; Guo,      Learning (CoRL).
+J.; Anguelov, D.; and Tan, M. 2025. EMMA: End-to-End            Wang, Y.; Liu, Q.; Jiang, Z.; Wang, T.; Jiao, J.; Chu, H.;
+Multimodal Model for Autonomous Driving. Transactions           Gao, B.; and Chen, H. 2025a. RAD: Retrieval-Augmented
+on Machine Learning Research.                                   Decision-Making of Meta-Actions with Vision-Language
+Ishaq, A.; Lahoud, J.; More, K.; Thawakar, O.; Thawkar,         Models in Autonomous Driving. In Proceedings of the
+R.; Dissanayake, D.; Ahsan, N.; Li, Y.; Khan, F. S.;            IEEE/CVF Conference on Computer Vision and Pattern
+Cholakkal, H.; Laptev, I.; Anwer, R. M.; and Khan, S.           Recognition (CVPR) Workshops.
+2025. DriveLMM-o1: A Step-by-Step Reasoning Dataset             Wang, Y.; Luo, W.; Bai, J.; Cao, Y.; Che, T.; Chen, K.;
+and Large Multimodal Model for Driving Scenario Under-          Chen, Y.; Diamond, J.; Ding, Y.; Ding, W.; et al. 2025b.
+standing. arXiv:2503.10621.                                     Alpamayo-R1: Bridging Reasoning and Action Prediction
+Ishihara, K.; Sasaki, K.; Takahashi, T.; Shiono, D.; and Ya-    for Generalizable Autonomous Driving in the Long Tail.
+maguchi, Y. 2025. STRIDE-QA: Visual Question Answer-            arXiv:2511.00088.
+ing Dataset for Spatiotemporal Reasoning in Urban Driving       Xie, S.; Kong, L.; Dong, Y.; Sima, C.; Zhang, W.; Chen,
+Scenes. arXiv:2508.10427.                                       Q. A.; Liu, Z.; and Pan, L. 2025. Are VLMs Ready for Au-
+Jiang, B.; Chen, S.; Liao, B.; Zhang, X.; Yin, W.; Zhang, Q.;   tonomous Driving? An Empirical Study from the Reliability,
+Huang, C.; Liu, W.; and Wang, X. 2024. Senna: Bridg-            Data, and Metric Perspectives. arXiv:2501.04003.
+ing Large Vision-Language Models and End-to-End Au-             Yang, L.; Huang, J.; Huang, Z.; Liu, S.; and Yang, H. 2026.
+tonomous Driving. arXiv:2410.22313.                             Judge, Then Drive: A Critic-Centric Vision Language Action
+Liu, Z.; Ye, H.; Zhang, X.; and Qi, M. 2026.                    Framework for Autonomous Driving. arXiv:2604.27366.
+CritiqueDriveVLM: From Verifier-Guided Reinforcement            Ye, H.; Qi, M.; Liu, Z.; Liu, L.; and Ma, H. 2025.
+Learning to Latent Thought Distillation for Autonomous          SafeDriveRAG: Towards Safe Autonomous Driving with
+Driving. arXiv:2607.04179.                                      Knowledge Graph-Based Retrieval-Augmented Generation.
+Mao, J.; Ye, J.; Qian, Y.; Pavone, M.; and Wang, Y.             arXiv:2507.21585.
+2024.      A Language Agent for Autonomous Driving.             Yu, S.; Lee, S.; Kim, N.; Shin, J.; Park, J.; Ryu, W.; Jung,
+arXiv:2311.10813.                                               R.; and Shim, H. 2025. WaymoQA: A Multi-View Visual
+Marcu, A.-M.; Chen, L.; Hünermann, J.; Karnsund, A.;            Question Answering Dataset for Safety-Critical Reasoning
+Hanotte, B.; Chidananda, P.; Nair, S.; Badrinarayanan, V.;      in Autonomous Driving. arXiv:2511.20022.
+Yuan, J.; Sun, S.; Omeiza, D.; Zhao, B.; Newman, P.; Kunze,
+L.; and Gadd, M. 2024. RAG-Driver: Generalisable Driving
+Explanations with Retrieval-Augmented In-Context Learn-
+ing in Multi-Modal Large Language Model. In Proceedings
+of Robotics: Science and Systems (RSS).
+Zeng, S.; Chang, X.; Xie, M.; Liu, X.; Bai, Y.; Pan, Z.; Xu,
+M.; Wei, X.; and Guo, N. 2025. FutureSightDrive: Thinking
+Visually with Spatio-Temporal CoT for Autonomous Driv-
+ing. In Advances in Neural Information Processing Systems
+38 (NeurIPS). Spotlight.
+Zhang, Z.; Zheng, H.; Wang, Y.; Xu, L.; Deng, T.; Chen,
+X.; Chen, Q.; Zhang, B.; and Huang, W. 2026. OmniDrive-
+R1: Reinforcement-Driven Interleaved Multi-Modal Chain-
+of-Thought for Trustworthy Vision-Language Autonomous
+Driving. arXiv:2512.14044.
+Zheng, W.; Mao, X.; Ye, N.; Li, P.; Zhan, K.; Lang, X.; and
+Zhao, H. 2025. DriveAgent-R1: Advancing VLM-Based Au-
+tonomous Driving with Active Perception and Hybrid Think-
+ing. arXiv:2507.20879.
+Zhou, X.; Liang, D.; Tu, S.; Chen, X.; Ding, Y.; Zhang,
+D.; Tan, F.; Zhao, H.; and Bai, X. 2025. HERMES: A
+Unified Self-Driving World Model for Simultaneous 3D
+Scene Understanding and Generation. In Proceedings of
+the IEEE/CVF International Conference on Computer Vi-
+sion (ICCV), 27817–27827.
+           A    Additional Method Details                          identity fields and the teacher’s decision are stripped, so no
+A.1    Scene-Level Short-Term Memory                               raw training question or ground-truth answer is ever exposed
+                                                                   to the model. The store remains read-only during benchmark
+       Construction                                                evaluation and is updated only in the offline-consolidation
+The scene-level short-term memory represents the current           experiment (Algorithm 1).
+driving scene as a compact graph containing the ego state,
+key objects, spatial sectors, distance bands, motion states,       A.3    Driving Tool Library
+risks, and inter-object relations. Adjacent-timestamp multi-
+view images are passed through a pretrained HERMES-style           The complete driving tool library contains 27 callable func-
+BEV encoder and an LLM decoder to obtain scene descrip-            tions covering visual grounding, metric geometry, object
+tions that initialize the graph-structured state; The short-term   perception, ego-state estimation, trajectory forecasting, oc-
+memory is provided as a read-only scene prior during each          cupancy reasoning, and map querying. Below, we describe
+reasoning episode and is refreshed only when a new pair of         the 20 core tools used in the reported experiments. Each
+adjacent observations becomes available.                           tool returns structured observations that can be incorporated
+                                                                   into the transient scene belief during memory-conditioned
+A.2    Cross-Scene Long-Term Memory                                reasoning.
+
+                                                                   Open-Vocabulary Grounding Functions.
+Algorithm 1: Offline Long-Term Memory Consolidation
+                                (n)                                 • detect_objects_2d_open_vocab: Given a list of object
+Require: Current memory Ml , pending trajectory buffer                words and one named camera view, this function runs an
+    Pn , utility-update rate η                                        open-vocabulary 2D detector and returns bounding boxes,
+                                 (n+1)
+Ensure: Updated memory Ml                                             centers, and confidences. An empty detection result is
+ 1: Pn+ ← VerifiedTrajs(Pn )                                         treated as inconclusive rather than as evidence that the
+      +
+ 2: Bn   ← QualityFilter ExtractBuffer(Pn+ )                          queried object is absent.
+ 3: Un ← CollectUsefulEntries(Pn+ )                                 • select_referred_instance: Selects and confirms the re-
+    c(n) ← Reinforce M (n) , Un , η
+                                          
+ 4: M l                        l                                      ferred instance when multiple same-class candidates are
+                                      +
+ 5: {Gk } ← SemanticCluster(Bn          )                             detected. It takes the camera view, textual object descrip-
+ 6: for each cluster Gk do                                            tion, and selected bounding box as input, and returns the
+ 7:    Gk ← Deduplicate(Gk )                                          confirmed pixel center and box for subsequent metric es-
+                                          c(n)
+                                                                     timation.
+ 8:    Gk ← ResolveConflicts Gk , M         l
+ 9:    ēk ← Abstract(Gk )
+                                                                   3D Geometry Functions.
+10: end for
+       (n+1)              c(n) , {ēk }                             • estimate_object_3d_location_camera: Given a camera
+                                       
+11: Ml         ← Merge M     l
+                (n+1)                                                 view and either a text query or an explicit box, this func-
+12: return Ml
+                                                                      tion returns the metric camera-frame (x, y, z) of the target
+                                                                      in meters from multi-view BEV-3D perception, together
+   The cross-scene long-term memory is built in two stages.           with the straight-line camera distance. The returned co-
+It is first initialized with 23,388 experience entries of traf-       ordinates share a common metric BEV frame, enabling
+fic rules and general driving knowledge abstracted from the           cross-view spatial comparison.
+OmniDrive dataset. After multi-step teacher rollout (Ap-
+pendix B.1), we further abstract reusable success patterns          • estimate_object_depth: Returns the metric forward dis-
+and tool strategies from the verified trajectories and append         tance to a target on one camera view, its straight-line
+them to the store.                                                    camera distance, and a coarse distance band. Used for
+   Both the query and the stored entries are encoded                  “how far” questions.
+into normalized 384-dimensional representations using               • measure_pairwise_distance_3d: Given two targets on
+sentence-transformers/all-MiniLM-L6-v2.                               one camera view, returns the absolute lateral gap |∆x|
+The retrieval query is composed from the current question             and the straight-line 3D distance between them in meters.
+together with the scene-level short-term memory, so that
+                                                                    • compare_object_depth_order: Given two targets on one
+a single semantic query expresses both what the task asks
+                                                                      camera view, reports which is closer to the ego, their
+and what the current scene looks like; entries whose task
+                                                                      metric depths, and a confidence level. Used for “which is
+and scene context both resemble the query therefore rank
+                                                                      closer” and front/behind questions.
+highest. Retrieval computes cosine similarity between the
+query and every entry, and the top-4 entries are returned.          • estimate_object_depth_monocular:           Provides   a
+   Two safeguards apply at retrieval time. First, entries orig-       monocular-depth estimation. The result is treated as an
+inating from the query’s own scene are excluded, which pre-           approximate pixel-anchored estimate and is considered
+vents a sample from retrieving the roughly forty temporally           less reliable for long-range targets. For pairwise mea-
+adjacent frames of its own scene as trivially similar evi-            surement, both targets are estimated within the same
+dence. Second, the returned view is inference-safe: internal          image to preserve relative scale consistency.
+Detection Functions.                                                       Item                 Value
+ • get_leading_object_detection: Detects the leading ob-                   API provider         Alibaba Cloud DashScope
+   ject in the same lane within 10 m ahead, returning its                  Model identifier     qwen3.6-plus (alias)
+   ID, position, and size. Returns None if no leading object               Dated snapshot       not exposed by the API
+   exists.                                                                 Extended thinking    disabled
+                                                                           Call window          2026-05-09 to 2026-05-13
+ • get_surrounding_object_detections: Detects objects                      Logged calls         6,395
+   within a 20 m × 20 m box around the ego, returning IDs,
+   positions, and sizes.                                                   Temperature          0.1
+                                                                           Top-p / top-k        provider defaults (not set)
+ • get_front_object_detections: Identifies objects in a                    Max output tokens    2,048
+   10 m × 20 m region in front of the ego, returning IDs,                  Response format      JSON object mode
+   positions, and sizes.                                                   Request timeout      180 s
+ • get_object_detections_in_range: Detects objects whose                   Retries per question 2 (3 attempts max)
+   center falls within a specified BEV rectangle
+   (xstart , xend ) × (ystart , yend ) in meters.                  Table 6: Teacher generation configuration for Phase-1 trajec-
+Ego-State Estimation Function.                                     tory synthesis.
+ • get_ego_states: Returns the ego vehicle’s current kine-
+   matic state and short history: velocity (vx , vy ), heading     on action validity, observation provenance, grounding qual-
+   angular velocity, acceleration, can-bus position, heading       ity, and observation–reasoning consistency rather than in-
+   speed, steering angle, the last two seconds of trajectory,      dependently re-evaluating answer correctness. Each rollout
+   and the mission goal (LEFT / RIGHT / FORWARD).                  follows the flow:
+Trajectory Forecasting Functions.                                     q + I + Ms + EK → Reasoning State 1 → Tool Call 1 →
+ • get_future_trajectories_for_specific_objects: Given a              Observation 1 → · · · → Final Answer,
+   list of object IDs obtained from a prior detection call, re-    with real tool execution at each step. Validation applies
+   turns their predicted future waypoints over the next ∼ 3 s.     action-syntax and tool-argument checks, object-grounding
+ • get_future_trajectories_in_range: Returns predicted             and observation-provenance checks, observation–reasoning
+   future trajectories for any object whose current center         consistency, final-answer correctness, and maximum-step /
+   lies in a specified BEV rectangle.                              redundancy filtering; failed rollouts are regenerated.
+                                                                      Table 6 records the exact teacher setup, so that the gener-
+Occupancy and Map Query Functions.                                 ation run is documented even though it cannot be replayed
+ • get_occupancy_at_locations_for_timestep: Given a list           bit-exactly. The model identifier is a provider-side alias rather
+   of (x, y) locations and a future timestep t ∈ {0, 1, 2, 3, 4}   than a dated snapshot: the API returns no finer build string,
+   (corresponding to 0, 0.5, 1, 1.5, 2 s), returns whether each    so the alias may resolve to a different underlying build after
+   location is occupied.                                           our call window. We therefore treat the released trajectories
+ • get_drivable_at_locations: Returns whether each (x, y)          as the frozen record of this run rather than as an artifact that
+   location lies in a drivable region.                             a reader can regenerate. Extended-thinking mode was not
+                                                                   enabled; the teacher emits its trace directly under a JSON
+ • get_lane_category_at_locations: Returns the lane-               response-format constraint. Nucleus and top-k sampling pa-
+   element category at each (x, y) location, one or more of        rameters were left at provider defaults and are not part of the
+   {divider, ped_crossing, boundary}, with optional proba-         recorded configuration.
+   bility scores.                                                     The teacher system prompt and the tool-call JSON schema
+ • get_current_shoulder: Returns the distance from the ego         it must satisfy are reproduced in Appendix D.1; the schema
+   to the left and right road shoulders at the current location.   is the same registry-validated contract used at inference (Ap-
+ • get_current_lane_divider: Returns the distance from the         pendix A.3), so a trajectory that passes validation is exe-
+   ego to the left and right lane dividers at the current loca-    cutable by the student without translation.
+   tion.
+                                                                   B.2    Stepwise Conversion and Two-Phase SFT
+ • get_nearest_pedestrian_crossing: Returns the location
+   of the nearest pedestrian crossing in front of the ego, or      The verified trajectory pool is decomposed into step-level
+   None if none exists.                                            supervision rather than used as whole traces, which are too
+                                                                   open-ended for supervised fine-tuning. Each trajectory yields
+                                                                   several next-step prediction examples: from the question plus
+B     Data Generation and Post-Training Details                    compact memory context to ⟨think⟩ and ⟨action⟩; from the
+B.1    Multi-Step Teacher Rollout and Validation                   previous observation to the next ⟨think⟩ and ⟨action⟩; and
+We construct gold-conditioned, tool-executing teacher tra-         from the final observation to ⟨think⟩, reasoning, and the final
+jectories. The gold answer is provided to the teacher to an-       answer. Environment-returned observations appear as user-
+chor trajectory synthesis, while real tool observations are ob-    side turns and are masked from the loss, so supervision ap-
+tained only through execution. Validation therefore focuses        plies only to model-generated reasoning, actions, belief up-
+Parameter                  Phase-1 SFT          Phase-2 SFT               Tier Condition                               Reward
+Training Configuration                                                     1   correct ∧ tool ∧ memory cited             +0.7
+  Objective                tool-call init   obs.-grounded reason.          2   correct ∧ tool ∧ no memory citation       +0.5
+  Epochs                         3                    20                   3   correct ∧ no tool                          0.0
+  Per-device batch size          1                     1
+                                                                           4   incorrect ∧ tool                          +0.2
+  Gradient accumulation         16                    16
+  Data-parallel size             1                     1                   5   incorrect ∧ no tool                        0.0
+  Effective batch size          16                    16                   6   malformed output                           0.0
+  Max sequence length         12,288                12,288
+  Precision                  bfloat16              bfloat16         Table 8: Tiered outcome reward for trajectory-level GRPO.
+  Attention                   SDPA                  SDPA            Tiers are mutually exclusive; each trajectory is scored once.
+  Gradient checkpointing     enabled               enabled
+  Loss scope                last round            last round
+Optimizer (AdamW, fused)                                            B.3    GRPO and Reward Design
+  Learning rate                5e-5                 2e-5
+                                                                    Starting from the Phase 2 checkpoint, we run trajectory-
+  Betas (β1 , β2 )          (0.9, 0.95)          (0.9, 0.95)
+  Epsilon ϵ                    1e-8                 1e-8            level GRPO with lr 1 × 10−6 , warmup ratio 0.25, KL co-
+  Weight decay                 0.01                 0.01            efficient β = 0.001, and G = 8 sampled trajectories per
+  Gradient clipping             1.0                  1.0            prompt; the maximum completion length is 1,536 tokens
+                                                                    and training uses DeepSpeed ZeRO-3. A single rule-based
+Scheduler
+                                                                    outcome reward model assigns each sampled trajectory to
+  Type                        Cosine               Cosine
+  Warmup ratio                 0.05                 0.05            exactly one tier (Table 8). Correctness is evaluated on the
+                                                                    multiple-choice letter of the last parseable final answer; tool
+LoRA Configuration                                                  denotes at least one action passing the schema legality check;
+  Rank                          16                    16            memory cited requires at least two concrete scene-state or ex-
+  Alpha                         32                    32
+                                                                    perience phrases surfaced in the reasoning. Three properties
+  Dropout                      0.05                  0.05
+  Bias                         none                  none           of the reward deserve explicit statement:
+  Target modules                      all linear layers                First, the memory-citation bonus is fully correctness-
+  Frozen                          vision encoder, aligner           gated: the +0.2 gap between Tier 1 and Tier 2 is available
+                                                                    only on correct answers.
+Data and Selection
+  Training records           13,679              20,062
+                                                                       Second, tool use is deliberately not fully correctness-gated.
+  Validation split ratio      0.01                0.005             Tier 4 assigns a small positive reward to incorrect trajecto-
+  Data-loader workers           4                    4              ries that issued at least one legal tool call, which makes
+  Save / eval interval      200 / 300          1000 / 1000          R(incorrect, tool) > R(correct, no tool). This ordering is in-
+  Selection criterion                validation loss                tentional and serves two purposes. It is a bootstrapping term:
+  Seed                         42                   42              at the start of reinforcement training the policy must first
+                                                                    learn that the tool interface is executable at all, and a purely
+Table 7: Supervised fine-tuning hyperparameters. Both               correctness-gated reward gives no gradient on the prompts
+phases train a single LoRA adapter on one GPU; the ef-              the model cannot yet answer, which are exactly the prompts
+fective batch size is 1 × 16 × 1 = 16 sequences.                    tool use is meant to address. It is also an anti-shortcut term:
+                                                                    the supervised warm-up already leaves the model able to
+                                                                    answer many questions directly, so rewarding correct-but-
+                                                                    toolless trajectories would make direct answering the dom-
+                                                                    inant strategy and discard the interaction behaviour that the
+dates, and final answers. Phase 1 yields 13,679 tool-decision       warm-up established.
+records and Phase 2 yields 20,062 records with complete                The shaping term cannot be exploited, for three reasons
+memory-conditioned reasoning contexts and executed tool             that are structural rather than empirical. (i) Tiers are mutually
+observations.                                                       exclusive and each trajectory is scored exactly once, so a
+                                                                    trajectory that issues seven tool calls receives the same +0.2
+   We adapt Qwen2.5-VL-7B-Instruct with LoRA (rank 16,              as one that issues a single call; the reward is therefore flat in
+α = 32, dropout 0.05) on all linear layers of the lan-              the number of calls and exerts no pressure toward deeper or
+guage backbone, freezing the vision encoder and multimodal          repeated invocation. (ii) The tier is strictly dominated: any
+aligner; all stages use bfloat16 and AdamW. Phase 1 learns          trajectory that converts a tool call into a correct answer moves
+valid tool selection and argument generation, with tool obser-      to Tier 2 or Tier 1 and more than doubles its reward, so the
+vations removed from the context except candidate detections        shaping term is never the best available outcome for a prompt
+needed by the instance-selection action. Phase 2 continues          the model can solve. (iii) Advantages are standardized within
+from the Phase 1 adapter and learns observation-grounded            each group of G samples of the same prompt, so Tier 4 only
+reasoning. The complete training, optimization, LoRA, and           produces a positive advantage when no sample in the group is
+data-selection hyperparameters for both SFT phases are sum-         correct; whenever the group contains a correct trajectory, the
+marized in Table 7.                                                 tool-using-but-incorrect samples receive negative advantage.
+      Parameter                      Value                               Phase       LTM        LR        Warmup Steps
+                                                                                                     −6
+      Objective                                                          v0 (fresh)   —     1×10           0.25    800
+        Loss / advantage estimator GRPO                                  v1           —     5×10−7         0.05    500
+        Clipping parameter ϵ       0.2 (symmetric)                       v2         enabled 5×10−7         0.10    500
+        KL coefficient β           0.001                                 v3 (final) enabled 1×10−6         0.10    500
+        KL placement               in loss, not in reward
+        KL estimator               sampled-token (k3 )
+        Importance sampling        token level                   Table 10: GRPO continued-training chain. Each phase re-
+        Policy update epochs µ     1 (on-policy)                 sumes strictly from the preceding phase’s checkpoint; long-
+        Entropy bonus              none                          term memory is injected into the prompt set from v2 onward.
+                                                                 The reported model is the final v3 checkpoint.
+      Sampling
+        Group size G                 8
+        Generation batch size        16
+        Prompts per gen. batch       2                           turned observation is appended to the reasoning context and
+        Steps per generation         8                           informs the next step, but does not modify the explicit short-
+        Temp. / top-p / top-k        1.0 / 0.95 / 50             term memory. We use greedy decoding (temperature 0),
+        Max prompt / completion      512 / 1,536                 bfloat16, SDPA attention, an image-pixel budget of ∼ 106 ,
+        Max tool-interaction turns   7
+        Rollout engine               vLLM (server mode)
+                                                                 and we allow at most seven tool-execution turns followed by
+                                                                 one terminal answer turn, yielding at most eight model turns
+      Reward                                                     per query. Unless otherwise stated, all model parameters and
+        Reward function              answer_or_tool              both memory channels are frozen during evaluation. All ex-
+        Reward weight                1.0                         periments run on 4× NVIDIA RTX PRO 6000 Blackwell
+        Standardization              per group
+        Reward whitening             disabled
+                                                                 GPUs (96 GB each) distributed across two servers.
+        Overlong / dyn. filtering    disabled
+                                                                 Software environment. Ubuntu 24.04.2 LTS (kernel
+      Reference policy                                           6.8.0), NVIDIA driver 590.48.01, CUDA 12.8 with cuDNN
+        Source                       Phase-2 SFT adapter
+        Synchronization              none (frozen)
+                                                                 9.10.2, Python 3.10. Key packages: torch 2.8.0 (cu128),
+                                                                 transformers 4.57.6, peft 0.18.1, trl 0.24.0, deepspeed 0.17.6,
+      Optimization                                               accelerate 1.13.0, vllm 0.11.0, sentence-transformers 5.4.1,
+        Per-device batch size        2                           numpy 2.2.6. flash-attn is deliberately not installed and
+        Gradient accumulation        8 (4 in final phase)        attention runs through SDPA; environments that do install
+        Effective batch size         16
+        Optimizer                    AdamW (fused)
+                                                                 it may produce slightly different numerics. A complete pip
+        Betas / ϵ / wd               (0.9, 0.95) / 1e-8 / 0.01   freeze of this environment is included in the supplement.
+        Gradient clipping            1.0
+        Scheduler                    Cosine                      Random seeds. Trainer-side randomness is seeded at 42
+        Parallelism                  ZeRO-3; 1 trainer + 1       and propagated to Python, NumPy, and PyTorch, fixing
+                                     rollout GPU                 adapter initialization, data shuffling, and dataloader order
+        Save interval                every 50 steps              for both supervised stages and the reinforcement stage.
+        Seed / data seed             42 / 42                     Dataset partitions used for analysis are drawn under sepa-
+                                                                 rately recorded seeds. Inference is deterministic given a fixed
+Table 9: GRPO implementation parameters shared across            checkpoint. The teacher model and the evaluation judge are
+the four continued-training phases. Per-phase learning rate,     hosted third-party APIs that accept no seed argument, so
+warmup ratio, and step budget are listed in Table 10.            the released trajectories and judge outputs are frozen records
+                                                                 of the actual runs; and reinforcement rollouts are sampled at
+                                                                 temperature 1 without a per-sample seed threaded through the
+The shaping term is thus active precisely on the prompts         rollout server, so the sampled groups are not bit-reproducible
+where the policy has not yet learned to succeed, and inactive    across reruns, as is expected for on-policy reinforcement
+elsewhere.                                                       learning.
+   Third, open-ended items are treated as incorrect by the
+multiple-choice correctness test and can therefore only reach    Hyperparameter selection. Optimizer, adapter, and rein-
+Tiers 4–6, so the reinforcement stage applies pressure on        forcement hyperparameters were fixed by compute budget
+multiple-choice correctness and tool discipline but no direct    rather than searched: they follow the defaults of the training
+pressure on open-ended reasoning quality. We return to this      toolkit and of prior stepwise tool-use recipes. We ran no grid
+asymmetry in Appendix E.2.                                       or random search over learning rate, adapter rank, retrieval
+                                                                 depth, group size, or interaction budget, and we state this
+B.4    Training and Compute Configuration                        plainly rather than present a post-hoc search space. Check-
+GRPO uses a separate subset of training questions disjoint       points are selected by accuracy on a validation partition held
+from SFT. At inference the model follows a Think–Action–         out from the training file by the trainer, never on any bench-
+Observation–Update loop with real tool execution: each re-       mark test split.
+   C    Benchmarks and Evaluation Protocols                         and relative (object-to-object) relations, and each question
+C.1    DriveLMM-o1 Protocol                                         is answered from a single view with no temporal context.
+                                                                    Following the zero- and one-shot protocols of prior tool-
+DriveLMM-o1 (Ishaq et al. 2025) is our primary bench-               augmented work, we evaluate eight tasks: left/right (L/R),
+mark for reasoning quality and answer accuracy. It is built         front/behind (F/B), relative horizontal distance (RHD), rela-
+on nuScenes keyframes and contains over 18K training and            tive distance (RD), pixel localization (PPos), bounding-box
+over 4K test VQA examples spanning perception, predic-              localization (BBox), camera vertical distance (CVD), and
+tion, and planning; unlike earlier driving VQA sets it sup-         camera distance (CD). Binary relational tasks are scored by
+plies manually curated intermediate reasoning steps for ev-         exact match, acci = 1[pi = yi ]. Metric-regression tasks use
+ery question rather than only a final answer. The test split        a bounded penalty on the absolute error,
+contains 4,634 questions (2,391 multiple-choice and 2,243
+open-ended), drawn from 539 multi-view keyframes across                                   1
+115 nuScenes scenes; each sample provides six surround-                  acci =                      ,       αd = 0.05,        (13)
+                                                                                  1 + αd ∥di − dgt
+                                                                                                i ∥1
+view images.
+                                                                    covering RHD, RD, CVD, and CD. Pixel localization uses
+Input configuration. We follow the official inference for-          the Euclidean form
+mat. The six views are supplied in the canonical order
+(FRONT_LEFT, FRONT, FRONT_RIGHT, BACK_RIGHT,                                            1
+                                                                         acci =                    , αp = 0.005,      (14)
+BACK, BACK_LEFT), stitched into a 2 × 3 grid, and the lay-                      1 + αp ∥xi − xgt
+                                                                                              i ∥2
+out is declared in the system prompt so that answers referring
+to, for example, “top row, second image” resolve correctly.         and bounding-box localization is scored by intersection-over-
+We reuse the official reasoning instruction verbatim so that        union. The aggregate score is the unweighted mean over
+                                                                                                 P8
+the fine-tuned model and the evaluation harness see the same        the eight tasks, AccS = 81 j=1 accj . All scaling constants
+template.                                                           are the published values. Parameters and long-term memory
+                                                                    stay frozen; the one-shot setting adds a single in-context
+Reasoning score. An LLM judge scores each re-
+                                                                    demonstration.
+sponse against the human-verified reasoning steps on a
+                                                                       STSBench (Fruhwirth-Reisinger et al. 2025) targets
+1–10 scale along twelve dimensions: Faithfulness-Step,
+                                                                    spatio-temporal reasoning over both ego and non-ego agents,
+Informativeness-Step, Risk Assessment Accuracy, Traffic
+                                                                    which distinguishes it from benchmarks that test ego-centric
+Rule Adherence, Scene Awareness & Object Understand-
+                                                                    action recognition on single images or monocular video. Its
+ing, Repetition-Token, Hallucination, Semantic Coverage-
+                                                                    nuScenes instantiation mines 43 pre-defined traffic scenarios
+Step, Commonsense Reasoning, Missing Step, Relevance,
+                                                                    from ground-truth annotations, passes them through human
+and Missing Details. The judge receives the question, the
+                                                                    verification, and converts them into 971 five-way multiple-
+concatenated ground-truth reasoning steps and final answer,
+                                                                    choice questions, each grounded in six temporal frames at
+and the model response, and returns a structured JSON ob-
+                                                                    2 Hz from six surround-view cameras. We report accuracy for
+ject under a fixed schema with no free text. The full prompts
+                                                                    ego motion, ego–agent relations, agent motion, and agent–
+given to the judge is presented in D.2. We use GPT-4o-mini
+                                                                    agent relations, plus a micro-average over all 971 questions.
+at temperature 0, matching the reference implementation’s
+                                                                       STRIDE-QA (Ishihara et al. 2025) is built from an ur-
+default. The reported reasoning score is
+                                                                    ban driving corpus disjoint from nuScenes, which makes it
+                                          12                        a genuine cross-dataset test: neither our training data nor
+                       100 X 1 X
+            Reason. =            mk,i ,                     (12)    our memory contains any STRIDE-QA scene, sensor con-
+                      10 |D| 12
+                                 i∈D     k=1                        figuration, or city. We evaluate on the benchmark split, built
+where mk,i is dimension k for question i and D is the full          from held-out recording dates and comprising 5,317 QA
+4,634-question split. Table 1 reports five of the twelve dimen-     pairs over 409 scene groups, filtered to dynamic interactions
+sions individually; the “Missing” column is Missing Details.        and categorized into six scenario types. The model observes
+                                                                    four context frames from a front-facing camera with a 60◦
+Answer accuracy. A question is multiple-choice when the             field of view at t ∈ {−1.5, −1.0, −0.5, 0} s, with a single
+trailing index of its identifier lies in {2, 3, 4, 5, 8}, the of-   target agent identified by its segmentation mask, and pre-
+ficial partition, which yields exactly 2,391 items. The pre-        dicts at t ∈ {0, 1, 2, 3} s the target’s distance, velocity, and
+dicted option is extracted by splitting the response at the first   heading angle together with the ego velocity. Heading is
+final-answer marker and taking the first option pattern in the      expressed in the ego frame with 0◦ forward and positive
+remainder; a response with no parseable marker is scored            counter-clockwise; targets may leave the field of view at
+incorrect. MCQ accuracy is the mean over the 2,391 items.           t > 0. A localization succeeds only if distance and heading
+                                                                    are simultaneously within tolerance,
+C.2    Cross-Benchmark Evaluation                                              h                                            i
+DriveMLLM (Guo et al. 2024) evaluates fine-grained spa-                sg,t = 1 |dˆt − d∗t | < 0.25 d∗t ∧ |θ̂t − θt∗ | < 10◦ , (15)
+tial understanding on nuScenes front-facing images, pair-
+ing each image with programmatically generated questions            where the ±25% distance margin follows prior spatial-
+whose ground truth is derived from calibrated 3D boxes and          reasoning work and the ±10◦ heading margin is set so that
+camera intrinsics. It covers both absolute (camera-to-object)       at 10 m the lateral deviation equals a standard 3.5 m lane
+width. We report LSR at the 0/1/2/3 s timesteps, its mean            ones. The three system prompts are reproduced verbatim
+               1
+                 P 1 PT
+MLSR = |G|          g T +1    t=0 sg,t , and Temporal Localiza-
+                                                                     below.
+                              1
+                                 P
+tion Consistency TLC = |G|         g 1[sg,0 ∧ sg,1 ∧ sg,2 ∧ sg,3 ]   Stage 1 — action planning. You are a Memory-Tool Syn-
+with T = 3, the strict fraction of sequences localized cor-          ergistic Reasoning policy teacher. Your job is to produce a
+rectly at all four timesteps.                                        skeleton for autonomous driving VQA. The skeleton must de-
+                                                                     cide which external actions should be executed before the
+C.3       Leakage Control                                            student answers. You see the image grid, question, gold an-
+                                                                     swer, memory and reasoning seed, but you DO NOT see real
+Training data. All supervised trajectories and all rein-
+                                                                     tool observations. Do not fabricate observations.
+forcement prompts are generated from the DriveLMM-o1
+                                                                        Output strict JSON only:
+training split only. No test question, image, or reference an-
+swer is used at any training stage.                                     {"steps": [{"think": {"goal": "...",
+                                                                        "evidence_gap": "..."},
+Memory initialization. The initial long-term store is ab-               "action": {"type": "...", "arguments":
+stracted from the OmniDrive dataset, which supplies scene-              {...}}}]}
+level driving knowledge, traffic rules, and counterfactual             Rules:
+driving rationales over nuScenes scenes. Because OmniDrive
+                                                                     1. Use 1–3 actions only.
+shares its underlying corpus with three of our benchmarks,
+                                                                     2. action.type must be one of the allowed action types.
+extraction is restricted to nuScenes training scenes: no en-
+try in the store originates from a scene that appears in any         3. Use sample_token="<CURRENT_SAMPLE>" when an ac-
+                                                                        tion needs the current sample.
+evaluation split. Entries added later, during the abstraction
+of reusable success and failure patterns from verified teacher       4. Look up in short-term memory before calling tools.
+rollouts, inherit the same restriction because those rollouts        5. No observation_summary, final_answer, or tool re-
+are themselves generated only from training-split questions.            sult text in this phase.
+
+Memory access at evaluation time. During benchmark                   Stage 2 — next-step decision. You are a Memory-Tool
+evaluation the store is read-only and frozen. Retrieval ap-          Synergistic Reasoning policy teacher. Decide the next action
+plies two safeguards. First, an anti-leak filter excludes every      after reading the image, question, gold answer, reasoning
+entry whose scene identifier matches the query’s own scene,          seed, and any already executed observations. Use a memory-
+which prevents a sample from retrieving the roughly forty            tool synergistic style: first use scene-level short-term memory
+temporally adjacent frames of its own scene as trivially sim-        when scene continuity is relevant, retrieve long-term experi-
+ilar evidence. Second, the returned view is inference-safe:          ence when planning or safety judgment benefits from similar
+teacher decisions and dataset identity tokens are stripped, so       past driving cases, then use tools as needed.
+no reference answer or scene identifier is ever exposed to the          Output strict JSON only:
+model.                                                                  {"decision_type": "action",
+                                                                        "scene_state": "<brief reusable
+Model selection. Checkpoints are selected on a validation               scene-local state>",
+partition held out from the training file by the trainer, never         "experience": "<brief retrieved
+on any benchmark test split.                                            cross-scene experience>",
+                                                                        "think": {"goal": "...",
+Offline consolidation. Consolidation uses only training-                "evidence_gap": "...",
+split rollouts and additional non-benchmark scenes; correct-            "decision": "<why this action is the
+ness is verified against training labels alone, and the memory          next
+is frozen before evaluation, so the self-evolution protocol is          best evidence source>"},
+strictly inductive.                                                     "action": {"type": "...", "arguments":
+                                                                        {...}}}
+      D     Prompt and Serialization Templates                         If enough evidence has already been gathered and at least
+                                                                     one action has been executed, output strict JSON only:
+D.1       Teacher Rollout Prompts
+                                                                        {"decision_type": "finish",
+Teacher trajectories are produced by a three-stage prompted             "scene_state": "...", "experience":
+pipeline rather than a single generation call. Stage 1 plans            "...",
+a short action skeleton without access to any tool output.              "think": {"goal": "finish with the
+Stage 2 is invoked once per interaction round: it observes              benchmark-
+the tool results executed so far and either emits the next              compatible answer", "evidence_gap":
+action or declares the evidence sufficient. Stage 3 receives            "none",
+the completed trace together with the real observations, then           "decision": "<why the evidence is
+updates current belief and step by step reasoning. All three            sufficient>"},
+                                                                        "final_answer": "<exact gold final
+stages are conditioned on the gold answer, so a trajectory is           answer>"}
+an explanation of a known answer rather than an independent
+attempt at it; the filtering described in Appendix B.1 therefore       Rules:
+rejects malformed or ungrounded traces rather than incorrect         1. Use at most one action in this response.
+2. action.type must be one of the available actions.                     output budget. For each question the judge receives a single
+3. Use sample_token="<CURRENT_SAMPLE>" when an ac-                       user message of the form
+   tion needs the current sample.                                           Question: {question}
+4. For planning, safety, behavior prediction, relative motion, and          Ground Truth: {ground_truth}
+   ambiguous temporal questions, consider looking up in short-              LLM Response: {llm_response}
+   term memory first to get a full view of the scene.
+                                                                         where ground_truth concatenates the human-written
+5. Avoid template collapse: do not repeat a fixed route just because
+   the question type is familiar. Compare the current observations,
+                                                                         reasoning steps and the reference final answer. The system
+   memory availability, action history, tool costs, and unresolved       prompt is reproduced verbatim below.
+   evidence gap..                                                        System prompt. You are an autonomous driving reasoning
+6. decision_type=finish is allowed only after at least one               evaluator. Your task is to assess the alignment, coherence,
+   useful action has been executed.                                      and quality of reasoning steps in text responses for safety-
+7. final_answer in a finish response must exactly match the              critical driving scenarios.
+   gold final answer.                                                       You will evaluate the model-generated reasoning using the
+Stage 3 — summary. You are a Memory-Tool Synergistic                     following metrics:
+Reasoning policy teacher. You will receive a think-action-               1. Faithfulness-Step (1–10): Measures how well the model’s rea-
+trace with real observations from tools and memory. Pro-                    soning steps align with the ground truth. 9–10: All steps cor-
+duce compact memory sections, observation-aware private                     rectly match or closely reflect the reference. 7–8: Most steps
+updates, and DriveLMM-o1-style public step-by-step rea-                     align, with minor deviations. 5–6: Some steps align, but sev-
+soning that turns private evidence into benchmark-friendly                  eral are incorrect or missing. 3–4: Few steps align; most are
+reasoning.                                                                  inaccurate or missing. 1–2: Majority of steps are incorrect.
+   Output strict JSON only:                                              2. Informativeness-Step (1–10): Measures completeness of rea-
+   {"scene_state": "<compact structured                                     soning. 9–10: Captures almost all critical information. 7–8: Cov-
+   scene state>"                                                            ers most key points, with minor omissions. 5–6: Missing sig-
+   "experience": "<brief historical                                         nificant details. 3–4: Only partial reasoning present. 1–2: Poor
+   driving experience>"                                                     extraction of relevant reasoning.
+   "updates": [{"observation_summary":                                   3. Risk Assessment Accuracy (1–10): Evaluates if the model cor-
+   "...",                                                                   rectly prioritizes high-risk objects or scenarios. 9–10: Correctly
+   "belief_update": "...", "decision":                                      identifies and prioritizes key dangers. 7–8: Mostly accurate, with
+   "..."}],                                                                 minor misprioritizations. 5–6: Some important risks are over-
+   "reasoning": "<step-by-step                                              looked. 3–4: Significant misjudgments in risk prioritization.
+   reasoning>",                                                             1–2: Misidentifies key risks or misses them entirely.
+   "final_answer": "<exact gold final                                    4. Traffic Rule Adherence (1–10): Evaluates whether the re-
+   answer>"}                                                                sponse follows traffic laws and driving best practices. 9–10:
+  Rules:                                                                    Fully compliant with legal and safe driving practices. 7–8: Mi-
+                                                                            nor deviations, but mostly correct. 5–6: Some inaccuracies in
+1. final_answer must exactly equal the provided gold final                  legal/safe driving recommendations. 3–4: Several rule viola-
+   answer.                                                                  tions or unsafe suggestions. 1–2: Promotes highly unsafe driving
+2. updates length must equal the number of observations.                    behavior.
+3. observation_summary must accurately reflect the given                 5. Scene Awareness & Object Understanding (1–10): Measures
+   observation; do not add unsupported facts.                               how well the response interprets objects, their positions, and
+4. experience must only use retrieved long-term experience                  actions. 9–10: Clearly understands all relevant objects and their
+   context.                                                                 relationships. 7–8: Minor misinterpretations but mostly correct.
+5. belief_update must be grounded in the corresponding ob-                  5–6: Some key objects misunderstood or ignored. 3–4: Many
+   servation.                                                               errors in object recognition and reasoning. 1–2: Misidentifies or
+6. reasoning must be step-by-step style. Step 1 must point to               ignores key objects.
+   key evidence in the 2 × 3 image grid or a camera view or spatial      6. Repetition-Token (1–10): Identifies unnecessary repetition in
+   region, and include the real visual or observation evidence that         reasoning. 9–10: No redundancy, very concise. 7–8: Minor rep-
+   supports it, without evidence source tags. Step 2 must explain           etition but still clear. 5–6: Noticeable redundancy. 3–4: Frequent
+   how that evidence affects the ego vehicle’s safety, maneuver             repetition that disrupts reasoning. 1–2: Excessive redundancy,
+   feasibility, collision risk, lane-change feasibility, speed choice,      making reasoning unclear.
+   or future behavior. Step 3 must first name compact evidence           7. Hallucination (1–10): Detects irrelevant or invented reasoning
+   sources, translate their support into natural driving language;          steps not aligned with ground truth. 9–10: No hallucinations, all
+   for multiple-choice questions it must explain why the selected           reasoning is grounded. 7–8: One or two minor hallucinations.
+   option is safer, more likely, or more relevant than the alterna-         5–6: Some fabricated details. 3–4: Frequent hallucinations. 1–2:
+   tives. Step 4, give a final answer.                                      Majority of reasoning is hallucinated.
+D.2    LLM-Judge Prompt for DriveLMM-o1                                  8. Semantic Coverage-Step (1–10): Checks if the response fully
+                                                                            covers the critical reasoning elements. 9–10: Nearly complete
+We use the official DriveLMM-o1 evaluation script without                   semantic coverage. 7–8: Good coverage, some minor omissions.
+modification. The judge is gpt-4o-mini at temperature                       5–6: Partial coverage with key gaps. 3–4: Major gaps in reason-
+0, constrained to a strict JSON schema, with a 500-token                    ing. 1–2: Very poor semantic coverage.
+ 9. Commonsense Reasoning (1–10): Assesses the use of intuitive                Component                  Median      p90         Max
+    driving logic in reasoning. 9–10: Displays strong commonsense
+    understanding. 7–8: Mostly correct, with minor gaps. 5–6: Some             LLM generation             34.96 s    50.66 s    82.60 s
+    commonsense errors. 3–4: Frequent commonsense mistakes. 1–                 Tool execution†             5.4 ms    84.1 ms    35.70 s
+    2: Lacks basic driving commonsense.                                        Parsing                    0.13 ms    0.22 ms    0.46 ms
+                                                                               Other (decode, tokenize)   49.1 ms    91.7 ms     2.08 s
+10. Missing Step (1–10): Evaluates if any necessary reasoning steps
+    are missing. 9–10: No critical steps missing. 7–8: Minor missing           End-to-end                 35.04 s    50.73 s     96.75 s
+    steps, but answer is mostly intact. 5–6: Some important steps
+    missing. 3–4: Many critical reasoning gaps. 1–2: Response is         Table 11: Per-query latency breakdown. † aggregated over all
+    highly incomplete.                                                   tool calls in a query.
+11. Relevance (1–10): Measures how well the response is specific to
+    the given scenario and ground truth. 9–10: Highly specific and
+                                                                               Benchmark        Calls Median        p90     Peak mem.
+    directly relevant to the driving scenario. 7–8: Mostly relevant,
+    but some minor parts may be overly generic. 5–6: Somewhat                  DriveLMM-o1 1295 0.20 ms 1.49 ms                ∼19 GB
+    relevant but lacks precision; contains vague or general reason-            DriveMLLM   1956 2.12 ms 74.15 ms               ∼24 GB
+    ing. 3–4: Mostly generic or off-topic reasoning, with significant
+    irrelevant content. 1–2: Largely irrelevant, missing key aspects     Table 12: Per-benchmark tool-call latency (median/p90) and
+    of the scenario.                                                     inference peak GPU memory. The rare 35.70 s max (one
+12. Missing Details (1–10): Evaluates the extent to which critical       cold-start monocular-depth call) is reported in Table 11.
+    information is missing from the response, impacting the reason-
+    ing quality. 9–10: No significant details are missing; response is
+    comprehensive. 7–8: Covers most important details, with minor               Tool                           N    Median       p90
+    omissions. 5–6: Some essential details are missing. 3–4: Many               Instance filter (Python)      419   0.05 ms 0.06 ms
+    critical reasoning steps or contextual details are absent. 1–2:             2D detection (YOLO-World)     960   2.08 ms 80.8 ms
+    Response is highly lacking in necessary details.                            3D localization (camera)      390   2.92 ms 5.04 ms
+                                                                                3D localization (monocular)    26   99.6 ms 241 ms
+  Final Evaluation: Compute the Overall Score as the aver-                      Geometry / distance / depth   119   ∼5 ms ∼9 ms
+age of all metric scores. Avoid subjective interpretation and
+adhere to the given thresholds. Always strictly follow these
+                                                                         Table 13: Per-tool latency. Only monocular depth (UniDepth)
+scoring guidelines. Do not add any additional explanations
+                                                                         is costly, and it is invoked rarely (N =26); 2D detection uses
+beyond the structured JSON output.
+                                                                         per-image caching.
+Output format. The judge returns a flat JSON object with
+one numeric field per metric plus an Overall Score,
+enforced by a strict json_schema response format so that                 occasionally inconsistent with the dimensions returned in the
+unparseable or partial responses are rejected at the API level:          same call.
+    {"Faithfulness-Step": 6.0,
+    "Informativeness-Step": 6.5,                                                 E     Additional Experimental Results
+    "Risk Assessment Accuracy": 7.0,                                     E.1     Tool-Use Behavior and Efficiency
+    "Traffic Rule
+    Adherence": 7.5, "Scene Awareness &                                  Table 11 shows that end-to-end latency is dominated by LLM
+    Object                                                               decoding (median 34.96 s), while tool execution adds only
+    Understanding": 8.0,                                                 5.4 ms at the median per query. Per-call tool latency stays
+    "Repetition-Token": 7.0,                                             in the millisecond range on both benchmarks (Table 12);
+    "Hallucination": 8.5, "Semantic                                      the lone 35.70 s maximum comes from a single cold-start
+    Coverage-Step": 7.5,                                                 monocular-depth call, invoked in only 26 of all queries (Ta-
+    "Commonsense Reasoning": 7.0, "Missing                               ble 13). Inference peaks at ∼19 GB on DriveLMM-o1 and
+    Step": 8.5,                                                          ∼24 GB on DriveMLLM, so the full system runs on a sin-
+    "Relevance": 8.5, "Missing Details":                                 gle consumer GPU. Overall, adding a hierarchical memory
+    7.0,
+                                                                         and a tool-use loop introduces negligible runtime overhead
+    "Overall Score": 7.42}
+                                                                         relative to the backbone VLM’s own decoding cost.
+Two notes on the reference implementation. First,
+the reference script contains a naming inconsistency:                    E.2     Confidence Intervals
+the enforced JSON schema declares the ninth field                        The main results are single deterministic evaluation runs: in-
+as Commonsense, whereas the system prompt and                            ference uses greedy decoding at temperature 0, so repeated
+the in-prompt example both name it Commonsense                           evaluation of a fixed checkpoint is bit-identical and run-to-
+Reasoning. We preserve the prompt’s naming in all                        run variance is zero by construction. Sampling variability
+released per-question outputs. Second, as stated in Ap-                  nonetheless remains because the test split is finite. We there-
+pendix C.3, we compute the reported reasoning score as the               fore report non-parametric confidence intervals obtained by
+mean of the twelve dimensions rather than reading the judge’s            bootstrapping over test questions (10,000 resamples with re-
+self-reported Overall Score field, because the latter is                 placement, per-question scores held fixed).
+       Metric                     Value      95% CI                case tempers that decision after detecting a pedestrian at
+       MCQ                        79.09 [77.46, 80.72]
+                                                                   (−3.78, 6.45) m. Each trace closes with an offline consol-
+       Reasoning score            80.03 [79.46, 80.57]             idation step: five cases reinforce the utility weight of the
+                                                                   retrieved strategy, while the fog case abstracts a new entry
+       Risk Assessment            76.95   [76.27, 77.59]           stating that fog alone should not trigger deceleration before
+       Traffic Rule Adherence     86.29   [85.75, 86.82]           ego speed and nearby hazards are verified. Together these
+       Scene Awareness            84.06   [83.55, 84.56]
+       Relevance                  77.38   [76.66, 78.08]
+                                                                   cases show retrieved experience selecting task-appropriate
+       Missing Details            76.39   [75.67, 77.11]           evidence and tool observations grounding the answer in
+       Faithfulness-Step          74.56   [73.99, 75.13]           geometric and state evidence rather than appearance-based
+       Informativeness-Step       85.53   [85.13, 85.94]           guesses, although the metric estimates remain approximate.
+       Repetition-Token           96.71   [96.49, 96.92]
+       Hallucination              76.72   [75.99, 77.42]                                F    Limitations
+       Semantic Coverage-Step     61.26   [60.50, 62.06]
+       Commonsense Reasoning      85.46   [84.97, 85.97]
+                                                                   End-to-end median latency is approximately 35 s per query,
+       Missing Step               79.13   [78.51, 79.77]           dominated by language-model decoding rather than tool ex-
+                                                                   ecution; the framework is therefore suited to offline scene
+Table 14: Bootstrap 95% confidence intervals on                    understanding, data annotation, and simulation-based eval-
+DriveLMM-o1 (10,000 resamples over the 2,391 MCQ or                uation rather than to a real-time driving stack, and we use
+4,634 full-split questions).                                       driving benchmarks as a demanding testbed for grounded
+                                                                   multi-step reasoning rather than as a claim of vehicle readi-
+                                                                   ness. As analysed in Appendix B.3, the reinforcement stage
+                                                                   optimizes multiple-choice correctness, so descriptive quality
+   The advantage in answer accuracy is robust: the strongest
+                                                                   improves through supervised fine-tuning but receives no di-
+published baseline reaches 71.35 MCQ, far outside the in-
+                                                                   rect reinforcement signal. Inference is deterministic, but the
+terval under convention. The advantage in reasoning score
+                                                                   pipeline was trained once: the intervals in Table 14 capture
+is not: the strongest baseline reaches 79.68, which falls in-
+                                                                   test-set sampling variability, not variability across indepen-
+side our interval [79.46, 80.57]. We therefore claim a clear
+                                                                   dent training runs, and the reinforcement stage is not bit-
+improvement in answer accuracy and parity in overall rea-
+                                                                   reproducible even under a fixed trainer seed. Finally, offline
+soning score. This is consistent with the shape of Table 1,
+                                                                   consolidation improves accuracy for nine generations and
+where our model leads on Rule Adherence and Scene Aware-
+                                                                   then declines, indicating saturation of the store; we observe
+ness while conceding the descriptive dimensions, and with
+                                                                   this on a single consolidation trajectory and do not character-
+the reward design of Appendix B.3: the reinforcement stage
+                                                                   ize its variance or asymptote. Improving retrieval reliability
+optimizes answer correctness on multiple-choice items and
+                                                                   and belief-conflict resolution are the natural next steps.
+does not directly reward descriptive completeness. Semantic
+Coverage-Step (61.26) is our lowest dimension by over 13
+points, reflecting that the reasoning loop stops as soon as
+the evidence needed to discriminate among options has been
+gathered, which is efficient for answer accuracy but leaves
+reference reasoning steps uncovered.
+
+E.3    Other Qualitative Results
+Figures 6 and 7 extend this comparison with six further
+cases. On STRIDE-QA, the baseline estimates metric dis-
+tances from image perspective and returns 5 m and 18 m for
+references of 13.26 m and 7.57 m, whereas grounding the
+referent and querying camera-frame 3D localization gives
+13.9 m and 8.8 m. The DriveMLLM cases show that the re-
+trieved entry constrains which evidence is admissible rather
+than merely whether a tool is called: a pairwise-distance
+question retrieves a ground-then-measure procedure and re-
+covers 22.3 m against a 27.05 m reference, while a relative-
+position question retrieves a strategy that explicitly rules out
+depth reasoning, and comparing horizontal image coordi-
+nates (1412.7 against 997.3) identifies the correct object
+where the baseline’s depth-based reasoning inverts it. Un-
+der the corrupted DriveBench scenes the baseline reacts to
+degraded imagery alone, recommending deceleration under
+watersplash and pulling over under fog, whereas our method
+verifies the ego state (2.89 m/s, no collision prior) and the
+forward corridor before maintaining speed, and in the fog
+                                       STRIDE-QA                                                                                            DriveBench                                                                                       DriveMLLM
+
+
+
+
+          Question: Can you give me an estimation of the distance between Region [1] and                                                                                                                     Question: Object A = the red car; Object B = the white truck. Which object is
+          Region [2]?                                                                                         Question:In this foggy scenario, what are safe actions to take for the ego vehicle?            positioned further to the right?
+          Ground Truth: They are 7.57 meters apart.                                                           Ground Truth: Keep going at the same speed                                                     Ground Truth: A — the red car.
+
+            Qwen3-VL-32B                                                                                                                                                                                    Qwen3-VL-32B
+                                                                                                               Qwen3-VL-32B
+                                                                                                                                                                                                       Recognizes the red car in the right foreground and the white truck farther down the road.
+   Recognizes the truck and car regions, estimates their distance through visual intuition and                                                                                                         Despite the white truck being further away, it is still positioned further to the right
+   road-width assumptions. The model approximates the distance as 18 meters.                            Recommend reducing speed, using low-beam headlights and pulling over if visibility
+                                                                                                        worsens.                                                                                       compared to the red car when considering their relative positions in the image.
+   Final Answer : 18 m                                                                                                                                                                                 Final Answer : B
+                                                                                                        Final Answer : Reduce speed, use low beams, pull over if visibility worsens.
+
+            Ours                                                                                                Ours                                                                                           Ours
+    Step1                            Query Hierarchical Memory                                          Step1                             Query Hierarchical Memory                                    Step1                            Query Hierarchical Memory
+
+                                                                                                                                                                                                                       STM: The ego vehicle is traveling along a narrow urban road. The red car
+                     STM: Truck travels ahead in the middle lane. The black taxi is positioned                          STM: The ego vehicle is moving straight through a foggy urban road with a                      occupies the immediate right foreground near the curb, while the white
+                     to the rear of the truck. A sedan lies further to the right within the roadside                    speed increase and only a small heading change, indicating an accelerating                     truck remains farther ahead near the center-right portion of the roadway.
+                     median area.                                                                                       but nearly straight trajectory. A pedestrian moves toward the ego vehicle.                     Retrieved LTM: For relative left–right position questions, first ground
+                     Retrieved LTM: For pairwise-distance questions, first ground the queried                           Retrieved LTM: Querying nearby object detections to verify whether an                          each referred object and select the correct instances among same-class
+                     objects with OVD tool and then measure depth with MDE tool.                                        immediate hazard requires braking or yielding.                                                 candidates. Then compare their horizontal image coordinates rather than
+                                                                                                                                                                                                                       relying on depth or apparent object scale.
+    Step2                            Open-Vocabulary Grounding                                          Step2                             Ego State Estimation                                         Step2                            Open-Vocabulary Grounding
+                    Open-vocab detector tool returns truck in the center lane bbox=[1545.4,                              Ego-state tool reports forward motion at about 5.06 m/s with near-zero
+                    642.2, 1851.5, 965.0], car on the right bbox=[2453.2, 841.3, 2830.6, 994.0]                                                                                                                        Open-vocab detector tool returns Red car: bbox = [1225.7, 486.7, 1599.6,
+                                                                                                                         acceleration and small steering.
+                                                                                                                                                                                                                       729.6], White truck: bbox = [952.6, 465.6, 1042.1, 521.4].
+
+    Step3                          3D Distance Measurement                                              Step3                             Pedestrian Detection                                         Step3                          Relative Position Comparison
+                       Truck: xyz=[2.54, -0.67, 22.64] m , Car: xyz=[8.63, 0.23, 16.33] m.                              Front detection identifies a pedestrian at relative position (−3.78,6.45) m.
+                       Horizontal distance ~= 6.1 m, Straight-line 3D distance ~= 8.8 m.                                                                                                                               The red car has horizontal center coordinate x≈1412.7, the white truck has
+                                                                                                                        Final Answer : Maintain current speed but be prepared to                                       x≈997.3.Since 1412.7>997.3, the red car is farther to the right.
+                       Final Answer : 8.8m                                                                              reduce speed since the foggy conditions and pedestrian presence                                Final Answer: Object A is further to the right.
+    Step4                            Sleep-Time Consolidation                                           Step4                            Sleep-Time Consolidation                                      Step4                            Sleep-Time Consolidation
+                    Increases the utility weight of the retrieved strategy that combines open-                          Add a new experience: do not decelerate solely because of fog. First verify
+                    vocabulary grounding with monocular metric estimation for far-range                                                                                                                                Increases the utility weight of the retrieved object-grounding and horizontal-
+                                                                                                                        ego speed and nearby hazards; if the path remains clear, maintain a moderate                   coordinate comparison strategy for relative-position tasks.
+                    pairwise distance tasks.                                                                            speed while preparing to slow down.
+
+
+
+
+Figure 6: Additional qualitative comparison with Qwen3-VL-32B on STRIDE-QA, DriveBench, and DriveMLLM. Each case
+shows the retrieved short- and long-term memory, the executed tool actions with their returned observations, the final answer,
+and the offline consolidation update.
+
+                                       STRIDE-QA                                                                                            DriveBench                                                                                       DriveMLLM
+
+
+
+
+          Question: Can you tell me the vertical distance between the ego vehicle and Region                  Question:What actions could the ego vehicle take based on <c1,                                   Question: Object A = the white truck; Object B = the yellow rigid bus. What is the
+          [0]?                                                                                                CAM_BACK_RIGHT, 0.4146, 0.7509> considering the watersplash corruption? Why                      horizontal distance, in meters, between Object A and Object B ?
+          Ground Truth: The ego vehicle and Region [0] are 13.26 meters apart vertically.                     take this action and what’s the probability?                                                     Ground Truth: 27.05 m
+                                                                                                              Ground Truth: The action is to keep going at the same speed. The reason is to avoid
+                                                                                                              a collision, which has a high probability.
+            Qwen3-VL-32B                                                                                                                                                                                        Qwen3-VL-32B
+   The model infers the ego vehicle position from the camera viewpoint and estimates the
+                                                                                                             Qwen3-VL-32B                                                                               White truck is ocated on the left side of the image, near the edge of the road. Yellow rigid
+   vertical distance to Region [0] using relative image location and scene perspective. Without        The road is wet, and another vehicle is visible behind the ego vehicle. Reduced visibility       bus is located further back in the image, closer to the center. The horizontal distance is
+   explicit spatial measurements, it approximates the distance as 5 meters.                            and longer braking distances require a defensive response. So ego should slow down.              approximately 12.5m.
+   Final Answer : 5 m                                                                                  Final Answer : Slow down, with a high probability of approximately 80%..                         Final Answer : 12.5 m
+
+            Ours                                                                                                Ours                                                                                            Ours
+    Step1                            Query Hierarchical Memory                                                                                                                                          Step1                             Query Hierarchical Memory
+                                                                                                       Step1                             Query Hierarchical Memory
+                                                                                                                                                                                                                         STM: The ego vehicle is approaching an urban intersection. The white
+                    STM: The ego is heading into an intersection, a light truck travels on the
+                                                                                                                        STM: The ego vehicle moves nearly straight through a rainy construction                          truck remains near the construction barriers on the far left with little
+                    opposite side of the intersection, on the ego vehicle’s right front.
+                                                                                                                        zone and accelerates. No dynamic agent directly enters the forward path.                         displacement, while the yellow rigid bus continues farther ahead along the
+                    Retrieved LTM: Retrieves the strategy for camera-distance estimation:
+                                                                                                                        Retrieved LTM: Check the current ego state and future collision prior                            right side of the road.
+                    first localize the queried object, then obtain metric 3D location with spatial
+                                                                                                                        before changing speed or direction..                                                             Retrieved LTM: For pairwise horizontal-distance questions, first ground
+                    tools.
+                                                                                                                                                                                                                         both queried objects with OVD and then measure depth with MDE tool.
+
+    Step2                            Open-Vocabulary Grounding                                         Step2                             Ego State Estimation
+                                                                                                                                                                                                        Step2                             Open-Vocabulary Grounding
+                                                                                                                       Ego-state tool reports forward speed ≈ 2.89 m/s, mild acceleration, small
+                    Open-vocab detector tool returns Truck bbox= [1516.2, 749.3, 2112.8,                               steering, and a FORWARD mission. The future-prior tool returns no available                       Open-vocab detector tool returns White truck:bbox = [133.3, 522.7, 342.4,
+                    1077.5].                                                                                           collision prediction.                                                                             594.8], Yellow rigid bus:bbox = [927.6, 515.3, 1031.6, 550.6],
+
+    Step3                          3D Distance Measurement                                              Step3                                  Conclude                                                 Step3                           3D Distance Measurement
+
+                    Estimates the metric camera-frame location of the truck:Box truck: (x=2.8,                         Avoid abrupt braking or lane changes; maintain a steady speed while                                  White truck:xyz = [-14.94, 2.29, 34.74] m, Yellow rigid bus:xyz = [7.39,
+                    y≈0, z=13.9) m. Forward depth: 13.9 m .(straight-line distance ≈ 14.1m)                            monitoring possible hidden hazards.                                                                  2.74, 67.59] m, Horizontal distance:∣7.39−(−14.94)∣≈22.3 m
+                    Final Answer: 13.9 m                                                                               Final Answer : Maintain current speed with high probability .                                        Final Answer : 22.3m
+
+    Step4                            Sleep-Time Consolidation                                           Step4                            Sleep-Time Consolidation                                       Step4                             Sleep-Time Consolidation
+                                                                                                                        Increases the utility weight of the retrieved far-range distance-estimation                     Increases the utility weight of the retrieved strategy that combines open-
+                    Increases the utility weight of the retrieved metric distance estimation
+                                                                                                                        strategy for pair-wise 3D                                                                       vocabulary grounding with monocular metric estimation for far-range
+                    strategy for ego-agent distance measurement task.
+                                                                                                                        measurement tasks.                                                                              pairwise distance tasks.
+
+
+
+
+                                                                                    Figure 7: Further qualitative comparison in the same format.
+

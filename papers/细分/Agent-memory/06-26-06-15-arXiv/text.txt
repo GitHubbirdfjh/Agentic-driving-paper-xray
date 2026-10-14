@@ -1,0 +1,1357 @@
+                                                     DriveJudge: Rethinking Autonomous Driving
+                                                      Evaluation with Vision-Language Models
+
+
+                                                Xinglong Sun∗          Kevin Xie          Jenny Schmalfuss               Despoina Paschalidou
+
+                                                Xiuming Zhang              Sanja Fidler           Kashyap Chitta†               Jose M. Alvarez
+arXiv:2606.17362v1 [cs.CV] 15 Jun 2026
+
+
+
+
+                                                                                          NVIDIA
+
+
+
+
+                                         Figure 1: Comparison of evaluation paradigms. We address limitations of existing classical and
+                                         VLM-based metrics with DriveJudge which is a VLM-guided, rule-grounded evaluation paradigm. It
+                                         selectively invokes rules based on scene context, enabling explicit, expert-free, context-aware, and
+                                         interpretable driving assessment. In the example, DriveJudge ignores lane keeping (LK) to nudge.
+                                                                                          Abstract
+                                                     Autonomous driving has shifted towards end-to-end policy learning, where reli-
+                                                     able, interpretable policy evaluation is a fundamental challenge as driving quality
+                                                     is highly context-dependent. Commonly used rule-based driving metrics like
+                                                     EPDMS [11] are interpretable but lack context-awareness, while recent VLM-
+                                                     based evaluations are context-aware but limited by ambiguous VLM outputs and
+                                                     weak physical grounding. To evaluate driving in a manner that is both interpretable
+                                                     and context-aware, we introduce DriveJudge. DriveJudge is a driving evaluation
+                                                     agent that combines rule-grounded evaluation with Vision-Language Model (VLM)
+                                                     reasoning and selectively invokes physically-grounded deterministic rule functions
+                                                     after interpreting the environmental context. To train and evaluate DriveJudge, we
+                                                     curate a large-scale dataset of 33,577 challenging driving samples with human an-
+                                                     notations on whether the driving behavior is reasonable in the given scenario. With
+                                                     this dataset, we address the underexplored problem of driving metric evaluation,
+                                                     and introduce two human-aligned benchmark tasks: Driving Quality Classification
+                                                     and Trajectory Preference Selection. DriveJudge outperforms EPDMS for driving
+                                                     quality classification by 21.23 AUC, and the recent VLM-based DriveCritic for
+                                                     trajectory preference selection by 6.5%, setting a new standard for interpretable
+                                                     and precise driving evaluation.
+                                            ∗ Primary contact: xinglongs@nvidia.com       † Work done at NVIDIA, currently affiliated with KE:SAI.
+
+
+
+                                         Preprint.
+1   Introduction
+
+Autonomous driving has increasingly shifted towards end-to-end policy learning [27, 28, 53, 29, 30,
+54, 32, 59, 16, 8], which already achieves strong performance on the abundance of nominal driving
+scenarios [4, 11, 38]. The next critical challenge for improving policies lies in the long tail, which
+entails non-nominal rare events and complex interactions [23, 51, 3, 41, 7]. Problematically, policy
+evaluations themselves are underdeveloped for long-tail scenarios: Existing metrics often fail to
+faithfully capture driving quality in long-tail settings, where contextual understanding of maneuvers
+is essential [1, 6, 15, 45]. Meaningful progress in autonomous driving ultimately depends on reliable
+driving quality assessment, which is hindered by a current lack of long-tail-ready driving metrics.
+Existing driving metrics can be broadly categorized into imitation-based metrics [51] and rule-based
+metrics [11, 13, 26, 18, 37]. Imitation-based metrics, such as Average/Final Displacement Error
+(ADE/FDE), evaluate trajectories by measuring similarity to expert demonstrations. Assuming a
+fixed correct solution makes them simple and scalable, but ignores that expert trajectories may be
+suboptimal or unavailable, and overlooks the inherently multi-modal nature of driving.
+Rule-based metrics, such as Extended Predictive Driver Model Score (EPDMS) [11, 5], assess
+driving quality through explicitly computed rules. Because they provide transparent, reproducible,
+and fine-grained evaluation across dimensions like collision avoidance and lane compliance, rule-
+based metrics are the dominant paradigm for driving evaluation in both open-loop and closed-loop
+settings [11, 13, 26, 18, 37].
+However, predefined rules are inherently context-agnostic. In long-tail scenarios, driving quality
+is often highly situational: Nudging around obstacles to maintain progress may require temporary
+relaxation of lane-keeping constraints. Without contextual understanding, rule-based metrics can
+over-penalize such reasonable behaviors and produce misaligned evaluations.
+To address the missing context awareness of existing driving metrics, we introduce DriveJudge, a
+VLM-guided and rule-grounded evaluation agent for autonomous driving (Figure 1). DriveJudge
+formulates driving evaluation as an agentic decision-making process, where a VLM interprets the
+scene context and selectively invokes deterministic rule functions, such as collision checks and
+lane deviation analysis. This design bridges semantic reasoning and rule-based evaluation: the
+VLM provides contextual understanding and tool selection, while rule functions preserve the spatial
+precision and physical grounding required for reliable safety assessment.
+DriveJudge differs fundamentally from existing VLM-based critic methods across autonomous
+driving, robotics, and other decision-making domains [45, 15, 22, 31, 48, 55, 14, 49, 20, 50, 21, 56,
+2, 57], which mainly rely on either preference-based comparison or direct score prediction. Both
+paradigms depend on VLM-only judgments, making it difficult to explicitly decompose and interpret
+multiple driving aspects (e.g., safety, comfort, and progress), while also remaining unreliable for
+fine-grained safety assessment due to limited spatial precision [11, 46, 36, 25, 42, 17]. In contrast,
+DriveJudge introduces VLM-guided tool invocation, combining contextual VLM reasoning with
+rule-grounded execution for context-aware, interpretable, and physically grounded driving evaluation.
+To compare DriveJudge against baseline metrics, we argue that evaluating a driving metric itself is
+an underexplored problem, and propose two downstream benchmarks for metric evaluation (Sec 3):
+Driving Quality Classification following [14] and Trajectory Preference Selection following [45, 21,
+2]. To create these benchmarks, and train and validate DriveJudge, we curate a large-scale dataset
+of 33,577 long-tail driving samples (Sec 4.2), where reasonable driving may require temporarily
+relaxing certain rule constraints. Our data focus on cases where human driving itself violates
+or underperforms on specific rule-based metrics, paired with human annotations on whether the
+behavior remains ultimately reasonable. To further improve DriveJudge (Sec 4.3), we develop a
+post-training pipeline combining supervised fine-tuning (SFT) and reinforcement learning (RL) to
+strengthen contextual reasoning and rule invocation. Experiments show that DriveJudge significantly
+outperforms prior state-of-the-art driving metrics, improving driving quality classification by 21.23
+AUC over EPDMS [11] and human preference alignment by 6.5 accuracy over DriveCritic [45],
+despite DriveCritic being a true preference model. In summary, our contributions are as follows:
+
+       • We propose DriveJudge, a context-aware driving evaluation agent combining VLM-based
+         reasoning with rule-grounded evaluation, enabling context-sensitive assessment of driving.
+
+
+                                                  2
+       • We curate and release a large-scale driving dataset with human annotations on complex driv-
+         ing maneuvers, labeling whether the observed behavior is ultimately reasonable. This dataset
+         enables the study of driving evaluation and may benefit broader downstream applications.
+       • We formulate the underexplored problem of evaluating driving metrics and introduce two
+         benchmark tasks—Driving Quality Classification and Trajectory Preference Selection—to
+         validate metrics, and show DriveJudge significantly outperforms existing driving metrics.
+       • We benchmark state-of-the-art driving policies under DriveJudge, revealing stronger driving
+         capability than conventional metrics suggest and signs of benchmark saturation, highlighting
+         the need for future research beyond incremental rule-based metric optimization.
+
+2   Related Work
+Driving Evaluation Metrics. Driving evaluation has received far less attention than model and data
+development, and existing methods mainly fall into two categories: imitation-based and rule-based
+metrics. Imitation-based metrics, such as ADE/FDE and Waymo’s RFS [51], measure similarity to
+expert trajectories, assuming a fixed correct solution and relying heavily on demonstration quality,
+which limits reliability under multi-modal or imperfect human behaviors. As a result, the field has
+shifted toward rule-based metrics. In closed-loop settings [13, 37, 26, 18], these typically take the
+form of infraction scores. More recently, open-loop benchmarks such as NAVSIM and NAVSIM
+v2 have established PDMS and EPDMS as widely adopted interpretable and physically grounded
+driving metrics [11, 5].
+However, rule-based metrics remain context-agnostic: in long-tail scenarios, reasonable driving
+may require relaxing certain rules (e.g., nudging around obstacles), leading to over-penalization.
+DriveJudge addresses this limitation by introducing a context-aware evaluation framework that uses
+VLMs to reason about rule applicability.
+
+Evaluating an Evaluation Metric. To validate DriveJudge, a key challenge is to rigorously
+evaluate metric quality. We survey strategies across autonomous driving and other fields, including
+robotics [22, 31, 14, 48], reconstruction [21], and more [2], and identify four common paradigms.
+(1) Action Preference Selection [45, 50, 31, 21, 2]: a metric should assign higher scores to human-
+preferred actions, typically evaluated in pairwise settings. (2) Deployment Performance [22]: using
+the metric as a reward or model selection criterion should improve real-world performance, though
+this is often costly and impractical in autonomous driving. (3) Closed-loop Alignment [11, 5]:
+stronger open-loop metrics should correlate with closed-loop performance, though closed-loop
+metrics themselves may be imperfect. (4) Action Quality Classification [14]: the metric should
+distinguish reasonable actions from failures.
+Given the limitations of (2)–(3), we adopt (1) Action Preference Selection and (4) Action Quality
+Classification, which provide direct, scalable, and reliable measures of quality of driving metric.
+
+VLM-based Critic and Judge Models. Recent work explores Vision-Language Models (VLMs)
+as critics for policy evaluation, which mainly fall into two paradigms. The first is preference-based
+models [45, 50, 21, 31, 2], where VLMs select the better action among candidates. While effective
+for relative ranking, they do not produce explicit quality scores, limiting usage as standalone metrics
+or reward functions over larger candidate sets. The second is direct scoring [22, 57, 48, 56], where
+VLMs directly predict scalar scores or textual feedback for evaluating actions.
+Despite their promise, both paradigms share two key limitations. First, autonomous driving is
+inherently multi-objective [11], requiring joint assessment of safety, progress, comfort, and rule
+compliance, making VLM-only judgments ambiguous and less interpretable. Second, VLMs remain
+limited in spatial precision [46, 36, 25, 17], making direct fine-grained safety assessment unreliable.
+In contrast, DriveJudge introduces a third paradigm: VLM-guided tool invocation, where VLMs
+first understand the context then perform contextual reasoning to select evaluation tools, while
+deterministic rule functions provide spatially precise and physically grounded assessment.
+
+VLM Post-Finetuning Adapting Vision-Language Models (VLMs) to specialized domains typi-
+cally relies on a two-stage post-training pipeline consisting of supervised fine-tuning (SFT) [40, 47, 9,
+
+
+                                                   3
+33] followed by reinforcement learning (RL) [43, 12, 35, 34]. SFT aligns the model with task-specific
+formats, reasoning patterns, and domain knowledge, while RL further optimizes objectives that are
+difficult to supervise directly, such as preference alignment and decision-making quality. In this work,
+we adopt this paradigm to improve DriveJudge for context-aware rule invocation and human-aligned
+driving evaluation. Specifically, we employ GRPO [12] during the RL stage due to its strong sample
+efficiency and effectiveness for preference-based optimization over multiple candidate rollouts.
+
+3     How to Evaluate a Driving Metric?
+Following evaluation paradigms in related fields (Sec. 2), a good metric should align with human
+judgment. We therefore propose to evaluate driving metric via two human-aligned downstream tasks.
+
+3.1   Driving Quality Classification
+
+First, following [14], a good driving metric should distinguish reasonable from unreasonable driving,
+assigning high scores to human-approved behaviors and low scores to failures. Similar strategies
+have been used to evaluate VLM-based critics in robotics [14]. Given a binary label y ∈ {0, 1} and a
+metric score S ∈ [0, 1], we classify a behavior as reasonable if S > τ :
+                                              
+                                                1, Si > τ
+                                        ŷi =                                                     (1)
+                                                0, otherwise.
+The Driving Quality Classification accuracy is:
+                                                       N
+                                                  1 X
+                                   ACCDQC =             1[ŷi = yi ].                               (2)
+                                                  N i=1
+
+Since accuracy depends on τ , we report ACCDQC across multiple thresholds. To provide threshold-
+independent evaluation, we also report AUC and average precision: AUC(S, y), AP+ (S, y).
+To emphasize safety-critical failure detection, we additionally report: AP− (1 − S, 1 − y), which
+measures average precision on detecting failures. We evaluate on a validation split of 1083 samples
+from the DriveJudge dataset(Sec 4.2), with human annotations as ground-truth labels.
+
+3.2   Trajectory Preference Selection
+
+Second, a good driving metric should align with human preference when comparing candidate actions.
+Given two trajectories trajA and trajB with human preference label y ∈ {A, B}, the metric should
+assign a higher score to the preferred trajectory. Similar protocols have been used in robotics, 3D
+reconstruction, and physical decision-making [31, 21, 50]. The evaluation accuracy is defined as:
+                                            N
+                                        1 X
+                           ACCTPS =         1[arg max(SiA , SiB ) = yi ].                           (3)
+                                        N i
+
+We evaluate on the DriveCritic [45] validation set for NAVSIM [11] with pairwise trajectory prefer-
+ences annotated by GPT-4 [39] and verified by humans. Ambiguous cases without clear preference
+are further removed by us, resulting in 862 samples (see details in Appendix B.3).
+
+4     DriveJudge
+We propose DriveJudge, a context-aware driving evaluation agent that leverages VLM reasoning to
+interpret scene context and selectively invoke rule-grounded evaluation functions.
+
+4.1   DriveJudge Score via Context-Aware Rule Invocation
+
+DriveJudge formulates driving evaluation as an agentic process, where a VLM interprets scene context
+and selectively invokes rule-based functions for physically grounded and spatially precise assessment
+
+
+                                                   4
+Figure 2: DriveJudge Framework. DriveJudge leverages a VLM to determine metric relevance
+under scene context, selectively invokes the relevant rules, and aggregates their outputs into a context-
+aware driving quality score.
+
+
+
+
+Figure 3: DriveJudge Dataset. The DriveJudge dataset contains diverse challenging driving scenarios,
+including reasonable behaviors that may deviate from conventional driving rules, as well as fine-
+grained driving failure cases.
+
+
+(Fig. 2). Let M = {f 1 , f 2 , . . . , f M } denote a set of rule-based evaluation functions, where each
+rule evaluates a driving quality dimension (e.g., safety, progress, etc.) to produce a compliance score:
+                                     sm = f m (·),       sm ∈ [0, 1].                                (4)
+Conventional rule-based driving metrics [11, 5] aggregate all rule scores sm into a weighted composite
+score that implicitly assumes equal rule relevance in every driving scenario, where wm is the weight:
+                                                        wim sm
+                                               P
+                                                              i
+                                      Si = m∈M
+                                        conv      P       m     .                                  (5)
+                                                     m wi
+
+We argue that rule relevance is inherently context-dependent. For instance, in nudging scenarios,
+temporarily relaxing lane-keeping constraints may be necessary for safe obstacle avoidance and
+maintaining progress. To address this, DriveJudge dynamically determines which rules should
+contribute to evaluation based on scene context. Specifically, DriveJudge predicts a gating vector ĝi ,
+
+
+                                                     5
+where each gating variable ĝim ∈ [0, 1] indicates the relevance of rule f m for driving state Xi :
+                                        ĝi = ΘDJ (Xi , prompt),                                       (6)
+where ΘDJ denotes the DriveJudge agent, and we show the prompt details in Appendix A.1. Given a
+predicted trajectory t̂i , the selected rules are evaluated as:
+                                           sm    m
+                                            i = f (Xi , t̂i ).                                         (7)
+The final DriveJudge driving score is computed by:
+                                                    m m m
+                                           P
+                                      DJ      m∈M ĝi w si
+                                    Si = P            m m                                              (8)
+                                               m∈M ĝi w
+DriveJudge is agnostic to the choice of rule set, as long as it captures the core aspects of driving. In
+this work, we instantiate M using EPDMS [11], with rule functions including safety (NC, TTC),
+lane compliance (LK, DAC, DDC), progress (EP), and comfort.
+For input, each driving state Xi consists of camera observations and perception labels (e.g., object
+boxes and lane maps), where the latter are rendered as bird eye’s view (BEV) visualizations and
+provided to the VLM together with camera images as multi-modal input.
+To train and validate DriveJudge, we introduce a curated driving evaluation dataset next.
+
+4.2   DriveJudge Dataset
+
+Long-tail and complex driving scenarios are critical for evaluating autonomous systems and studying
+driving metrics, but yet remain underrepresented in existing benchmarks [38, 11, 5], which largely
+focus on nominal driving. Therefore, we curate a dataset from the publicly available PhysicalAI-
+Autonomous-Vehicles dataset [38], which contains over 300,000 driving clips of 20 seconds long.
+To identify informative samples for metric learning, we compute rule-based metric scores on human
+trajectories using the EPDM [11] metric suite and mine challenging segments where human driving
+receives low rule-based scores, capturing ambiguous and context-dependent behaviors. Human
+annotators are then asked a binary question: Does the driving behavior follow reasonable driving
+practices under the current scene context? They also provide brief textual justifications for their
+decisions.
+In total, we label 10, 732 segments and extract 33, 577 standardized 2s windows, with 15.3% labeled
+as driving failures (Fig. 3). Those driving failures violate at least one of the five classes: lane keep,
+traffic rule adherence, ego progress, comfort or safety buffer. The dataset is split into training and a
+representative test set of 1, 083 samples with a higher failure ratio (23.3%). This dataset serves both
+as supervision for training DriveJudge and as a benchmark for evaluating driving metrics.
+
+4.3   DriveJudge Finetuning
+
+We further improve DriveJudge using a two-stage post-training pipeline of SFT followed by RL.
+
+Supervised Fine-Tuning (SFT) The SFT stage directly supervises DriveJudge on rule invocation
+decisions, teaching DriveJudge whether each evaluation rule should be invoked for a given driving
+clip. This provides an efficient way to improve the context-aware tool-calling ability of DriveJudge.
+To construct ground-truth rule invocation labels, we leverage the human annotations in the DriveJudge
+dataset. Each clip is annotated with a binary label yi ∈ {0, 1}, where yi = 1 indicates reasonable
+driving and yi = 0 indicates unreasonable driving. Our key intuition is that if a human trajectory is
+judged as reasonable but receives a low score under a rule function, that rule is likely irrelevant in the
+given context rather than indicating an actual failure. For example, in emergency stopping scenarios,
+metrics such as Ego Progress or Comfort may score poorly while the behavior remains reasonable.
+Formally, for each sample i, we first compute rule-based scores sm i on the human trajectory ti , from
+which we define the ground-truth rule invocation label gim :
+                                  sm     m
+                                    i = f (Pi , ti ), m ∈ M,                                           (9)
+                                          0, yi = 1 and sm    m
+                                        
+                                                         i <τ
+                                  gim =                                                               (10)
+                                          1, otherwise.
+
+
+                                                    6
+Table 1: Driving Quality Classification Performance. We report ACCDQC (Eq. 2) under multiple
+thresholds τ (Eq. 1), along with threshold-independent ranking metrics including AUC and Average
+Precision for reasonable (AP+ ) and unreasonable (AP− ) driving (Sec. 3). Across all settings,
+DriveJudge consistently outperforms strong baselines by a significant margin. Results are run twice.
+                                              Accuracy (ACCDQC )
+    Method                  Finetuning                                      AUC     AP−     AP+
+                                         τ = 0.7       τ = 0.8    τ = 0.9
+    Random                      ✗         50.00         50.00      50.00    50.00    23.3    76.7
+    ADE/FDE                     ✗          n/a           n/a        n/a      n/a      n/a     n/a
+    EPDMS [5]                   ✗         66.94         54.76      43.95    57.67   26.34   81.64
+    Gemini3.1 [10]              ✗         65.73         65.69      65.26    56.61   26.29   79.62
+    GPT-5.4 [39]                ✗         76.71         76.59      72.48    48.59   23.65   76.89
+    Supervised Classifier       ✓         77.01         73.59      33.51    58.39   33.28   80.49
+    DriveJudge-2B               ✓         80.97         83.28      83.74    77.95   58.31   89.83
+    DriveJudge-8B               ✓         80.89         83.47      84.03    78.90   59.04   90.77
+
+
+Here, τ m is the violation threshold for rule m. We select these thresholds to maximize alignment
+between rule-based outcomes and human judgments on the DriveJudge dataset (details in Sec. B.1).
+We then optimize DriveJudge with a supervised cross-entropy loss:
+                                             N X
+                                             X
+                                    LSFT =             CE(ĝim , gim ).                          (11)
+                                             i=1 m∈M
+
+Reinforcement Learning As discussed in Sec. 3, a strong driving metric should perform well on
+downstream tasks including driving quality classification and trajectory preference selection. Since
+SFT labels are derived from human driving quality annotations, we expect SFT alone to already
+provide strong performance on quality classification. We therefore introduce a reinforcement learning
+(RL) stage to further optimize DriveJudge for improving trajectory preference selection.
+For each preference sample i, two candidate trajectories trajA          B
+                                                              i and traji are paired with a human
+preference label yi ∈ {A, B}. DriveJudge evaluates both trajectories and produces driving scores
+SiA and SiB . The reward is defined by whether the metric ranking matches human preference:
+                                       1, arg max(SiA , SiB ) = yi ,
+                                     
+                                ri =                                                          (12)
+                                       0, otherwise.
+
+To optimize this objective, we adopt Group Relative Policy Optimization (GRPO) [12], which
+optimizes relative advantages over sampled rule-invocation rollouts. With |M| = 7 rules, the action
+space contains 128 possible invocation combinations; we use a rollout size of 8 for exploration.
+
+5     Experiments
+We evaluate DriveJudge under the validation protocol in Sec. 3 against existing driving metrics on
+two downstream tasks: Driving Quality Classification and Trajectory Preference Selection. We report
+quantitative and qualitative results, ablations on VLM-guided tool invocation, reinforcement learning,
+and scaling behaviors under varying SFT and RL data sizes, and further benchmark state-of-the-art
+policy models under DriveJudge. For implementation, we finetune Qwen-3 [52] (2B and 8B) using
+the VERL framework [44]. SFT trains models for 9,800 iterations with batch size 32 and learning
+rate 10−5 . RL optimizes models with GRPO for 340 iterations with batch size 32, rollout size 8,
+learning rate 10−6 , and KL coefficient 10−2 . All experiments ran on 8 NVIDIA A100 GPUs.
+
+Baselines We compare DriveJudge against a diverse set of strong baselines across both downstream
+tasks. These include imitation-based metrics (ADE/FDE) and the widely adopted rule-based metric
+EPDMS [5]. We further benchmark against general-purpose VLMs (GPT-5 [39], Gemini 3.1 [10])
+prompted for evaluation, as well as a trained non-VLM classifier (details in Sec A.2) to isolate the
+benefit of VLM-based reasoning. For trajectory preference selection, we additionally compare against
+DriveCritic [45], a recent learned critic explicitly and directly designed for preference selection.
+
+
+                                                   7
+(a) Direct scoring misses the lane-keeping violation         (b) Ego nudges into the opposite lane to avoid a con-
+during the left turn due to weak spatial precision. In       struction zone. While EPDMS heavily penalizes this
+contrast, DriveJudge invokes rule-based evaluation and       behavior, DriveJudge correctly recognizes the contex-
+assigns a more appropriate driving score of 0.70.            tual justification and assigns a driving score of 1.00.
+      Figure 4: Qualitative model comparisons on two representative clips from the test set.
+
+Table 2: Trajectory Preference Selection Per-                Figure 5: Qualitative comparison. Drive-
+formance. We report ACCTPS (Eq. 3) to com-                   Critic [45] fails due to weak spatial grounding,
+pare DriveJudge against strong baselines, includ-            while DriveJudge selects the correct trajectory.
+ing EPDMS and DriveCritic, which is an explicit
+preference model. DriveJudge consistently out-
+performs all baselines by a significant margin in
+selecting trajectories aligned with human prefer-
+ence. Results are the mean of two repetitions.
+
+  Method                  Finetuning    Accuracy                                                   Traj A           Traj B
+
+
+
+  Random                       ✗          50.00
+  ADE/FDE                      ✗          70.53                                                                                  DriveCritic
+
+  EPDMS [5]                    ✗          56.50                                                             Both trajectories satisfy LK = 1, but Trajectory B
+                                                                                                            achieves higher EP. Trajectory A remains close to the
+                                                                    Human Picks
+  GPT-5 [39]                   ✗          55.20                       Traj A                                ego with limited forward movement, while Trajectory
+                                                                                                            B progresses farther along an open lane with no
+                                                                                                            blocking vehicles. Therefore, Trajectory B is preferred
+  Gemini3.1 [10]               ✗          55.45                      DriveJudge
+                                                                       (Ours)
+                                                                                    DriveCritic
+                                                                                    Picks Traj B
+                                                                                                            for its larger progress.
+                                                                     Picks Traj A
+  Supervised Classifier        ✓          64.80                                                                                 Picks Traj B
+
+  DriveCritic [45]             ✓          76.33                                                                                  DriveJudge
+                                                                                                            This scenario reflects normal traffic conditions with a
+  DriveJudge-2B                ✓          80.63                                                             stop sign ahead, so all traffic rules should be strictly
+                                                                                                            enforced to ensure safe and compliant driving.
+  DriveJudge-8B                ✓          82.83                                                                    !! = #. %&          >       !" = #. &'
+
+                                                                                                                                Picks Traj A
+
+
+
+
+5.1   Driving Quality Classification
+
+Quantitative Analysis In Table 1, we compare Driving Quality Classification performance of
+DriveJudge with all baselines. Imitation-based metrics (ADE/FDE) are not applicable, as they treat
+human trajectories as ground truth and therefore cannot identify failures or suboptimal human driving.
+EPDMS [11] performs poorly (57.67 AUC, 26.34 AP− ) due to its rigid rule-based evaluation. Zero-
+shot VLMs (GPT [39], Gemini [10]) show promise and achieve higher thresholded accuracy, but
+remain weaker in AUC. A supervised non-VLM classifier improves to 58.39 AUC and 33.28 AP− ,
+validating the value of our curated dataset. DriveJudge performs best across all metrics. Our 8B
+model reaches 78.90 AUC and 59.04 AP− , outperforming EPDMS by +21.23 AUC and +32.70 AP− .
+The strong gain in AP− is particularly important for reliably detecting failure cases and highlights
+the effectiveness of contextual reasoning with rule-grounded evaluation.
+
+Qualitative Analysis. Figure 4 highlights representative failure modes of direct scoring VLMs and
+rule-based metrics. Direct scoring VLMs miss violations due to weak spatial fidelity, while rule-based
+metrics over-penalize contextually justified nudging. In contrast, DriveJudge combines contextual
+reasoning with rule-grounded evaluation, producing more accurate and robust assessments.
+
+
+                                                         8
+5.2   Trajectory Preference Selection
+
+Quantitative Analysis In Table 2, we compare Trajectory Preference Selection performance across
+all baselines. EPDMS performs poorly on this task (56.50%), reflecting the limitation of rigid
+rule-based metrics in aligning with human preferences. ADE/FDE achieves higher accuracy (70.53%)
+by leveraging trajectory similarity, but remains limited by reliance on potentially imperfect human
+demonstrations. Zero-shot VLMs (GPT-5, Gemini) show some promise but still underperform,
+indicating that contextual reasoning alone is insufficient without physical grounding.
+DriveJudge achieves the best performance, outperforming all baselines by a clear margin. Notably,
+it surpasses DriveCritic [45] (82.83% vs. 76.33%), despite DriveCritic being designed only for
+preference-based selection. We attribute this gap to our design: while both use VLMs for contextual
+reasoning, DriveJudge further incorporates rule-based tool invocation to ensure spatial and physical
+fidelity, which is critical for reliable trajectory evaluation.
+
+Qualitative Analysis Figure 5 shows a qualitative comparison between DriveCritic [45] and
+DriveJudge. Due to weak spatial understanding, DriveCritic makes factual errors: it incorrectly
+claims there is no blocking vehicle ahead, treats moving over for progress as appropriate, and assumes
+both trajectories satisfy lane keeping. These errors lead it to prefer Trajectory B, contradicting the
+human label. In contrast, DriveJudge grounds evaluation through explicit rule invocation, correctly
+identifies the traffic condition, and selects the human-preferred Trajectory A.
+
+5.3   Ablation Studies
+
+Effectiveness of VLM, Tool Invocation, and
+                                                   Table 3: Ablation on VLM reasoning, tool invoca-
+Post-Finetuning. Table 3 shows the contribu-
+                                                   tion, and finetuning.
+tion of three components: VLM reasoning, tool
+invocation, and post-finetuning. Tool invoca-         Method              VLM Tool FT AUC
+tion improves zero-shot performance (50.06 →          VLM-DirectScore       ✓      ✗     ✗ 50.06
+56.13 AUC), highlighting the need for explicit        DriveJudge-ZeroShot   ✓      ✓     ✗ 56.13
+rule-based evaluation of spatially precise proper-
+ties. Tasks such as collision detection and lane      Non-VLM               ✗      ✗     ✓ 58.39
+                                                      Non-VLM-Agent         ✗      ✓     ✓ 55.11
+compliance require accurate geometric reason-
+                                                      VLM-DirectScore-Ft    ✓      ✗     ✓ 68.67
+ing, which VLMs alone cannot reliably capture.        DriveJudge            ✓      ✓     ✓ 77.95
+Post-finetuning further amplifies this gap: Drive-
+Judge improves to 77.95 AUC, while direct scoring reaches only 68.67 AUC. Although finetuning
+enhances contextual reasoning, it cannot overcome the inherent spatial fidelity limitations of VLMs
+without grounded tool support. Finally, finetuned non-VLM variants underperform both VLM-based
+baselines, emphasizing the importance of VLM commonsense and contextual understanding. Overall,
+combining VLM reasoning with rule-grounded tool invocation is key to strong performance.
+
+Reinforcement Learning for Trajectory Preference Selection. In Fig. 6, we compare validation
+accuracy during RL optimization, starting from either an SFT-initialized model or a zero-shot model
+under identical settings. RL on top of SFT leads to large gains in validation accuracy (58.82%
+→ 80.63%). In contrast, starting from zero-shot yields nearly no change in accuracy (56.38% →
+56.50%), indicating minimal learning. This suggests RL alone is insufficient for effective exploration
+from a zero-shot initialization. SFT provides a critical warm start by grounding the model in task
+structure and reasoning, enabling RL to further refine preference-aligned decision making.
+
+Scaling Behavior Under Training Data Size. In Fig. 7, we study how SFT and RL scale with
+training data. All runs use identical training iterations and batch sizes, and RL is initialized from
+the same fully SFT-trained model to isolate the effect of data scale. SFT shows steady, near-linear
+improvement with increasing data, indicating strong scalability with more annotated supervision. In
+contrast, RL achieves large gains at small data sizes (e.g., 1/20 → 1/15), followed by diminishing
+returns as performance saturates. This aligns with prior observations: SFT benefits from data
+scale [19, 9], while RL is more sensitive to data quality [40, 58]. Notably, even limited high-quality
+preference data yields substantial improvements, highlighting the importance of data quality in
+RL-based post-training for driving evaluation.
+
+
+                                                  9
+                                                Trajectory Preference Selection                                                          Driving Quality Classification                                                                            Trajectory Preference Selection
+                                                 Zeroshot + RL vs. SFT + RL                                                                 SFT AUC vs. Data Size                                                                                    RL Accuracy vs. Data Size
+                                                                                  80.63%                                                                                                                                                                                                      1
+                          80         SFT + RL                                                                                                                                       1
+
+                                     Zero-shot + RL                                                                                                                                                               80
+
+
+
+
+Validation Accuracy (%)
+                                                                                                            75                                                                                                                                                 1/2
+
+
+
+
+                                                                                                                                                                                        Validation Accuracy (%)
+                                                                                                                                                                                                                                          1/5
+                          75                                                                                                                                                                                                                        1/3
+                                                                                                                                                                                                                  78
+
+
+
+
+                                                                                           Validation AUC
+                                                                                                            70
+                          70
+                                                                                                                                                    1/2
+                                                                                                                                                                                                                  76              1/10
+                                                                                                            65
+                          65                                                                                                             1/3                                                                               1/15
+                                                                                                                                1/5                                                                               74
+                                                                                                            60
+                          60       58.82%
+                                                                                                                         1/10
+                                   56.38%                                         56.50%                             1/15                                                                                         72
+                                                                                                            55
+                          55                                                                                     1/20                                                                                                  1/20
+                               0        50       100      150      200      250   300                            0          5000      10000     15000     20000     25000   30000                                      0            500         1000     1500     2000      2500    3000   3500
+                                                       RL Training Step                                                               SFT Training Data Size (# samples)                                                                          RL Training Data Size (# samples)
+
+
+
+
+Figure 6: Validation accuracy Figure 7: Scaling behavior under varying training data sizes.
+of Zero-shot+RL and SFT+RL Left: Supervised Finetuning (SFT). Right: Reinforcement Learn-
+using DriveJudge-2B.          ing (RL). All experiments use DriveJudge-2B.
+
+5.4                                 Benchmarking State-of-the-Art Policy Models
+
+To better understand modern autonomous driv- Table 4: Comparison of state-of-the-art planning
+ing policies under DriveJudge evaluation, we models on navtest [11] under DriveJudge.
+benchmark state-of-the-art planning models [27,
+53, 29]. Table 4 reports both EPDMS and Drive- Method                    EPDMS ↑ DriveJudge ↑
+Judge scores. DriveJudge consistently assigns     Hydra-MDP-8192 [27]      0.825       0.894
+higher scores across all models than EPDMS, Hydra-MDP-16384 [27]           0.848       0.912
+suggesting that rule-based metrics may under-
+                                                  DriveSuprim-R34 [53]     0.818       0.882
+value contextually reasonable behaviors and un- DriveSuprim-V2-99 [53]     0.847       0.906
+derestimate the capability of modern driving      DriveSuprim-ViT-L [53]   0.857       0.917
+policies. Meanwhile, the relatively small perfor-
+mance gaps among state-of-the-art models un- ZTRS-R34 [29]                 0.836       0.900
+der DriveJudge indicate that benchmarks such as   ZTRS-V2-99  [29]         0.854       0.911
+                                                  ZTRS-ViT-L [29]          0.865       0.924
+navtest [11] may be approaching saturation.
+
+6                                  Conclusion
+Limitations. A main limitation of this work is that we validate DriveJudge only in open-loop
+settings and do not conduct closed-loop experiments. Our current study focuses on open-loop metric
+quality. Also, an important future direction is to leverage DriveJudge as a reward function for
+policy optimization, where its context-aware and physically grounded metrics could provide richer
+supervision for training autonomous driving policies.
+
+Conclusion. We introduced DriveJudge, a context-aware driving evaluation agent that combines
+VLM reasoning with rule-grounded evaluation for autonomous driving. By selectively invoking
+evaluation rules based on scene context, DriveJudge enables interpretable, physically grounded, and
+human-aligned assessment of driving quality, particularly in long-tail scenarios where conventional
+metrics often fail. We further curated a large-scale benchmark for evaluating driving metrics and
+showed that DriveJudge consistently outperforms existing metrics on both driving quality classifica-
+tion and trajectory preference alignment. We hope this work advances the study of driving evaluation
+and provides a stronger foundation for future autonomous driving research.
+
+References
+                   [1] Ahmed Abouelazm, Jonas Michel, and J. Marius Zoellner. A review of reward functions for reinforcement
+                       learning in the context of autonomous driving, 2026.
+                   [2] Mohamed Aghzal, Xiang Yue, Erion Plaku, and Ziyu Yao. Evaluating vision-language models as evaluators
+                       in path planning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+                       pages 6886–6897, 2025.
+                   [3] Hassan Abu Alhaija, Jose Alvarez, Maciej Bala, Tiffany Cai, Tianshi Cao, Liz Cha, Joshua Chen, Mike
+                       Chen, Francesco Ferroni, Sanja Fidler, et al. Cosmos-transfer1: Conditional world generation with adaptive
+                       multimodal control. arXiv preprint arXiv:2503.14492, 2025.
+                   [4] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora, Venice Erin Liong, Qiang Xu, Anush Krishnan,
+                       Yu Pan, Giancarlo Baldan, and Oscar Beijbom. nuscenes: A multimodal dataset for autonomous driving.
+                       In CVPR, pages 11621–11631, 2020.
+
+
+                                                                                                                                               10
+ [5] Wei Cao, Marcel Hallgarten, Tianyu Li, Daniel Dauner, Xunjiang Gu, Caojun Wang, Yakov Miron, Marco
+     Aiello, Hongyang Li, Igor Gilitschenski, Boris Ivanovic, Marco Pavone, Andreas Geiger, and Kashyap
+     Chitta. Pseudo-simulation for autonomous driving. In Conference on Robot Learning (CoRL), 2025.
+
+ [6] Changhe Chen, Mozhgan Pourkeshavarz, and Amir Rasouli. Criteria: a new benchmarking paradigm for
+     evaluating trajectory prediction models for autonomous driving. In 2024 IEEE International Conference
+     on Robotics and Automation (ICRA), pages 8265–8271. IEEE, 2024.
+
+ [7] Kai Chen, Ruiyuan Gao, Lanqing Hong, Hang Xu, Xu Jia, Holger Caesar, Dengxin Dai, Bingbing Liu,
+     Dzmitry Tsishkou, Songcen Xu, et al. Eccv 2024 w-coda: 1st workshop on multimodal perception and
+     comprehension of corner cases in autonomous driving. arXiv preprint arXiv:2507.01735, 2025.
+
+ [8] Shaoyu Chen, Bo Jiang, Hao Gao, Bencheng Liao, Qing Xu, Qian Zhang, Chang Huang, Wenyu Liu, and
+     Xinggang Wang. Vadv2: End-to-end vectorized autonomous driving via probabilistic planning. arXiv
+     preprint arXiv:2402.13243, 2024.
+
+ [9] Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Yunxuan Li, Xuezhi
+     Wang, Mostafa Dehghani, Siddhartha Brahma, et al. Scaling instruction-finetuned language models.
+     Journal of Machine Learning Research, 25(70):1–53, 2024.
+
+[10] Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon,
+     Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier with ad-
+     vanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint
+     arXiv:2507.06261, 2025.
+
+[11] Daniel Dauner, Marcel Hallgarten, Tianyu Li, Xinshuo Weng, Zhiyu Huang, Zetong Yang, Hongyang
+     Li, Igor Gilitschenski, Boris Ivanovic, Marco Pavone, Andreas Geiger, and Kashyap Chitta. Navsim:
+     Data-driven non-reactive autonomous vehicle simulation and benchmarking. In NeurIPS, volume 37, pages
+     28706–28719, 2024.
+
+[12] DeepSeek-AI, Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang
+     Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, Damai Dai, Daya Guo, Dejian Yang, Deli Chen,
+     Dongjie Ji, Erhang Li, Fangyun Lin, Fucong Dai, Fuli Luo, Guangbo Hao, Guanting Chen, Guowei
+     Li, H. Zhang, Han Bao, Hanwei Xu, Haocheng Wang, Haowei Zhang, Honghui Ding, Huajian Xin,
+     Huazuo Gao, Hui Li, Hui Qu, J. L. Cai, Jian Liang, Jianzhong Guo, Jiaqi Ni, Jiashi Li, Jiawei Wang, Jin
+     Chen, Jingchang Chen, Jingyang Yuan, Junjie Qiu, Junlong Li, Junxiao Song, Kai Dong, Kai Hu, Kaige
+     Gao, Kang Guan, Kexin Huang, Kuai Yu, Lean Wang, Lecong Zhang, Lei Xu, Leyi Xia, Liang Zhao,
+     Litong Wang, Liyue Zhang, Meng Li, Miaojun Wang, Mingchuan Zhang, Minghua Zhang, Minghui Tang,
+     Mingming Li, Ning Tian, Panpan Huang, Peiyi Wang, Peng Zhang, Qiancheng Wang, Qihao Zhu, Qinyu
+     Chen, Qiushi Du, R. J. Chen, R. L. Jin, Ruiqi Ge, Ruisong Zhang, Ruizhe Pan, Runji Wang, Runxin
+     Xu, Ruoyu Zhang, Ruyi Chen, S. S. Li, Shanghao Lu, Shangyan Zhou, Shanhuang Chen, Shaoqing Wu,
+     Shengfeng Ye, Shengfeng Ye, Shirong Ma, Shiyu Wang, Shuang Zhou, Shuiping Yu, Shunfeng Zhou,
+     Shuting Pan, T. Wang, Tao Yun, Tian Pei, Tianyu Sun, W. L. Xiao, Wangding Zeng, Wanjia Zhao, Wei
+     An, Wen Liu, Wenfeng Liang, Wenjun Gao, Wenqin Yu, Wentao Zhang, X. Q. Li, Xiangyue Jin, Xianzu
+     Wang, Xiao Bi, Xiaodong Liu, Xiaohan Wang, Xiaojin Shen, Xiaokang Chen, Xiaokang Zhang, Xiaosha
+     Chen, Xiaotao Nie, Xiaowen Sun, Xiaoxiang Wang, Xin Cheng, Xin Liu, Xin Xie, Xingchao Liu, Xingkai
+     Yu, Xinnan Song, Xinxia Shan, Xinyi Zhou, Xinyu Yang, Xinyuan Li, Xuecheng Su, Xuheng Lin, Y. K.
+     Li, Y. Q. Wang, Y. X. Wei, Y. X. Zhu, Yang Zhang, Yanhong Xu, Yanhong Xu, Yanping Huang, Yao Li,
+     Yao Zhao, Yaofeng Sun, Yaohui Li, Yaohui Wang, Yi Yu, Yi Zheng, Yichao Zhang, Yifan Shi, Yiliang
+     Xiong, Ying He, Ying Tang, Yishi Piao, Yisong Wang, Yixuan Tan, Yiyang Ma, Yiyuan Liu, Yongqiang
+     Guo, Yu Wu, Yuan Ou, Yuchen Zhu, Yuduan Wang, Yue Gong, Yuheng Zou, Yujia He, Yukun Zha, Yunfan
+     Xiong, Yunxian Ma, Yuting Yan, Yuxiang Luo, Yuxiang You, Yuxuan Liu, Yuyang Zhou, Z. F. Wu, Z. Z.
+     Ren, Zehui Ren, Zhangli Sha, Zhe Fu, Zhean Xu, Zhen Huang, Zhen Zhang, Zhenda Xie, Zhengyan Zhang,
+     Zhewen Hao, Zhibin Gou, Zhicheng Ma, Zhigang Yan, Zhihong Shao, Zhipeng Xu, Zhiyu Wu, Zhongyu
+     Zhang, Zhuoshu Li, Zihui Gu, Zijia Zhu, Zijun Liu, Zilin Li, Ziwei Xie, Ziyang Song, Ziyi Gao, and
+     Zizheng Pan. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437, 2025.
+
+[13] Alexey Dosovitskiy, German Ros, Felipe Codevilla, Antonio Lopez, and Vladlen Koltun. Carla: An open
+     urban driving simulator. pages 1–16, 2017.
+
+[14] Lin Guan, Yifan Zhou, Denis Liu, Yantian Zha, Heni Ben Amor, and Subbarao Kambhampati. Task success
+     is not enough: Investigating the use of video-language models as behavior critics for catching undesirable
+     agent behaviors. arXiv preprint arXiv:2402.04210, 2024.
+
+[15] Ruiyang Hao, Bowen Jing, Haibao Yu, and Zaiqing Nie. Styledrive: Towards driving-style aware
+     benchmarking of end-to-end autonomous driving. In Proceedings of the AAAI Conference on Artificial
+     Intelligence, volume 40, pages 4627–4635, 2026.
+
+
+                                                      11
+[16] Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima, Xizhou Zhu, Siqi Chai, Senyao Du, Tianwei
+     Lin, Wenhai Wang, et al. Planning-oriented autonomous driving. In CVPR, pages 17853–17862, 2023.
+
+[17] Ting Huang, Zeyu Zhang, and Hao Tang. 3d-r1: Enhancing reasoning in 3d vlms for unified scene
+     understanding. arXiv preprint arXiv:2507.23478, 2025.
+
+[18] Xiaosong Jia, Zhenjie Yang, Qifeng Li, Zhiyuan Zhang, and Junchi Yan. Bench2drive: Towards multi-
+     ability benchmarking of closed-loop end-to-end autonomous driving. NeurIPS, 37:819–844, 2024.
+
+[19] Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child, Scott Gray,
+     Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language models. arXiv preprint
+     arXiv:2001.08361, 2020.
+
+[20] Pierre Krack, Tobias Jülg, Wolfram Burgard, and Florian Walter. Rewarding dino: Predicting dense rewards
+     with vision foundation models. arXiv preprint arXiv:2603.16978, 2026.
+
+[21] Jack Langerman, Denys Rozumnyi, Yuzhong Huang, and Dmytro Mishkin. Explaining human preferences
+     via metrics for structured 3d reconstruction. In Proceedings of the IEEE/CVF International Conference on
+     Computer Vision, pages 26944–26953, 2025.
+
+[22] Tony Lee, Andrew Wagenmaker, Karl Pertsch, Percy Liang, Sergey Levine, and Chelsea Finn. Roboreward:
+     General-purpose vision-language reward models for robotics. arXiv preprint arXiv:2601.00675, 2026.
+
+[23] Kaican Li, Kai Chen, Haoyu Wang, Lanqing Hong, Chaoqiang Ye, Jianhua Han, Yukuai Chen, Wei Zhang,
+     Chunjing Xu, Dit-Yan Yeung, et al. Coda: A real-world road corner case dataset for object detection in
+     autonomous driving. In European Conference on Computer Vision, pages 406–423. Springer, 2022.
+
+[24] Mingxin Li, Yanzhao Zhang, Dingkun Long, Keqin Chen, Sibo Song, Shuai Bai, Zhibo Yang, Pengjun Xie,
+     An Yang, Dayiheng Liu, Jingren Zhou, and Junyang Lin. Qwen3-vl-embedding and qwen3-vl-reranker: A
+     unified framework for state-of-the-art multimodal retrieval and ranking. 2026.
+
+[25] Peizheng Li, Zhenghao Zhang, David Holtz, Hang Yu, Yutong Yang, Yuzhi Lai, Rui Song, Andreas Geiger,
+     and Andreas Zell. Spacedrive: Infusing spatial awareness into vlm-based autonomous driving. arXiv
+     preprint arXiv:2512.10719, 2, 2025.
+
+[26] Quanyi Li, Zhenghao Peng, Lan Feng, Qihang Zhang, Zhenghai Xue, and Bolei Zhou. Metadrive:
+     Composing diverse driving scenarios for generalizable reinforcement learning. IEEE transactions on
+     pattern analysis and machine intelligence, 45(3):3461–3475, 2022.
+
+[27] Zhenxin Li, Kailin Li, Shihao Wang, Shiyi Lan, Zhiding Yu, Yishen Ji, Zhiqi Li, Ziyue Zhu, Jan Kautz,
+     Zuxuan Wu, et al. Hydra-mdp: End-to-end multimodal planning with multi-target hydra-distillation. arXiv
+     preprint arXiv:2406.06978, 2024.
+
+[28] Zhenxin Li, Shihao Wang, Shiyi Lan, Zhiding Yu, Zuxuan Wu, and Jose M. Alvarez. Hydra-next: Robust
+     closed-loop driving with open-loop training. In ICCV, pages 27305–27314, October 2025.
+
+[29] Zhenxin Li, Wenhao Yao, Zi Wang, Xinglong Sun, Jingde Chen, Nadine Chang, Maying Shen, Jingyu
+     Song, Zuxuan Wu, Shiyi Lan, et al. Ztrs: Zero-imitation end-to-end autonomous driving with trajectory
+     scoring. arXiv preprint arXiv:2510.24108, 2025.
+
+[30] Zhenxin Li, Wenhao Yao, Zi Wang, Xinglong Sun, Joshua Chen, Nadine Chang, Maying Shen, Zuxuan
+     Wu, Shiyi Lan, and Jose M. Alvarez. Generalized trajectory scoring for end-to-end multimodal planning.
+     arXiv preprint arXiv:2506.06664, 2025.
+
+[31] Anthony Liang, Yigit Korkmaz, Jiahui Zhang, Minyoung Hwang, Abrar Anwar, Sidhant Kaushik, Aditya
+     Shah, Alex S Huang, Luke Zettlemoyer, Dieter Fox, et al. Robometer: Scaling general-purpose robotic
+     reward models via trajectory comparisons. arXiv preprint arXiv:2603.02115, 2026.
+
+[32] Bencheng Liao, Shaoyu Chen, Haoran Yin, Bo Jiang, Cheng Wang, Sixu Yan, Xinbang Zhang, Xiangyu Li,
+     Ying Zhang, Qian Zhang, and Xinggang Wang. Diffusiondrive: Truncated diffusion model for end-to-end
+     autonomous driving. In CVPR, June 2025.
+
+[33] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural
+     information processing systems, 36:34892–34916, 2023.
+
+[34] Jiacai Liu, Chaojie Wang, Chris Yuhao Liu, Liang Zeng, Rui Yan, Yiwen Sun, and Yang Liu. Dapo:
+     Improving multi-step reasoning abilities of large language models with direct advantage-based policy
+     optimization. In The Thirty-ninth Annual Conference on Neural Information Processing Systems, 2025.
+
+
+                                                     12
+[35] Shih-Yang Liu, Xin Dong, Ximing Lu, Shizhe Diao, Peter Belcak, Mingjie Liu, Min-Hung Chen, Hongxu
+     Yin, Yu-Chiang Frank Wang, Kwang-Ting Cheng, et al. Gdpo: Group reward-decoupled normalization
+     policy optimization for multi-reward rl optimization. arXiv preprint arXiv:2601.05242, 2026.
+[36] Yuechen Luo, Fang Li, Shaoqing Xu, Yang Ji, Zehan Zhang, Bing Wang, Yuannan Shen, Jianwei Cui, Long
+     Chen, Guang Chen, et al. Last-vla: Thinking in latent spatio-temporal space for vision-language-action in
+     autonomous driving. arXiv preprint arXiv:2603.01928, 2026.
+[37] NVIDIA, Yulong Cao, Riccardo de Lutio, Sanja Fidler, Guillermo Garcia Cobo, Zan Gojcic, Maximilian
+     Igl, Boris Ivanovic, Peter Karkus, Janick Martinez Esturo, Marco Pavone, Aaron Smith, Ellie Tanimura,
+     Michal Tyszkiewicz, Michael Watson, Qi Wu, and Le Zhang. Alpasim: A modular, lightweight, and
+     data-driven research simulator for autonomous driving, October 2025.
+[38] NVIDIA Corporation. PhysicalAI-Autonomous-Vehicles, October 2025. Dataset hosted on Hugging Face.
+     Accessed 2026-05-05.
+[39] OpenAI, Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni
+     Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, Red Avila, Igor Babuschkin,
+     Suchir Balaji, Valerie Balcom, Paul Baltescu, Haiming Bao, Mohammad Bavarian, Jeff Belgum, Irwan
+     Bello, Jake Berdine, Gabriel Bernadett-Shapiro, Christopher Berner, Lenny Bogdonoff, Oleg Boiko,
+     Madelaine Boyd, Anna-Luisa Brakman, Greg Brockman, Tim Brooks, Miles Brundage, Kevin Button,
+     Trevor Cai, Rosie Campbell, Andrew Cann, Brittany Carey, Chelsea Carlson, Rory Carmichael, Brooke
+     Chan, Che Chang, Fotis Chantzis, Derek Chen, Sully Chen, Ruby Chen, Jason Chen, Mark Chen, Ben
+     Chess, Chester Cho, Casey Chu, Hyung Won Chung, Dave Cummings, Jeremiah Currier, Yunxing Dai,
+     Cory Decareaux, Thomas Degry, Noah Deutsch, Damien Deville, Arka Dhar, David Dohan, Steve Dowling,
+     Sheila Dunning, Adrien Ecoffet, Atty Eleti, Tyna Eloundou, David Farhi, Liam Fedus, Niko Felix,
+     Simón Posada Fishman, Juston Forte, Isabella Fulford, Leo Gao, Elie Georges, Christian Gibson, Vik Goel,
+     Tarun Gogineni, Gabriel Goh, Rapha Gontijo-Lopes, Jonathan Gordon, Morgan Grafstein, Scott Gray,
+     Ryan Greene, Joshua Gross, Shixiang Shane Gu, Yufei Guo, Chris Hallacy, Jesse Han, Jeff Harris, Yuchen
+     He, Mike Heaton, Johannes Heidecke, Chris Hesse, Alan Hickey, Wade Hickey, Peter Hoeschele, Brandon
+     Houghton, Kenny Hsu, Shengli Hu, Xin Hu, Joost Huizinga, Shantanu Jain, Shawn Jain, Joanne Jang,
+     Angela Jiang, Roger Jiang, Haozhun Jin, Denny Jin, Shino Jomoto, Billie Jonn, Heewoo Jun, Tomer Kaftan,
+     Łukasz Kaiser, Ali Kamali, Ingmar Kanitscheider, Nitish Shirish Keskar, Tabarak Khan, Logan Kilpatrick,
+     Jong Wook Kim, Christina Kim, Yongjik Kim, Jan Hendrik Kirchner, Jamie Kiros, Matt Knight, Daniel
+     Kokotajlo, Łukasz Kondraciuk, Andrew Kondrich, Aris Konstantinidis, Kyle Kosic, Gretchen Krueger,
+     Vishal Kuo, Michael Lampe, Ikai Lan, Teddy Lee, Jan Leike, Jade Leung, Daniel Levy, Chak Ming
+     Li, Rachel Lim, Molly Lin, Stephanie Lin, Mateusz Litwin, Theresa Lopez, Ryan Lowe, Patricia Lue,
+     Anna Makanju, Kim Malfacini, Sam Manning, Todor Markov, Yaniv Markovski, Bianca Martin, Katie
+     Mayer, Andrew Mayne, Bob McGrew, Scott Mayer McKinney, Christine McLeavey, Paul McMillan,
+     Jake McNeil, David Medina, Aalok Mehta, Jacob Menick, Luke Metz, Andrey Mishchenko, Pamela
+     Mishkin, Vinnie Monaco, Evan Morikawa, Daniel Mossing, Tong Mu, Mira Murati, Oleg Murk, David
+     Mély, Ashvin Nair, Reiichiro Nakano, Rajeev Nayak, Arvind Neelakantan, Richard Ngo, Hyeonwoo Noh,
+     Long Ouyang, Cullen O’Keefe, Jakub Pachocki, Alex Paino, Joe Palermo, Ashley Pantuliano, Giambattista
+     Parascandolo, Joel Parish, Emy Parparita, Alex Passos, Mikhail Pavlov, Andrew Peng, Adam Perelman,
+     Filipe de Avila Belbute Peres, Michael Petrov, Henrique Ponde de Oliveira Pinto, Michael, Pokorny,
+     Michelle Pokrass, Vitchyr H. Pong, Tolly Powell, Alethea Power, Boris Power, Elizabeth Proehl, Raul
+     Puri, Alec Radford, Jack Rae, Aditya Ramesh, Cameron Raymond, Francis Real, Kendra Rimbach, Carl
+     Ross, Bob Rotsted, Henri Roussez, Nick Ryder, Mario Saltarelli, Ted Sanders, Shibani Santurkar, Girish
+     Sastry, Heather Schmidt, David Schnurr, John Schulman, Daniel Selsam, Kyla Sheppard, Toki Sherbakov,
+     Jessica Shieh, Sarah Shoker, Pranav Shyam, Szymon Sidor, Eric Sigler, Maddie Simens, Jordan Sitkin,
+     Katarina Slama, Ian Sohl, Benjamin Sokolowsky, Yang Song, Natalie Staudacher, Felipe Petroski Such,
+     Natalie Summers, Ilya Sutskever, Jie Tang, Nikolas Tezak, Madeleine B. Thompson, Phil Tillet, Amin
+     Tootoonchian, Elizabeth Tseng, Preston Tuggle, Nick Turley, Jerry Tworek, Juan Felipe Cerón Uribe,
+     Andrea Vallone, Arun Vijayvergiya, Chelsea Voss, Carroll Wainwright, Justin Jay Wang, Alvin Wang, Ben
+     Wang, Jonathan Ward, Jason Wei, CJ Weinmann, Akila Welihinda, Peter Welinder, Jiayi Weng, Lilian
+     Weng, Matt Wiethoff, Dave Willner, Clemens Winter, Samuel Wolrich, Hannah Wong, Lauren Workman,
+     Sherwin Wu, Jeff Wu, Michael Wu, Kai Xiao, Tao Xu, Sarah Yoo, Kevin Yu, Qiming Yuan, Wojciech
+     Zaremba, Rowan Zellers, Chong Zhang, Marvin Zhang, Shengjia Zhao, Tianhao Zheng, Juntang Zhuang,
+     William Zhuk, and Barret Zoph. Gpt-4 technical report. arXiv preprint arXiv:2303.08774, 2024.
+[40] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang,
+     Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with
+     human feedback. Advances in neural information processing systems, 35:27730–27744, 2022.
+[41] Xuanchi Ren, Yifan Lu, Tianshi Cao, Ruiyuan Gao, Shengyu Huang, Amirmojtaba Sabour, Tianchang
+     Shen, Tobias Pfaff, Jay Zhangjie Wu, Runjian Chen, et al. Cosmos-drive-dreams: Scalable synthetic
+     driving data generation with world foundation models. arXiv preprint arXiv:2506.09042, 2025.
+
+
+                                                     13
+[42] Jenny Schmalfuss, Nadine Chang, Vibashan VS, Maying Shen, Andres Bruhn, and Jose M Alvarez. PARC:
+     A quantitative framework uncovering the symmetries within vision language models. In Proceedings of
+     the Computer Vision and Pattern Recognition Conference (CVPR), pages 25081–25091, 2025.
+
+[43] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy
+     optimization algorithms. arXiv preprint arXiv:1707.06347, 2017.
+
+[44] Guangming Sheng, Chi Zhang, Zilingfeng Ye, Xibin Wu, Wang Zhang, Ru Zhang, Yanghua Peng, Haibin
+     Lin, and Chuan Wu. Hybridflow: A flexible and efficient rlhf framework. arXiv preprint arXiv: 2409.19256,
+     2024.
+
+[45] Jingyu Song, Zhenxin Li, Shiyi Lan, Xinglong Sun, Nadine Chang, Maying Shen, Joshua Chen, Kather-
+     ine A Skinner, and Jose M Alvarez. Drivecritic: Towards context-aware, human-aligned evaluation for
+     autonomous driving with vision-language models. ICRA, 2026.
+
+[46] Jie Wang, Guang Li, Zhijian Huang, Chenxu Dang, Hangjun Ye, Yahong Han, and Long Chen. Vggdrive:
+     Empowering vision-language models with cross-view geometric grounding for autonomous driving. arXiv
+     preprint arXiv:2602.20794, 2026.
+
+[47] Jason Wei, Maarten Bosma, Vincent Y Zhao, Kelvin Guu, Adams Wei Yu, Brian Lester, Nan Du, Andrew M
+     Dai, and Quoc V Le. Finetuned language models are zero-shot learners. arXiv preprint arXiv:2109.01652,
+     2021.
+
+[48] Yanru Wu, Weiduo Yuan, Ang Qi, Vitor Guizilini, Jiageng Mao, and Yue Wang. Large reward models: Gen-
+     eralizable online robot reward generation with vision-language models. arXiv preprint arXiv:2603.16065,
+     2026.
+
+[49] Tianbao Xie, Siheng Zhao, Chen Henry Wu, Yitao Liu, Qian Luo, Victor Zhong, Yanchao Yang, and
+     Tao Yu. Text2reward: Reward shaping with language models for reinforcement learning. arXiv preprint
+     arXiv:2309.11489, 2023.
+
+[50] Tianyi Xiong, Shihao Wang, Guilin Liu, Yi Dong, Ming Li, Heng Huang, Jan Kautz, and Zhiding Yu.
+     Phycritic: Multimodal critic models for physical ai. arXiv preprint arXiv:2602.11124, 2026.
+
+[51] Runsheng Xu, Hubert Lin, Wonseok Jeon, Hao Feng, Yuliang Zou, Liting Sun, John Gorman, Ekaterina
+     Tolstaya, Sarah Tang, Brandyn White, et al. Wod-e2e: Waymo open dataset for end-to-end driving in
+     challenging long-tail scenarios. arXiv preprint arXiv:2510.26125, 2025.
+
+[52] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao,
+     Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge,
+     Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang,
+     Jing Zhou, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao Deng, Mei Li,
+     Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui Men, Ruize Gao, Shixuan Liu, Shuang
+     Luo, Tianhao Li, Tianyi Tang, Wenbiao Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren,
+     Yang Fan, Yang Su, Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru
+     Zhang, Zhipeng Zhou, and Zihan Qiu. Qwen3 technical report. arXiv preprint arXiv:2505.09388, 2025.
+
+[53] Wenhao Yao, Zhenxin Li, Shiyi Lan, Zi Wang, Xinglong Sun, Jose M. Alvarez, and Zuxuan
+     Wu. Drivesuprim: Towards precise trajectory selection for end-to-end planning. arXiv preprint
+     arXiv:2506.06659, 2025.
+
+[54] Wenhao Yao, Xinglong Sun, Zhenxin Li, Shiyi Lan, Zi Wang, Jose M Alvarez, and Zuxuan Wu.
+     Had: Combining hierarchical diffusion with metric-decoupled rl for end-to-end driving. arXiv preprint
+     arXiv:2604.03581, 2026.
+
+[55] Pengfei Yi, Yingjie Ma, Wenjiang Xu, Yanan Hao, Shuai Gan, Wanting Li, and Shanlin Zhong. Critic in the
+     loop: A tri-system vla framework for robust long-horizon manipulation. arXiv preprint arXiv:2603.05185,
+     2026.
+
+[56] Di Zhang, Jingdi Lei, Junxian Li, Xunzhi Wang, Yujie Liu, Zonglin Yang, Jiatong Li, Weida Wang,
+     Suorong Yang, Jianbo Wu, et al. Critic-v: Vlm critics help catch vlm errors in multimodal reasoning. In
+     Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages 9050–9061,
+     2025.
+
+[57] Xuanyu Zhang, Weiqi Li, Shijie Zhao, Junlin Li, Li Zhang, and Jian Zhang. Vq-insight: Teaching vlms for
+     ai-generated video quality understanding via progressive visual reinforcement learning. In Proceedings of
+     the AAAI Conference on Artificial Intelligence, volume 40, pages 12870–12878, 2026.
+
+
+                                                     14
+[58] Daniel M Ziegler, Nisan Stiennon, Jeffrey Wu, Tom B Brown, Alec Radford, Dario Amodei, Paul
+     Christiano, and Geoffrey Irving. Fine-tuning language models from human preferences. arXiv preprint
+     arXiv:1909.08593, 2019.
+
+[59] Jialv Zou, Shaoyu Chen, Bencheng Liao, Zhiyu Zheng, Yuehao Song, Lefei Zhang, Qian Zhang, Wenyu
+     Liu, and Xinggang Wang. Diffusiondrivev2: Reinforcement learning-constrained truncated diffusion
+     modeling in end-to-end autonomous driving. arXiv preprint arXiv:2512.07745, 2025.
+
+
+
+
+                                                  15
+A     Model Details
+
+A.1   Prompts
+
+
+System : You are an expert AI driving instructor and analyst .
+Your task is to analyze which criteria are useful for evaluating
+    driving behavior in the given video context .
+Focus on the following evaluation criteria :
+    - Lane Keeping ( LK ) : A lower score indicates deviation from the
+         lane centerline , while a higher score means the vehicle stays
+         well - centered within its lane . Ego vehicle should drive as
+         close to lane centerlines as possible . However , LK can be " too
+          strict " during justified lane changes , courteous nudges ,
+         overtakes , construction work zones , or wide lanes ; question LK
+          if the camera view contradicts it .
+    - Driving Direction Compliance ( DDC ) : A lower score means the
+         vehicle is not following the intended lane direction ( e . g . ,
+         driving in the opposite direction ) . DDC can be " too strict "
+         during courteous nudging or construction work zones ; question
+         DDC if the camera view contradicts it .
+    - Drivable Area Compliance ( DAC ) : A lower score indicates the
+         vehicle is moving outside the designated drivable area . DAC
+         can be " too strict " during courteous nudging or work zones ;
+         question DAC if the camera view contradicts it .
+    - Time to Collision ( TTC ) : A lower score suggests the trajectory
+         may lead to an imminent collision with other agents or
+         pedestrians . This should always be critical as there are
+         agents , pedestrains , or obstacles visible .
+    - No Collision ( NC ) : A lower score indicates the trajectory
+         results in a collision with other agents or pedestrians . This
+         should always be critical as there are agents , pedestrains , or
+          obstacles visible .
+    - Ego Progress ( EP ) : A lower score reflects poor navigation
+         progress toward the goal , while a higher score indicates
+         meaningful forward movement . EP may not make sense in
+         scenarios where a sudden obstacle appears or other unexpected
+         events occur ; question EP if the camera view contradicts it .
+    - Comfort : A lower score suggests uncomfortable driving behavior ,
+         such as sudden braking , jerky motion , or harsh acceleration /
+         deceleration .
+All visible traffic signs and road markings follow U . S . traffic rules ,
+     where vehicles drive on the right - hand side of the road . Yellow
+    lines separate traffic moving in opposite directions , while white
+    lines separate lanes traveling in the same direction .
+Determine , for each scenario , which metrics should be used to evaluate
+     the driving behavior .
+For example , in a lane nudging scenario , evaluating with LK and DDC
+    might not make sense due to temporarily taking an incorrect lane .
+When providing your analysis , exclude the following :
+    - Unrelated objects
+    - Hypothetical scenarios or actions
+    - Street or business names
+    - Vehicle makes or models
+
+User :
+This is a short clip ( four frames in temporal order ) of a driving
+     scenario .
+< video >
+Each frame contains a frontal camera view on the left and a Bird ’s - Eye
+      View ( BEV ) image on the right .
+Each frame shows the vehicle ’ s future 4 - second driving trajectory .
+In the frontal view image , the trajectory is overlaid in a cyan dotted
+      line .
+
+
+                                    16
+In the BEV image , the EGO vehicle and its trajectory are shown in RED ,
+     while bounding boxes of OTHER AGENTS are displayed in BLUE .
+On the BEV , lane boundaries are drawn in solid black lines , and lane
+    CENTERLINES are shown as BLUE arrows that also indicate the normal
+     driving direction of each lane .
+
+The seven criteria ( fixed order below ) :
+- LK - Lane Keeping
+- DDC - Driving Direction Compliance
+- DAC - Drivable Area Compliance
+- TTC - Time to Collision
+- NC - No Collision
+- EP - Ego Progress
+- COMFORT - Comfort
+
+Decide whether LK , DDC , DAC , TTC , NC , EP , and COMFORT should each be
+    leveraged to evaluate driving performance in this scenario . Do not
+     judge whether the driving violates a criterion ; only whether that
+     criterion is useful to evaluate performance here .
+
+Reply with exactly one line after the prompt below : seven labels in
+    this exact order - LK , then DDC , then DAC , then TTC , then NC , then
+     EP , then COMFORT - separated by commas and spaces . Each label
+    must be exactly Useful or Questionable .
+
+Example format ( values are illustrative ) : Useful , Questionable , Useful
+    , Useful , Useful , Useful , Useful
+
+Requirements :
+- Exactly seven labels , in the fixed order above
+- Only the words Useful or Questionable ; no other text on that line
+
+Your answer for criterion usefulness for driving evaluation for LK ,
+    DDC , DAC , TTC , NC , EP , and COMFORT is :
+
+                                    Listing 1: DriveJudge Prompt
+
+
+A.2   Detail on the non-vlm baseline
+
+To ablate the use of a VLM model, we present a simple visual classifier baseline as the replacement
+model backbone. We use Qwen3-VL-Embedding-2B [24] to extract visual embeddings from the
+same input images and we train a simple linear logistic classifier on top of it. We train two models,
+Non-VLM and Non-VLM-Agent. Non-VLM is a direct judgement classifier trained with the human
+reasonable labels y. Non-VLM-Agent makes use of PDM in a very similar way as DriveJudge.
+The model is trained for binary classification for rule-invocation using the same ground-truth rule
+invocation labels gim . A classification threshold is selected based on the training set and used to infer
+rule-invocations on the held out test set. The predicted rule invocations are aggregated following
+Equation 6. We report scores of the two ablation models in Table 3 showing some gain compared
+to the zero-shot VLM-DirectScore approach but still underperforming due to the limited contextual
+understanding of the non-VLM model. We don’t see a significant difference between adding or not
+adding rule invocation showing that the benefit of using rule invocation requires the base model to
+have enough underlying capability to use it well.
+
+A.3   VLM direct scoring baseline
+
+System : You are an expert AI driving instructor and analyst . Your task
+     is to evaluate whether the driving behavior shown in the video is
+     reasonable and does not violate any best driving practices .
+Focus on the following aspects when forming your judgment :
+- Lane Keeping : Is the vehicle staying appropriately within its lane ,
+    accounting for legitimate maneuvers like lane changes , overtakes ,
+    or navigating construction zones ?
+
+
+                                                   17
+- Driving Direction : Is the vehicle following the intended direction
+    of travel on each road ?
+- Drivable Area : Is the vehicle remaining within the designated
+    drivable area ?
+- Safety around other agents : Is the trajectory safe with respect to
+    other vehicles , pedestrians , and obstacles ?
+- Ego Progress : Is the vehicle making reasonable forward progress
+    toward its goal , given the road conditions and any obstacles ?
+- Comfort : Is the driving behavior smooth , without harsh braking ,
+    jerky motion , or sudden acceleration ?
+All visible traffic signs and road markings follow U . S . traffic rules ,
+     where vehicles drive on the right - hand side of the road . Yellow
+    lines separate traffic moving in opposite directions , while white
+    lines separate lanes traveling in the same direction .
+When providing your analysis , exclude the following :
+- Unrelated objects
+- Hypothetical scenarios or actions
+- Street or business names
+- Vehicle makes or models
+
+User : < video >
+These are video frames from a driving video .
+Each frame contains a frontal camera view on the left and a Bird ’s - Eye
+      View ( BEV ) image on the right .
+Each frame shows the vehicle ’ s future 4 - second driving trajectory .
+In the frontal view image , the trajectory is overlaid in a cyan dotted
+      line .
+In the BEV image , the EGO vehicle and its trajectory are shown in RED ,
+      while bounding boxes of OTHER AGENTS are displayed in BLUE .
+On the BEV , lane boundaries are drawn in solid black lines , and lane
+    CENTERLINES are shown as BLUE arrows that also indicate the normal
+      driving direction of each lane .
+
+Describe the driving scenario shown in the video , then provide a
+    single score between 0 and 1 that reflects how reasonable and safe
+     the ego vehicle ’ s driving behavior is .
+A score of 1.0 means the driving is completely reasonable and follows
+    all best driving practices .
+A score of 0.0 means the driving is completely unreasonable or unsafe .
+
+All responses must be in English only .
+Do not mention anything you are not certain about - avoid statements
+    with ’ maybe ’ , ’ might ’ , or ’ possibly ’.
+The description should be concise and to the point .
+
+** CRITICAL : You MUST format your response as a valid JSON object with
+     this EXACT structure :**
+
+‘‘‘ json
+{
+  " context ": " Brief description of the driving scenario and key
+       observations " ,
+  " reasoning ": " Concise explanation of why this score was assigned "
+  " score ": 0.85 ,
+}
+‘‘‘
+
+** Requirements :**
+- " score " must be a single float in the range [0.0 , 1.0]
+- " reasoning " should clearly justify the score , referencing specific
+     behaviors observed
+- Return ONLY the JSON object , no additional text before or after
+
+                   Listing 2: VLM Direct Score Prediction Prompt
+
+
+
+                                        18
+B     Data
+
+B.1   Thresholds per metric for violation when creating the groundtruth gating
+
+As mentioned in Section 4.3, we construct ground-truth rule invocation labels using the human
+annotations in DriveJudge dataset along with the computed EPDMS metrics. We do this by disabling
+tool invocations that would result in low scores for samples that are labeled as reasonable driving. The
+violation thresholds τ m per EPDMS metric defines the lowest score value that can be tolerated below
+which their invocation is disabled in reasonable clips. We select them to maximize the alignment
+between the resulting score with human judgement in our dataset.
+To do this we sweep over a range of different settings for τ m within reasonable bounds. For each
+threshold setting, we use the implied ground truth tool invocations gim to compute the final scores Si .
+We then select the threshold setting that leads to the predicted scores with the highest accuracy with
+respect to human annotator driving quality label:
+
+                                    arg max
+                                         m
+                                            ACCDQC (S(gim (τm )), y)                                (13)
+                                        τ
+
+
+On our dataset we found the threshold setting achieving the highest alignment with human judgement
+(ACCDQC = 93.80) to be:
+
+
+                       LK     NC      DAC    DDC         TTC   COMFORT        EP
+                       0.7    0.9      0.4    0.7        0.9      0.6        0.5
+
+
+
+
+B.2   Examples from the annotations
+
+We show some representative examples of collected annotations from our DriveJudge dataset in
+Figure 8.
+
+
+B.3   Filtering the DriveCritic [45] Trajectory Selection Dataset
+
+The original DriveCritic [45] trajectory preference dataset contains a substantial number of samples
+where the preference signal is inherently ambiguous, as shown in Fig 9. A common pattern we
+observe is that both candidate trajectories are safe, valid, and largely equivalent in driving quality,
+differing only in minor behavioral details such as slightly different progress profiles (e.g., slowly
+creeping forward versus remaining stationary). In such cases, assigning a strict preference between
+the two trajectories is often subjective and does not reflect a meaningful difference in driving quality.
+For evaluation, these ambiguous samples weaken the reliability of the benchmark itself. If both
+trajectories are equally reasonable under the driving context, forcing a binary preference label
+introduces noise into the evaluation target and makes metric comparison less informative. A strong
+driving metric should distinguish meaningful quality differences, rather than arbitrary preferences
+between equally valid behaviors.
+For training, these samples also introduce undesirable supervision noise. Preference optimization
+methods assume that the preference label reflects a consistent quality ordering between candidates.
+When this assumption does not hold, the optimization objective may encourage the model to learn
+unstable or non-generalizable preference patterns.
+To improve benchmark quality, we manually filter out these ambiguous trajectory pairs and retain
+only samples where one trajectory exhibits a clear and meaningful advantage under human judgment,
+such as stronger safety, better progress, or more appropriate rule compliance under the scene context.
+After filtering, the validation split is reduced from 1,166 to 862 samples, and the training split is
+reduced from 4,564 to 3,597 samples. The resulting dataset provides a cleaner and more reliable
+benchmark for trajectory preference evaluation and preference-based post-training.
+
+
+                                                    19
+(a) Reasonable: Ego drifts right in lane to keep buffer        (b) Reasonable: Ego nudges left across double yellow
+from barrier on left.                                          lane line due to stopped truck in front.
+
+
+
+
+(c) Unreasonable: Ego is driving in opposite direction         (d) Unreasonable: Ego is cutting corner on left turn
+lane too long.                                                 and drives through opposite lane.
+
+
+
+
+(e) Unreasonable: Ego runs a red light driving straight        (f) Unreasonable: Ego is creeping too close to pedes-
+through the intersection.                                      trians on a right turn.
+               Figure 8: Representative examples from our collected annotation labels.
+
+
+
+
+                                                          20
+Figure 9: Ambiguous preference samples removed from DriveCritic [45]. A common pattern in
+the original DriveCritic dataset involves trajectory pairs without a clear human preference. In this
+example, both trajectories are safe and valid, differing only in minor progress behavior (e.g., slowly
+advancing versus remaining stationary), making the preference inherently ambiguous. We remove
+such samples to construct a cleaner trajectory preference benchmark.
+C     Method
+
+C.1   Full Scoring Formula
+
+                                                          P
+                                                                      m m m
+                                                             m∈Mavg ĝi w si
+                             Y
+                  Si =            (ĝim sm          m 
+                                          i + (1 − ĝi ))  · P          m m .                    (14)
+                          m∈Mpen                              m∈Mavg ĝi w
+
+
+
+
+                                                 21
+                                                  Trajectory Preference Selection
+                                                   Zeroshot + RL vs. SFT + RL
+                                   1.0
+
+                                   0.8
+
+
+
+
+                Training Reward
+                                   0.6
+
+                                   0.4
+
+                                   0.2
+
+                                   0.0                                              SFT + RL
+                                                                                    Zero-shot + RL
+                                  −0.2
+                                         0   50    100      150      200     250        300
+                                                         RL Training Step
+
+Figure 10: RL training reward comparison from different initialization. Starting from an SFT-
+initialized model leads to steady reward improvement, while zero-shot initialization quickly plateaus
+with minimal gain. This highlights the importance of SFT as a critical warm start.
+
+
+Concretely, the full driving score slightly differs from the simplified form shown in Eqn. 8. We
+present the complete formulation in Eqn. 14. Here, Mpen denotes hard safety metrics aggregated
+multiplicatively (including NC, DAC, and DDC), while Mavg represents the remaining soft metrics
+combined via weighted averaging. The weight wm specifies the relative contribution of each invoked
+sub-metric, following [11, 5].
+
+D     Experiments
+D.1   Training Reward Curve Comparison between Zero-shot+RL and SFT+RL
+
+In the main paper, we compare Zero-shot+RL and SFT+RL through validation accuracy on the
+trajectory preference benchmark, showing that reinforcement learning on top of supervised fine-
+tuning leads to substantially better downstream performance. Here, we provide the corresponding
+training reward curves to further illustrate the optimization dynamics behind this difference.
+Figure 10 shows the reward progression during RL training under identical optimization settings,
+with the only difference being the initialization: either starting directly from the zero-shot model or
+from the SFT-initialized checkpoint. The reward is defined by Eq. 12, measuring whether the model’s
+trajectory ranking aligns with the human preference label.
+A clear difference emerges in training behavior. Starting from the SFT-initialized model leads to stable
+and consistent reward improvement throughout RL optimization, indicating effective exploration and
+continual policy refinement. In contrast, starting from the zero-shot model quickly plateaus at a much
+lower reward level, with little meaningful improvement over training.
+This result highlights the importance of SFT as a warm-start stage before RL. While RL is effective
+at refining preference alignment, it relies on an initial policy with sufficient task understanding to
+explore meaningful rule invocation strategies. Without this initialization, the model struggles to
+discover useful behaviors, resulting in weak reward improvement and limited downstream gains.
+
+D.2   Training curves
+
+Figure 11 presents the supervised fine-tuning (SFT) training dynamics of DriveJudge-8B. In addition
+to downstream benchmark performance reported in the main paper, these curves provide a direct view
+into optimization behavior and the model’s ability to learn the rule invocation task.Figure 11a shows
+the training loss over optimization steps. The loss decreases steadily throughout training, indicating
+stable optimization and effective fitting to the curated supervision signals. The rapid initial drop
+suggests that the model quickly adapts to the task-specific output format and rule invocation patterns,
+while the slower later-stage decline reflects gradual refinement of decision boundaries.Figure 11b
+
+
+                                                           22
+                               SFT Training Loss Curve                                                                    Rule Invocation Trace Perfect Match
+
+
+
+
+                                                                         Validation Perfect Match Rate (%)
+                0.7                                                                                          90
+
+                0.6                                                                                          80
+
+Training Loss   0.5
+                                                                                                             70
+                0.4
+
+                0.3                                                                                          60
+
+                0.2                                                                                          50
+
+                0.1
+                                                                                                             40
+                0.0
+
+                      0     2000      4000       6000    8000                                                     0         2000      4000           6000   8000
+                                    Training Step                                                                                    Training Step
+
+                          (a) SFT training loss curve.                                                                 (b) Validation perfect-match rate.
+Figure 11: SFT training dynamics. Left: training loss over optimization steps. Right: validation
+perfect-match rate measuring exact alignment between predicted rule invocation traces and ground-
+truth traces.
+
+
+shows the validation perfect-match rate, which measures the percentage of validation samples where
+the predicted rule invocation trace exactly matches the ground-truth rule invocation trace across
+all evaluation dimensions. This is a stricter metric than per-rule accuracy, as a sample is counted
+as correct only if the entire rule invocation sequence is predicted perfectly. We observe consistent
+improvement throughout training, eventually reaching close to 90%, demonstrating that DriveJudge-
+8B learns to reliably recover the intended context-aware rule selection behavior.Together, these
+training curves show that supervised fine-tuning effectively improves the rule invocation capability of
+DriveJudge, providing a strong initialization for the subsequent reinforcement learning stage.
+
+
+D.3                   Hyperparameters for RL
+
+Table 5 presents the ablation of key hyperparameters used in the reinforcement learning (RL) stage
+for DriveJudge-2B, including the KL loss coefficient, number of rollouts, and batch size. We report
+the final trajectory preference selection accuracy under each setting.
+We observe that the KL loss coefficient has a noticeable impact on performance. A relatively large
+coefficient (0.1) leads to worse performance, likely because the optimization is overly constrained
+toward the reference policy, limiting effective policy improvement. A very small coefficient (0.001)
+improves flexibility but remains slightly suboptimal. In practice, a moderate coefficient (0.01)
+achieves the best trade-off between preserving policy stability and allowing reward-driven exploration.
+The number of rollouts also affects performance. Reducing the rollout size from 8 to 4 leads to a
+noticeable drop in accuracy (80.63→77.63), suggesting that sufficient rollout diversity is important
+for stable relative advantage estimation under GRPO.
+Finally, batch size influences optimization stability. Reducing the batch size from 32 to 16 also
+degrades performance (80.63→78.31), likely due to noisier gradient estimates and less stable policy
+updates.
+Based on these results, we adopt a KL loss coefficient of 0.01, rollout size of 8, and batch size of 32
+as the default configuration for all RL experiments in this work.
+
+
+                Table 5: Reinforcement learning hyperparameters and performance from DriveJudge-2B.
+                                   KL Loss Coefficient    # Rollouts                                         Batch Size       Accuracy (%)
+                                             0.001              8                                                 32               79.35
+                                              0.1               8                                                 32               78.75
+                                              0.01              4                                                 32               77.63
+                                              0.01              8                                                 16               78.31
+                                              0.01              8                                                 32               80.63
+
+
+
+
+                                                                    23
+D.4   BEV VLM input ablation for zero-shot evaluation
+
+Table 6 studies the effect of providing bird’s-eye-view (BEV) inputs during zero-shot evaluation.
+Specifically, we ablate whether to render the BEV representation and provide it to the VLM together
+with the frontal camera image as multi-modal input.
+
+Table 6: BEV ablation for zero-shot evaluation. Effect of providing bird’s-eye-view (BEV) inputs
+to the VLM during zero-shot driving quality classification.
+                                         BEV Input     AUC
+                                             ✗        52.39
+                                             ✓        56.13
+
+The BEV representation provides structured spatial information, including lane topology, surrounding
+agents, and geometric layout, which complements the egocentric camera view. This additional spatial
+context helps the VLM better reason about scene structure and driving constraints.
+As shown in Table 6, incorporating BEV improves zero-shot performance from 52.39 to 56.13 AUC.
+This result highlights the importance of explicit spatial representations for improving VLM-based
+driving evaluation, particularly in zero-shot settings where no task-specific adaptation is available.
+
+
+
+
+                                                 24
+

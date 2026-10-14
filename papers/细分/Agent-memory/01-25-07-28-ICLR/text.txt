@@ -1,0 +1,2328 @@
+                                         Published as a conference paper at ICLR 2026
+
+
+
+
+                                         D RIVE AGENT-R1:
+                                         A DVANCING VLM- BASED AUTONOMOUS D RIVING
+                                         WITH ACTIVE P ERCEPTION AND H YBRID T HINKING
+
+                                          Weicheng Zheng1,3∗         Xiaofei Mao2∗      Nanfei Ye2
+                                                        2                 2
+                                          Pengxiang Li          Kun Zhan         Xianpeng Lang2       Hang Zhao1,4†
+                                          1
+                                            Shanghai Qi Zhi Institute 2 LiAuto 3 Tongji University 4 Tsinghua University
+                                          Project: https://tsinghua-mars-lab.github.io/DriveAgent-R1/
+arXiv:2507.20879v3 [cs.CV] 20 Apr 2026
+
+
+
+
+                                                                                        A BSTRACT
+
+                                                     The advent of Vision-Language Models (VLMs) has significantly advanced end-
+                                                     to-end autonomous driving, demonstrating powerful reasoning abilities for high-
+                                                     level behavior planning tasks. However, existing methods are often constrained
+                                                     by a passive perception paradigm, relying solely on text-based reasoning. This
+                                                     passivity restricts the model’s capacity to actively seek crucial visual evidence
+                                                     when faced with uncertainty. To address this, we introduce DriveAgent-R1, an
+                                                     autonomous driving agent capable of active perception for planning. In complex
+                                                     scenarios, DriveAgent-R1 proactively invokes tools to perform visual reasoning,
+                                                     firmly grounding its decisions in visual evidence, thereby enhancing both inter-
+                                                     pretability and reliability. Furthermore, we propose a hybrid thinking framework,
+                                                     inspired by human driver cognitive patterns, allowing the agent to adaptively switch
+                                                     between efficient text-only reasoning and robust tool-augmented visual reasoning
+                                                     based on scene complexity. This capability is cultivated through a three-stage
+                                                     progressive training strategy, featuring a core Cascaded Reinforcement Learning
+                                                     (Cascaded RL) phase. Extensive experiments on the Drive-Internal dataset, which
+                                                     is rich in long-tail scenarios, and the public nuScenes dataset show that, with
+                                                     only 3B parameters, DriveAgent-R1 achieves competitive performance comparable
+                                                     to top closed model systems such as GPT-5 and to human driving proficiency
+                                                     while remaining deployment-friendly, offering a proven path toward building more
+                                                     intelligent autonomous driving systems.
+
+
+                                         1       I NTRODUCTION
+                                         The paradigm of end-to-end autonomous driving has been substantially advanced by the advent of
+                                         Vision-Language Models (VLMs) (Tian et al., 2024; Sima et al., 2024; Xu et al., 2024; Hu et al.,
+                                         2023b; Jiang et al., 2023). By emulating human-like cognition, VLMs promise to unify perception,
+                                         reasoning, and planning within a single, cohesive framework, holding the potential for superior
+                                         generalization and a deeper understanding of complex scenarios. In the context of planning, the task
+                                         can be decomposed into two levels: low-level motion planning and high-level behavioral decision-
+                                         making (Wang et al., 2025b; Tian et al., 2024). Compared to tasking VLMs with regressing continuous
+                                         physical trajectories—a task for which they are not inherently optimized—a more promising direction
+                                         is to leverage their strengths in semantic understanding to predict high-level driving intentions (Wang
+                                         et al., 2022; Paul et al., 2024). Accordingly, the core objective of this work is to endow agents with
+                                         the capability for fine-grained, high-level behavioral planning.
+                                         To achieve this goal with greater transparency, interpretability, and robustness, we turn to the
+                                         Multimodal Chain-of-Thought (M-CoT) (Xu et al., 2025a; Li et al., 2025a; OpenAI, 2025b; Cheng
+                                         et al., 2025; Hu et al., 2024). The evolution of M-CoT has given rise to distinct reasoning paradigms:
+                                         from early Text-based M-CoT (Xu et al., 2025a), which reasons over textual descriptions of visual
+                                         inputs, to the more sophisticated, interleaved Tool-based M-CoT (Hu et al., 2024), which actively
+                                             ∗
+                                                 These authors contributed equally to this work.
+                                             †
+                                                 Corresponding at: hangzhao@mail.tsinghua.edu.cn
+
+
+                                                                                              1
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                                               Reasoning under �����
+                                                        Description The vehicle ahead is partially on the road and a
+                   Front View
+                                                         motorcycle is also present on the right side of the road. ... I need
+                                                         check the vehicle ahead carefully.
+                                                                                           {"view_index": "front", "bbox": [205, 180, 330, 225],
+                                                                                          "description": "the vehicle ahead"}
+                                                                                   The RoI Inspection image confirms the
+                                                                                   presence of ..., indicating a minor collision.
+ Speed:
+ 12.8 km/h                                               Reasoning Given the collision and speed, ... Due to the ongoing
+ Navigation：                                           situation, stopping is prudent until further assessment is possible.
+ go straight through the intersection
+                                                        Prediction Decelerating twice ensures safety, and then stop to
+                                                       adhere to the traffic accident.
+
+                        ["Decelerate, Straight", "Decelerate, Straight", "Stop, Straight", "Stop, Straight"]
+
+
+Figure 1: An illustration of DriveAgent-R1’s active perception capability. The agent proactively uses
+RoI Inspection to clarify an uncertain scene, discovering a minor collision between the vehicles ahead.
+This active perception corrects its initial assessment, leading to a safe plan to decelerate and then stop
+based on direct visual evidence. More visualization is shown in the Appendix A.10.
+
+invokes tools to gather new visual evidence mid-reasoning, enabling a dynamic “think-while-seeing”
+process. While extensive research has sought to harness M-CoT for autonomous driving tasks (Tian
+et al., 2024; Jiang et al., 2025a; Li et al., 2025c), these efforts have predominantly remained within
+the confines of Text-based M-CoT, a paradigm of passive perception. The passive perception
+struggles with two opposing yet related challenges: (1) it cannot seek additional visual information to
+resolve ambiguity when the default view is insufficient; and (2) providing comprehensive multi-view
+data forces the model to process redundant visual inputs, increasing computational overhead and
+distracting it from critical cues. Human driving, by contrast, is an inherently active process of
+resolving uncertainty. Drivers will check blind spots or look again at a confusing traffic signal,
+demonstrating the ability to “actively perceive,” which is the cornerstone of safe driving. Tool-based
+M-CoT provides a technical pathway to instantiate this more human-like driving intelligence, breaking
+the shackles of passive perception. However, leveraging this tool-based active perception for the core
+task of high-level behavioral planning remains a significant and unexplored research gap.
+While this active perception paradigm is powerful, indiscriminately applying tool-based active
+perception to all driving scenes is computationally inefficient. Human drivers exhibit a similar
+cognitive efficiency, relying on intuition for simple conditions and reserving deliberate, active
+exploration for complex or uncertain scenarios. Such an observation suggests a more intelligent
+paradigm dynamically adapting its thinking mode: employing efficient Text-based M-CoT for routine
+cases while deploying the in-depth, Tool-based M-CoT only when the situation’s complexity demands
+it. To our knowledge, such an adaptive mechanism that integrates these distinct M-CoT modalities
+for the autonomous driving planning task remains unexplored.
+To bridge the identified gaps, we introduce DriveAgent-R1, a novel autonomous driving agent whose
+design is centered on two key innovations: active perception and a hybrid-thinking framework. First,
+it pioneers active perception for high-level behavioral planning. Leveraging a Tool-based M-CoT,
+DriveAgent-R1 proactively seeks visual evidence to resolve uncertainty, grounding its decisions in
+verifiable perception (See Fig. 1). This is enabled by a multi-turn interactive framework centered
+around a specialized Vision Toolkit, which empowers the agent to acquire diverse visual information
+on an as-needed basis rather than passively processing redundant multi-view data (Qiao et al., 2025;
+Hu et al., 2023a; Sun et al., 2025). Second, we introduce a Hybrid-Thinking framework to an
+autonomous driving agent. It innovatively integrates efficient Text-based M-CoT with in-depth Tool-
+based M-CoT, allowing the agent to adaptively switch its thinking mode based on scene complexity.
+We cultivate this capability through a three-stage progressive training strategy. Following an initial
+supervised fine-tuning (SFT) stage, the agent undergoes a novel Cascaded Reinforcement Learning
+(Cascaded RL) phase. In this core phase, our proposed Mode-Partitioned GRPO (MP-GRPO)
+algorithm first strengthens each thinking mode individually and then trains the agent to adaptively
+select the optimal one. On the Drive-Internal, which features a diverse set of long-tail scenarios, and
+public nuScenes datasets, our 3B DriveAgent-R1 achieves performance competitive with top-tier
+models like GPT-5 (OpenAI, 2025a) and human drivers, while maintaining deployment-friendly
+
+
+                                                                2
+Published as a conference paper at ICLR 2026
+
+
+
+
+efficiency. Crucially, ablation studies confirm this success is genuinely grounded in visual evidence
+rather than textual shortcuts, validating our active perception and hybrid-thinking framework as a
+path toward safer, more interpretable autonomous driving.
+Our main contributions are summarized as follows:
+1. We pioneer an active perception framework for high-level driving planning. The agent proactively
+   invokes a vision toolkit to ground decisions in visual evidence, enhancing reasoning and reliability.
+2. We introduce a hybrid-thinking framework that adaptively balances efficient text-only reasoning
+   with robust, tool-augmented visual analysis. This is enabled by a novel three-stage progressive
+   training strategy centered on Cascaded RL.
+3. DriveAgent-R1 achieves both strong performance and deployment-friendly efficiency. With
+   only 3B parameters, DriveAgent-R1 proves competitive with top-tier models like GPT-5 and
+   human drivers, while significantly reducing inference latency compared to passive approaches,
+   establishing a practical path toward scalable, intelligent autonomous driving.
+
+
+2      D RIVE AGENT-R1
+
+2.1      P ROBLEM F ORMULATION AND H YBRID T HINKING
+
+As illustrated in Fig. 2, the agent’s primary task is to generate a long-horizon driving intention
+sequence from multimodal inputs. Given an initial visual context I0 (from a front-view camera)
+and textual context T0 (vehicle speed and navigation), the agent outputs an 8-second meta-action
+sequence A = (a1 , a2 , a3 , a4 ), with each action predicted at a 2-second interval. Each meta-action
+at = (st , jt ) comprises a velocity token st ∈ Vs ={Accelerate, Keep Speed, Decelerate, Stop} and a
+trajectory token jt ∈ Vj ={Straight, Right Turn, Left Turn}.
+
+ Text-based M-CoT:                                                   �1                                                   �: �1 , �2 , �3 , �4
+                     <description> ... </description> - <reasoning> ... </reasoning> - <prediction> ... </prediction>
+ Tool-based M-CoT:      �1                                      �2                                        �3              �: �1 , �2 , �3 , �4
+
+                                           Qwen2.5 LM Decoder                                                           Vision Toolkit
+          �0              �0                �1                       �1            �2                      �2
+                                                                                                                                  Retrieve
+                                                                                                                                   View
+                                                 Vision Encoder
+                                                                                                                                     RoI
+                                                                                                                                 Inspection
+
+                                                                                                                                  Depth
+                                                                                                                                Estimation
+
+                                                                                                                                 3D Object
+    Default Input            Front View                                                          Front Right View                Detection
+
+
+
+Figure 2: The Hybrid-Thinking architecture of DriveAgent-R1. For simple scenarios (Top), the agent
+uses direct text-based reasoning (T1 → A). For complex scenarios (Bottom), it iteratively interleaves
+thoughts (Tk ) with tool calls to a Vision Toolkit, acquiring new visual evidence (Ik ) to refine its
+decision-making. The detailed visulization of this case is shown in Fig. 10, Appendix A.10.
+
+To achieve this, DriveAgent-R1 employs a hybrid-thinking mechanism. It first selects a reasoning
+path by generating either a <think_text> or <think_tool> token. Both paths adhere to a
+unified CoT framework: description, reasoning, and prediction, where the description stage involves
+initial perception of the scene, the reasoning stage conducts logical analysis, and the prediction stage
+summarizes the analysis to determine the sequence.
+Text-based M-CoT (Mtext ). For common scenarios, DriveAgent-R1 generates the <think_text>
+token, relying entirely on its internal knowledge and the initial input (I0 , T0 ) to make decisions
+through pure text-based reasoning.
+
+
+                                                                          3
+Published as a conference paper at ICLR 2026
+
+
+
+
+Tool-based M-CoT (Mtool ). For complex or uncertain scenarios where the initial visual context is
+insufficient, DriveAgent-R1 generates the <think_tool> token to engage in active perception,
+proactively seeking visual evidence to resolve ambiguity and ground its decisions. This process
+updates its contextual history Hk as follows:
+                                 Hk = Hk−1 ⊕ Tk ⊕ Ik ,         for k < K,
+where (Tk , Tk ) = LMDecoder(Hk−1 ) and Ik = VisionEncoder(Execute(Tk )). The process begins
+with an initial history H0 = T0 ⊕ I0 , where ⊕ denotes the concatenation of token embeddings. In
+each step k, DriveAgent-R1 generates a textual thought Tk and potentially a tool call request Tk based
+on its current history Hk . If a tool is called, it is executed to obtain new visual information, which is
+then encoded into an image embedding Ik and integrated into the history. The process terminates
+upon generating the final action sequence A or reaching the maximum interaction limit K.
+Vision Toolkit Design. DriveAgent-R1 is integrated with a powerful Vision Toolkit, endowing it
+with the capability of active perception. These tools allow the model to explore the environment on
+demand during its reasoning process to acquire critical information. The toolkit includes: (1) Retrieve
+View, which fetches clear images from any camera, including historical frames from a 5-second
+memory pool; (2) RoI Inspection, a “zoom-in” function that crops and magnifies a specified Region
+of Interest (RoI) from a higher-resolution image to provide rich visual details; (3) Depth Estimation,
+which generates a depth map to provide crucial 3D spatial awareness; (4) 3D Object Detection, an
+open-vocabulary tool that identifies and localizes objects in 3D space. Detailed descriptions and tool
+call formats are provided in Appendix A.2.
+
+2.2     AUTONOMOUS D RIVING D OMAIN A LIGNMENT
+
+Recent studies (Li et al., 2025c; Chen et al., 2025; Wang et al., 2025a) indicate that general VLMs
+exhibit a shortcut tendency in driving planning: they rely on low-dimensional textual cues and
+neglect high-dimensional visual input. To first develop visual sensitivity and ensure decisions are
+grounded in evidence, inspired by Drive-R1 (Li et al., 2025c), we perform autonomous-driving
+domain alignment on the base model before high-level behavioral planning training. To this end,
+we build an autonomous-driving VQA dataset from images collected in real traffic, totaling 530K
+question–answer pairs. Questions in the dataset fall into four main categories: (i) scene description,
+(ii) recognition of traffic entities, (iii) localization of critical targets, and (iv) traffic commonsense and
+rules. Using this dataset, we fully fine-tune all parameters of Qwen2.5-VL-3B (Bai et al., 2025) and
+obtain DriveAlign-3B, a model highly sensitive to visual evidence in driving scenes. DriveAlign-3B is
+used as the unified initialization for the subsequent three-stage training, laying the visual-alignment
+foundation for DriveAgent-R1’s active perception and hybrid thinking. See the Appendix A.3 for
+details of the VQA data construction.
+
+2.3     P ROGRESSIVE T RAINING VIA SFT AND C ASCADED RL
+
+To cultivate the hybrid-thinking capabilities of DriveAgent-R1, we devise a progressive training
+strategy composed of an initial Supervised Fine-Tuning (SFT) stage and a subsequent two-stage
+Cascaded RL phase shown in Fig. 3. This overall strategy follows a “foundation building → mode
+strengthening → intelligent selection” paradigm.
+
+2.3.1    S TAGE 1: D UAL -M ODE S UPERVISED F INE -T UNING
+We begin by cold-starting the model using SFT to endow it with a foundational understanding of
+the format and semantic boundaries of both thinking modes. To this end, we construct a high-
+quality dataset via a three-stage automated pipeline. The pipeline first partitions raw data into a tool-
+unnecessary set Dtext and a tool-necessary set Dtool . Dtext comprises simple scenarios where Qwen2.5-
+VL-3B already achieves high accuracy without tools, indicating no need for active perception.
+Conversely, Dtool includes complex cases where the powerful Qwen2.5-VL-72B shows a performance
+gain only when using tools, establishing a criterion for tool necessity. Next, Qwen2.5-VL-72B
+generates mode-specific CoT annotations, aligning with recent findings (Zhou et al., 2025) that
+demonstrate the efficacy of constrained or prompted generation for high-quality annotation. To ensure
+data quality, these annotations undergo a rigorous validation and filtering process: a separate judge
+model scores the reasoning coherence, and samples falling below a quality threshold are automatically
+
+
+                                                      4
+Published as a conference paper at ICLR 2026
+
+
+
+
+   Stage-1 Dual-Mode Supervised Fine-Tuning                                                Cascaded RL
+                  (DM-SFT)                    Stage-2 Forced Contrastive Mode RL (FCM-RL)         Stage-3 Adaptive Mode Selection RL (AMS-RL)
+                                                                                                             Vision Toolkit
+                                                                                                    Speed
+                                                                                                     Navi
+
+                   Cold Start                                             ��������    Multimodal Input
+                   CoT Data
+
+                                                 w/ mode limitation                                                           w/o mode limitation
+        �����                        �����
+                                                        �����                   �����
+                            SFT
+                                                      Response 1             Response 3                  Response 1              Response 3
+            Qwen2.5 LM Decoder
+                                                      Response 2              Response 4                 Response 2              Response 4
+                Vision Encoder
+                                                                   MP-GRPO                                               GRPO
+                                                           Accuracy                  Format                                           Tool Usage
+                Trainable         Frozen
+                                                            Rward                    Reward                                            Reward
+
+
+
+
+Figure 3: The progressive three-stage training strategy for DriveAgent-R1. The process begins with
+(1) DM-SFT to establish a foundational understanding of both thinking modes. This is followed by a
+core Cascaded RL phase, where (2) FCM-RL strengthens each mode independently, and (3) AMS-RL
+trains the agent to adaptively select the optimal mode.
+regenerated. Finally, the data is passed through rule-based cleaning to create a balanced, high-quality
+dataset for SFT. A complete description of this pipeline is provided in Appendix A.4.
+
+2.3.2    S TAGE 2: F ORCED C ONTRASTIVE M ODE R EINFORCEMENT L EARNING
+The first stage of our Cascaded RL phase aims to deepen the agent’s independent performance in each
+mode. We adopt Group Relative Policy Optimization (GRPO) (Guo et al., 2025) as our foundational
+algorithm, which has proven effective in multimodal reasoning and autonomous driving (Jiang et al.,
+2025a; Liu et al., 2025; Su et al., 2025; Zheng et al., 2025). Unlike PPO, GRPO eliminates the need
+for a critic model by estimating the baseline from a group of outputs. Specifically, for each query
+q, GRPO samples a group of outputs {o1 , o2 , . . . , oG } from the old policy πθold and optimizes the
+policy πθ by maximizing the following objective:
+                                      "    G
+                                                                                                     #
+                                        1 X
+ JGRP O (θ) = Eq∼P (Q),{oi }∼πθold            (min (wi Ai , clip(wi , 1 ± ϵ)Ai ) − βDKL (πθ ||πref )) ,
+                                        G i=1
+
+where wi = πθπθ (o(oi |q)
+                       i |q)
+                             is the importance sampling ratio, ϵ and β are hyper-parameters, and the
+                 old
+advantage Ai is computed by normalizing the rewards within the group. Building upon this standard
+formulation, we propose Mode-Partitioned GRPO (MP-GRPO) to prevent the agent from developing
+a bias against an initially weaker thinking mode. As illustrated in Fig. 3, the core mechanism of
+MP-GRPO is to enforce balanced exploration across both thinking modes. For each input q from
+Dexplore , we compel the agent to generate two mode-specific sets of G/2 responses by forcing the
+corresponding mode token (<think_text> or <think_tool>). This creates a full group of G
+responses:
+                                                    G/2      tool G/2
+                                      O(q) = {otext
+                                                i }i=1 ∪ {oj }j=1 ,
+where each individual response, denoted by o, is sampled from the old policy πθold . Crucially, all
+G responses are then aggregated into this unified set O(q) for reward normalization and advantage
+calculation. This design creates a multi-dimensional contrastive learning signal: it facilitates not
+only intra-mode comparison between different response trajectories but also inter-mode comparison.
+This multi-faceted contrast allows the agent to simultaneously enhance its specific capabilities in both
+modes and gain an initial understanding of the suitability of each mode for different scenarios, laying
+a critical foundation for the final stage of adaptive selection.
+Reward Design. The agent’s learning is guided by an outcome-driven reward function that evaluates
+the entire reasoning trajectory. This reward is a composite of two key components: an accuracy
+reward (Racc ) and a format consistency reward (Rfmt ), formulated as follows:
+                                                      R = Racc + Rfmt ,
+where the accuracy reward Racc is a weighted Levenshtein distance against the ground-truth sequence,
+with position-action weights to counteract action imbalance (see Appendix A.5 for details). The
+
+
+                                                                      5
+Published as a conference paper at ICLR 2026
+
+
+
+
+format consistency reward Rfmt penalizes structural errors and incorrect mode usage, such as invoking
+tools in the Mtext mode.
+
+2.3.3    S TAGE 3: A DAPTIVE M ODE S ELECTION R EINFORCEMENT L EARNING
+The final stage of Cascaded RL cultivates true hybrid thinking by training the agent to intelligently
+select the optimal mode. Using the native GRPO algorithm (Guo et al., 2025), the agent learns to
+generate the initial mode-selection token itself and commit to the corresponding reasoning path.
+Reward Design. To guide this learning process, the reward function is augmented with a conditional
+tool-usage reward, Rtool , which encourages the effective and judicious use of tools only when the
+Mtool mode is chosen. The total reward is defined as:
+                            R = Racc + Rfmt + I(mode = Mtool ) · Rtool ,
+where the definitions of Racc and Rfmt remain consistent with Stage 2. The core of Rtool is a
+contrastive mechanism that promotes impactful tool use. Within each group of G generated
+responses, we establish a baseline by calculating the average accuracy of all text-only trajectories
+  ¯ text ). A tool-based trajectory is rewarded only if its own accuracy (Racc ) surpasses this baseline
+(Acc
+by a margin, i.e., Rtool ∝ (Racc − Acc¯ text − margin). This design explicitly penalizes superfluous tool
+calls, incentivizing the agent to invoke active perception only when it provides a clear performance
+advantage over pure text-based reasoning. A detailed formulation is provided in the Appendix A.5.
+
+3     E XPERIMENTS
+3.1     S ETUP
+
+3.1.1    DATASET
+Automated Label Generation for Meta-actions. We produce labels for meta-action sequences
+with a rule-first, VLM-corrected pipeline. Starting from vehicle trajectory points, we use a 3-second
+sliding window to map each segment to a predefined vocabulary of speed and trajectory actions,
+employing thresholds iteratively optimized via dual VLM-human feedback. This yields a four-step
+discrete meta-action sequence for the next 8 seconds at 2-second intervals. To correct a small number
+of ambiguous or boundary cases, we then feed the resulting sequence and its BEV-map visualization
+into GPT-4.1 for refinement. Full rules and optimization details are in the Appendix A.7.
+
+Training Data. All training data are drawn from our Drive-Internal dataset, which comprises
+35K video clips specifically targeting long-tail and complex scenarios. This dataset features over
+40 distinct driving situations, including challenging events like road works and animal crossings.
+To leverage its rich diversity, one or two key frames are sampled from each clip, focusing on the
+moments surrounding critical events. For Stage 1 (DM-SFT), we generate 4K high-quality CoT
+data using the pipeline from Sec. 2.3.1, splitting it evenly into the tool-necessary set Dtool and the
+tool-unnecessary set Dtext (2K each). For the Cascaded RL phase, we construct an exploratory set
+Dexplore by sampling 15K instances from the data not assigned to Dtool or Dtext , ensuring the
+sampling maintains a balanced distribution of actions at each timestep in the sequence.
+
+Test Data. We randomly sample 1.5K instances from Drive-Internal as the in-distribution test set
+Drive-Internaltest . To assess generalization, we also sample 2K instances from the nuScenes validation
+set as nuScenestest for cross-dataset testing. All nuScenes samples are taken from the middle of each
+clip to ensure sufficient history and future trajectories. Meta-action labels on nuScenes are generated
+by the same pipeline.
+
+3.1.2    E VALUATION M ETRICS
+Accuracy (Acc). We evaluate planning precision using First-Frame and Sequence Average Joint
+Accuracy. A prediction is considered correct only if the composite meta-action (both speed and
+trajectory) exactly matches the ground truth. To encourage safer behavior, we also employ a Relaxed
+Speed Matching mechanism, awarding partial scores (0.5 and 0.2) for predictions that are one and
+two levels safer than the ground truth, respectively.
+
+
+                                                   6
+Published as a conference paper at ICLR 2026
+
+
+
+
+Table 1: Results on the Drive-Internaltest and nuScenestest . All models are evaluated using one-shot
+prompting under two conditions: without tools and with access to the visual toolkit. To ensure a
+consistent, structured reasoning format, closed-source models were queried via their official APIs in
+a “no-thinking” mode. Parentheses show the absolute gain from using tools.
+
+                                         Drive-Internaltest                                               nuScenestest
+  Model
+                     First-Frame Joint Acc. (%)     Seq. Avg. Joint Acc. (%)        First-Frame Joint Acc. (%)    Seq. Avg. Joint Acc. (%)
+                     w/o Tools       w/ Tools      w/o Tools          w/ Tools      w/o Tools       w/ Tools      w/o Tools       w/ Tools
+  Human                          49.59                         49.29                            50.48                         48.24
+  Qwen2.5-VL-3B        24.06       23.64 (-0.42)      24.98         22.63 (-2.35)     30.18       28.17 (-2.01)    23.48        21.58 (-1.90)
+  Qwen2.5-VL-7B        27.58       24.01 (-3.57)      29.84         24.98 (-4.86)     33.11       32.84 (-0.27)    27.60        28.82 (+1.22)
+  Qwen2.5-VL-72B       32.76       32.97 (+0.21)      38.80         39.61 (+0.81)     43.26       43.87 (+0.61)    39.13        40.47 (+1.34)
+  Doubao-Seed-1.6      34.92       38.98 (+4.06)      40.22         41.37 (+1.15)     45.63       46.29 (+0.66)    41.91        43.10 (+1.19)
+  Gemini-2.5-Flash     41.83       43.38 (+1.55)      42.14         43.42 (+1.28)     45.46       46.60 (+1.14)    42.69        44.07 (+1.38)
+  GPT-4.1              39.99       43.18 (+3.19)      42.14         43.43 (+1.29)     46.84       48.25 (+1.41)    43.63        44.72 (+1.09)
+  GPT-5                56.30       56.48 (+0.18)      47.19         47.97 (+0.78)     48.75       49.11 (+0.36)    44.85        45.14 (+0.29)
+  DriveAgent-R1        45.27       51.34 (+6.07)      43.29         45.42 (+2.13)     52.58       52.96 (+0.38)    44.43        47.10 (+2.67)
+
+Mode Selection Accuracy (MSA). To quantify DriveAgent-R1’s adaptive mode selection, we
+introduce the Mode Selection Accuracy (MSA), inspired by Jiang et al. (2025b). It measures the
+alignment between the agent’s adaptively chosen mode madaptive and the optimal mode m∗i . The
+optimal mode m∗i is defined as whichever mode (Mtool or Mtext ) achieves higher accuracy for a
+given sample qi . MSA is then calculated as:
+                                                              N
+                                                1 X
+                                         M SA =     I(madaptive (qi ) = m∗i )
+                                                N
+                                                              i=1
+
+
+3.1.3     I MPLEMENTATION D ETAILS
+
+All training is conducted on 8 H20 GPUs. For all multimodal inputs in our experiments, the maximum
+number of pixels per image is set to 259,200. Unless specified, only the front-view camera image
+serves as the default visual input. During the Cascaded RL phase, we set the sampling temperature to
+1.0, limit the maximum number of tool calls to 3, and group size to 4 per sample. For all evaluations,
+the sampling temperature is set to 0.7.
+
+3.2     M AIN RESULTS
+
+3.2.1     C OMPARISON WITH SOTA VLM S AND H UMAN D RIVERS
+
+To comprehensively evaluate DriveAgent-R1, we benchmark it against a suite of state-of-the-art
+closed-source VLMs, the open-source Qwen2.5-VL series, and a human performance baseline on
+both the Drive-Internaltest and nuScenestest . More details are shown in Appendix A.8. The main
+results are summarized in Table 1, leading to two key observations.
+DriveAgent-R1 achieves performance comparable to GPT-5 and human drivers with only 3B
+parameters. Despite its 3B parameter size, DriveAgent-R1 shows remarkable performance and the
+most effective tool use, achieving a +6.0% accuracy gain on Drive-Internaltest . Its performance
+is competitive with both GPT-5 and human drivers. Notably, on the nuScenestest , DriveAgent-R1
+surpasses GPT-5 in sequence accuracy (47.10% vs. 45.14%) and approaches human-level proficiency.
+Visual tool is a double-edged sword. While VLMs like GPT-4.1 and Gemini-2.5-Flash improved
+with tool access, the Qwen2.5-VL-3B and -7B models showed consistent performance degradation.
+This indicates that effective tool use is a non-trivial skill, requiring either a high level of base model
+capability or targeted, specialized training to master.
+
+3.2.2     P ERFORMENCE ON D RIVE B ENCH
+
+To further validate DriveAgent-R1 against existing state-of-the-art VLM-based driving agents, we
+conducted an evaluation on DriveBench (Xie et al., 2025), a benchmark designed for high-level
+driving tasks. We compare our model with DriveLM (Sima et al., 2024) and Dolphins (Ma et al.,
+2024).
+
+
+                                                                       7
+Published as a conference paper at ICLR 2026
+
+
+
+
+Table 2: Performance Comparison on DriveBench. We compare DriveAgent-R1 with representative
+VLM-based driving agents.
+
+                          Method                        Perception       Prediction     Planning       Behavior
+                          DriveLM                          16.85             44.33           68.71         42.78
+                          Dolphins                          9.59             32.66           52.91         18.81
+                          DriveAgent-R1 (Ours)             34.07             32.85           61.89         43.69
+
+
+Table 3: Open-loop planning performance on nuScenes validation set. We report the L2 Displace-
+ment Error (DE) and Collision Rate (CR) at different time horizons. Bold and underlined denote the
+best and second-best results, respectively.
+
+                                                             ADE (m) ↓                  Collision Rate (%) ↓
+                          Model
+                                                    1s       2s         3s    avg     1s        2s    3s      avg
+                          UniAD                     0.44     0.67    0.96     0.69    0.04     0.08   0.23    0.12
+                          VAD-Base                  0.17     0.34    0.60     0.37    0.07     0.10   0.24    0.14
+                          EMMA                      0.14     0.29    0.54     0.32      -        -      -       -
+                          DriveVLM-Dual             0.15     0.29    0.48     0.31    0.05     0.08   0.17     0.1
+                          OmniDrive                 0.14     0.29    0.55     0.33    0.00     0.13   0.78    0.3
+                          OpenDriveVLA (3B)         0.14     0.30    0.55     0.33    0.02     0.07   0.22     0.1
+                          DriveAgent-R1 (Ours)      0.13     0.24    0.47     0.28    0.01     0.12   0.30    0.14
+
+DriveAgent-R1 achieves superior scene understanding and decision-making. As shown in Table 2,,
+DriveAgent-R1 achieves a Perception score of 34.07, doubling DriveLM’s 16.85. This substantial
+margin confirms that proactive tool invocation captures critical visual details often missed by passive
+paradigms. Moreover, our top-ranking Behavior score (43.69) demonstrates that the DriveAgent-R1
+effectively translates this rich visual evidence into safe, correct decision-making.
+
+3.3      P ERFORMENCE OF M OTION P LANING
+
+To validate whether the high-level reasoning of DriveAgent-R1 translates into effective low-level
+control, we extended the architecture with a lightweight MLP motion planning head to regress
+physical trajectories on the nuScenes dataset. The motion head acts as an ”executor” for the frozen
+DriveAgent-R1. It uses a simple MLP taking three inputs: meta-action sequence (one-hot), visual
+tokens, and ego-status, predicting 3s future waypoints at 2Hz.
+High-Level Reasoning Enables Precise and Safe Planning. On the nuScenes validation set,
+DriveAgent-R1 achieves an average ADE of 0.28m, outperforming strong baselines like DriveVLM-
+Dual (0.31m) while maintaining a comparable collision rate. This confirms that the reasoning-driven
+meta-actions are the decisive factor enabling effective low-level control.
+
+Table 4: Analysis of Foundational Capabili- Table 5: Impact of Domain Alignment on High-
+ties. Overall scores on domain-specific and 8 Level Behavioral Planning Task. We report se-
+general VLM benchmarks. Numbers in blue quence accuracy on Drive-Internaltest . The relative
+denote the improvement over Qwen2.5-VL-3B. performance drop (%) upon removing images is
+Detail results are in Appendix A.9.1.         shown in parentheses.
+
+                                                                                                                      Seq. Avg. Joint Acc. (%)
+ Model           DriveAlign-VQAtest   General Benchmarks            Base Model         Model
+                                                                                                                    w/ image   w/o image (rel. drop)
+ Qwen2.5-VL-3B          72.9                 64.4                   Qwen2.5-VL-3B      DriveAgent-R1-Variant         43.56       38.79 (−11.0%)
+ Qwen2.5-VL-7B          77.0                 68.9
+                                                                    DriveAlign-3B      DriveAgent-R1                 45.42       38.24 (−15.8%)
+ DriveAlign-3B      84.6 (+11.7)          66.4 (+2.0)
+
+
+
+
+3.4      A BLATION ON D OMAIN A LIGNMENT
+
+To validate our domain alignment strategy, we analyze its impact on both the base model’s capabilities
+and the downstream high-level behavioral planning task.
+Domain Alignment Enhances Driving-Specific and General Capabilities. As shown in Table 4,
+domain alignment significantly boosts performance on our driving-specific VQA benchmark (+11.7)
+and also improves scores across a suite of general VLM benchmarks (+2.0). This confirms our
+strategy successfully injects domain knowledge while strengthening general capabilities.
+
+
+                                                                    8
+Published as a conference paper at ICLR 2026
+
+
+
+
+Domain Alignment Boosts Planning Performance and Mitigates Visual Neglect. As shown in
+Table 5, the agent built on our aligned model achieves higher accuracy (+1.86 Sequence Avg-Joint
+Acc). Crucially, its performance drops more significantly when images are removed (-15.8% vs.
+-11.0%), confirming its gains are grounded in visual evidence rather than textual shortcuts, thereby
+mitigating the visual neglect problem.
+
+          50
+                     First Frame-Join Acc                        51.34
+                                                                                  70
+                                                                                                 Table 6: Ablation on the progressive training strategy on
+                     Sequence Avg-Joint Acc   47.45
+                     MSA
+                                41.19 39.83
+                                                      44.64              45.42
+                                                                                  65             the Drive-Internaltest . We evaluate different combinations
+          40
+                                                                                                 of our three training stages. To ensure fair comparison, we
+
+
+
+
+                                                                                       MSA (%)
+Acc (%)
+
+
+
+
+                                                                                  60
+
+
+          30
+                                                                                  55
+                                                                                                 also test variants where a single RL stage is trained for two
+                24.08 23.03                                                       50
+                                                                                                 epochs, matching the total RL epochs of DriveAgent-R1.
+          20                                                                      45
+
+               DriveAlign-3B    + DM-SFT      + FCM-RL          DriveAgent-R1
+                                                                                                                                     Training Stage              Seq. Avg. Joint Acc. (%)
+                                                                                                 Variant                                                                                       MSA (%)
+                                                                                                                           DM-SFT      FCM-RL     AMS-RL        Mtool      Mtext   Madaptive
+
+Figure 4: Progressive training gains                                                             Variant-1 (SFT Only)
+                                                                                                 Variant-2 (+FCM)
+                                                                                                                           1 epoch
+                                                                                                                           1 epoch
+                                                                                                                                           -
+                                                                                                                                       1 epoch
+                                                                                                                                                         -
+                                                                                                                                                         -
+                                                                                                                                                                42.02
+                                                                                                                                                                44.30
+                                                                                                                                                                           40.65
+                                                                                                                                                                           42.20
+                                                                                                                                                                                     40.88
+                                                                                                                                                                                     44.64
+                                                                                                                                                                                                45.00
+                                                                                                                                                                                                56.64
+on Drive-Internaltest . Accuracy in                                                              Variant-3 (+FCM x2)       1 epoch     2 epochs          -      43.89      42.81     44.91      57.32
+
+Madaptive mode and MSA improve                                                                   Variant-4 (+AMS)
+                                                                                                 Variant-5 (+AMS x2)
+                                                                                                                           1 epoch
+                                                                                                                           1 epoch
+                                                                                                                                           -
+                                                                                                                                           -
+                                                                                                                                                  1 epoch
+                                                                                                                                                  2 epochs
+                                                                                                                                                                43.78
+                                                                                                                                                                44.76
+                                                                                                                                                                           41.64
+                                                                                                                                                                           42.56
+                                                                                                                                                                                     43.43
+                                                                                                                                                                                     44.13
+                                                                                                                                                                                                57.55
+                                                                                                                                                                                                61.61
+with each training stage.                                                                        DriveAgent-R1 (FCM→AMS)   1 epoch      1 epoch       1 epoch   44.97      43.29     45.42      68.52
+
+
+
+
+3.5               A BLATION ON P ROGRESSIVE T RAINING S TRATEGY
+
+To validate our progressive training strategy, we ablate different stage combinations in forced-text
+(Mtext ), forced-tool (Mtool ), and adaptive-selection (Madaptive ) modes on both the Drive-Internaltest
+and nuScenestest datasets to confirm the method’s effectiveness (full nuScenestest results are in the
+Appendix A.9.2). Our analysis yields two key findings.
+Progressive Training Yields Stable Performance Gains. As illustrated in Fig. 4, our strategy achieves
+consistent performance improvements, resulting in a steady increase in both accuracy and MSA.
+The Cascaded RL Strategy Surpasses Single-Strategy Stacking due to Functional Complementarity.
+Table 6 reveals that our cascaded RL strategy is synergistic, outperforming single-strategy stacking
+with the same total training epochs (Variant-3/5). This superiority stems from the complementary
+roles of its two stages: FCM-RL sharpens execution proficiency (achieving higher forced-mode
+accuracies of 44.30% vs. 43.78% in Mtool and 42.20% vs. 41.64% in Mtext , while AMS-RL hones
+selection intelligence (yielding a higher MSA of 57.55% vs. 56.64%). Our cascaded approach
+successfully integrates these distinct strengths for superior overall performance.
+
+Table 7: Ablation on Active vs. Passive Per-                                                                      Table 8: Performance and Efficiency Analysis.
+ception. We compare DriveAgent-R1 with                                                                            We compare inference latency and average out-
+passive baselines on Drive-Internaltest . Rela-                                                                   put tokens for different perception and reasoning
+tive drop (%) without images in parentheses.                                                                      strategies.
+                                                              Seq. Avg. Joint Acc. (%)
+Model                                                                                                             Model/Mode                                    Latency (s)           Avg. Token
+                                                         w/ image          w/o image (rel. drop)
+Passive-FV                                                    42.70              39.64 (-7.2%)                    Passive-SV                                            8.50                 210.77
+Passive-SV                                                    43.10              39.01 (-9.5%)                    DriveAgent-R1 (Mtool )                                7.91                 314.45
+DriveAgent-R1 (Retrieve View Only)                            44.39              38.78 (-12.6%)
+DriveAgent-R1 (Full Toolkit)                                  45.42              38.24 (-15.8%)
+                                                                                                                  DriveAgent-R1 (Madaptive )                            6.74                 265.57
+
+
+
+3.6               A BLATION ON ACTIVE VERSUS PASSIVE P ERCEPTION
+
+To isolate the benefits of active perception, we compare DriveAgent-R1 against two passive perception
+baselines: Passive-FV (front-view) and Passive-SV (surrounding views), all of which were trained
+with the same SFT and RL pipeline for a fair comparison. For a controlled comparison against
+Passive-SV, we evaluate a restricted variant, DriveAgent-R1 (Retrieve View Only), which is limited
+to using only the “Retrieve View” tool. As shown in Table 7, our findings are twofold.
+Active Selection is Superior to Passive Input. Active perception, as demonstrated by DriveAgent-R1
+(Retrieve View Only), shows a dual advantage. First, it overcomes information deficits (outperforming
+Passive-FV by +1.69 points). Second, it mitigates the redundancy of multiple fixed views. Despite
+sharing an identical information ceiling (the same pool of six views), DriveAgent-R1 outperforms
+
+
+                                                                                                                 9
+Published as a conference paper at ICLR 2026
+
+
+
+
+the Passive-SV by +1.29 points. This confirms that actively retrieving task-relevant information on
+demand is more effective than passively processing a fixed set of inputs.
+Active Perception Deepens Visual Reliance. A clear trend emerges: the more active and capable the
+agent’s perception, the more its performance drops when visual inputs are removed. This confirms
+our framework successfully fosters a genuine, vision-driven decision-making process, steering the
+model away from textual shortcuts. This heightened dependence on vision, however, also underscores
+the criticality of correctly interpreting the acquired evidence. In complex scenarios, misinterpreting
+new visual information can lead to errors, a challenge we explore in Appendix A.11.
+
+3.7   E FFICIENCY A NALYSIS
+
+To assess the computational efficiency of our framework, we evaluate inference latency and average
+output token length. Latency is measured on a single H20 GPU with a batch size of 1 using the
+vLLM (Kwon et al., 2023) inference framework, averaged over 100 samples and repeated across 5
+runs. The results, summarized in Table 8, highlight two key advantages of our design.
+Active Perception is More Efficient than Passive Input. By selectively retrieving visual data only
+when needed, DriveAgent-R1 avoids the computational overhead of processing the redundant images
+required by Passive-SV. This targeted approach reduces inference latency by over 20%.
+Hybrid Thinking Balances Performance and Cost. The advantage of hybrid thinking is clear when
+comparing the (Madaptive and Mtool modes. DriveAgent-R1 under Madaptive reduces both inference
+latency (from 7.91s to 6.74s) and output tokens (from 314.45 to 265.57).
+
+4     R ELATED W ORK
+
+VLMs for Autonomous Driving. Recent advancements have seen Vision-Language Models (VLMs)
+applied to autonomous driving, unifying perception, reasoning, and planning (Sima et al., 2024; Tian
+et al., 2024; Mao et al., 2023). Research has primarily followed two paths: enhancing structured
+scene understanding (Sima et al., 2024; Qian et al., 2025; Nie et al., 2024; Shao et al., 2024)
+and translating reasoning into actionable behaviors, from high-level decisions to low-level motion
+planning (Jiang et al., 2025a; Li et al., 2025c; Tian et al., 2024). However, existing VLM-based
+planners predominantly operate under a passive perception paradigm, reasoning over a fixed set of
+inputs. DriveAgent-R1 breaks from this by introducing an active perception framework, where the
+agent proactively invokes a visual toolkit to ground its decisions in visual evidence.
+Multimodal Reasoning with Chain-of-Thought. Chain-of-Thought (CoT) has significantly im-
+proved the reasoning capabilities of LLMs (Wei et al., 2022; Chu et al., 2023; Wang & Zhou, 2024)
+and has been extended to the multimodal domain (M-CoT) (Xu et al., 2025a; He et al., 2024; Wang
+et al., 2024; Mondal et al., 2024; Liu et al., 2025). The evolution of M-CoT has progressed from
+Text-based methods, which reason over static textual descriptions (Xu et al., 2025a; Zhao et al., 2025;
+Li et al., 2025b), to more dynamic, interleaved approaches. Among these, Tool-based M-CoT is
+a promising direction, enabling models to actively seek new information during reasoning (Qian
+et al., 2025; OpenAI, 2025b; Hu et al., 2024; Su et al., 2025; Zheng et al., 2025). Our work advances
+this frontier by introducing a novel hybrid-thinking paradigm that adaptively integrates efficient
+Text-based M-CoT with robust Tool-based M-CoT, allowing the agent to modulate its reasoning
+depth according to the scene’s complexity.
+
+5     C ONCLUSION AND L IMITATIONS
+
+We introduced DriveAgent-R1, an autonomous driving agent that pioneers active perception and
+hybrid thinking for high-level behavioral planning. Our 3B model achieves performance competitive
+with top-tier systems like GPT-5 and human drivers while being deployment-friendly. However, a
+key limitation is the agent’s over-reliance on new visual evidence from its tools, as detailed in our
+failure case analysis (Appendix A.11). Future work will directly address this challenge through two
+complementary directions: (1) strengthening the agent’s foundational understanding of complex road
+topologies and traffic rules, and (2) cultivating a more nuanced reasoning process capable of resolving
+informational conflicts.
+
+
+                                                  10
+Published as a conference paper at ICLR 2026
+
+
+
+
+ACKNOWLEDGMENTS
+This work was sponsored by the Beijing Nova Program.
+
+R EFERENCES
+Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang,
+  Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li, Jianqiang Wan,
+  Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, Jiabo Ye, Xi Zhang, Tianbao Xie, Zesen Cheng,
+  Hang Zhang, Zhibo Yang, Haiyang Xu, and Junyang Lin. Qwen2.5-vl technical report. arXiv
+  preprint arXiv:2502.13923, 2025.
+Lin Chen, Jinsong Li, Xiaoyi Dong, Pan Zhang, Yuhang Zang, Zehui Chen, Haodong Duan, Jiaqi
+  Wang, Yu Qiao, Dahua Lin, and Feng Zhao. Are we on the right way for evaluating large
+  vision-language models? In NeurIPS, 2024.
+Xuesong Chen, Linjiang Huang, Tao Ma, Rongyao Fang, Shaoshuai Shi, and Hongsheng Li. Solve:
+  Synergy of language-vision and end-to-end networks for autonomous driving. In CVPR, 2025.
+Zihui Cheng, Qiguang Chen, Xiao Xu, Jiaqi Wang, Weiyun Wang, Hao Fei, Yidong Wang, Alex Jin-
+  peng Wang, Zhi Chen, Wanxiang Che, et al. Visual thoughts: A unified perspective of understanding
+  multimodal chain-of-thought. arXiv preprint arXiv:2505.15510, 2025.
+Zheng Chu, Jingchang Chen, Qianglong Chen, Weijiang Yu, Tao He, Haotian Wang, Weihua Peng,
+  Ming Liu, Bing Qin, and Ting Liu. Navigate through enigmatic labyrinth a survey of chain of
+  thought reasoning: Advances, frontiers and future. arXiv preprint arXiv:2309.15402, 2023.
+Haodong Duan, Junming Yang, Yuxuan Qiao, Xinyu Fang, Lin Chen, Yuan Liu, Xiaoyi Dong,
+ Yuhang Zang, Pan Zhang, Jiaqi Wang, et al. Vlmevalkit: An open-source toolkit for evaluating
+  large multi-modality models. In ACM MM, 2024.
+Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu,
+  Shirong Ma, Peiyi Wang, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms
+  via reinforcement learning. arXiv preprint arXiv:2501.12948, 2025.
+Liqi He, Zuchao Li, Xiantao Cai, and Ping Wang. Multi-modal latent space learning for chain-of-
+  thought reasoning in language models. In AAAI, 2024.
+Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima, Xizhou Zhu, Siqi Chai, Senyao Du,
+  Tianwei Lin, Wenhai Wang, Lewei Lu, Xiaosong Jia, Qiang Liu, Jifeng Dai, Yu Qiao, and
+  Hongyang Li. Planning-oriented autonomous driving. In CVPR, 2023a.
+Yihan Hu, Jiazhi Yang, Li Chen, Keyu Li, Chonghao Sima, Xizhou Zhu, Siqi Chai, Senyao Du,
+  Tianwei Lin, Wenhai Wang, et al. Planning-oriented autonomous driving. In CVPR, 2023b.
+Yushi Hu, Weijia Shi, Xingyu Fu, Dan Roth, Mari Ostendorf, Luke Zettlemoyer, Noah A Smith, and
+  Ranjay Krishna. Visual sketchpad: Sketching as a visual chain of thought for multimodal language
+  models. In NeurIPS, 2024.
+Bo Jiang, Shaoyu Chen, Qing Xu, Bencheng Liao, Jiajie Chen, Helong Zhou, Qian Zhang, Wenyu Liu,
+  Chang Huang, and Xinggang Wang. Vad: Vectorized scene representation for efficient autonomous
+  driving. In ICCV, 2023.
+Bo Jiang, Shaoyu Chen, Qian Zhang, Wenyu Liu, and Xinggang Wang. Alphadrive: Unleashing the
+  power of vlms in autonomous driving via reinforcement learning and reasoning. arXiv preprint
+  arXiv:2503.07608, 2025a.
+Lingjie Jiang, Xun Wu, Shaohan Huang, Qingxiu Dong, Zewen Chi, Li Dong, Xingxing Zhang,
+  Tengchao Lv, Lei Cui, and Furu Wei. Think only when you need with large hybrid-reasoning
+  models, 2025b. URL https://arxiv.org/abs/2505.14631.
+Aniruddha Kembhavi, Mike Salvato, Eric Kolve, Minjoon Seo, Hannaneh Hajishirzi, and Ali Farhadi.
+  A diagram is worth a dozen images. In ECCV, 2016.
+
+
+                                               11
+Published as a conference paper at ICLR 2026
+
+
+
+
+Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E.
+ Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model
+ serving with pagedattention. In SOSP, 2023.
+Chengzu Li, Wenshan Wu, Huanyu Zhang, Yan Xia, Shaoguang Mao, Li Dong, Ivan Vulić, and
+  Furu Wei. Imagine while reasoning in space: Multimodal visualization-of-thought. arXiv preprint
+  arXiv:2501.07542, 2025a.
+Hongyu Li, Jinyu Chen, Ziyu Wei, Shaofei Huang, Tianrui Hui, Jialin Gao, Xiaoming Wei, and Si Liu.
+  Llava-st: A multimodal large language model for fine-grained spatial-temporal understanding. In
+  CVPR, 2025b.
+Yue Li, Meng Tian, Dechang Zhu, Jiangtong Zhu, Zhenyu Lin, Zhiwei Xiong, and Xinhai Zhao.
+  Drive-r1: Bridging reasoning and planning in vlms for autonomous driving with reinforcement
+  learning, 2025c.
+Yuan Liu, Haodong Duan, Yuanhan Zhang, Bo Li, Songyang Zhang, Wangbo Zhao, Yike Yuan, Jiaqi
+  Wang, Conghui He, Ziwei Liu, et al. Mmbench: Is your multi-modal model an all-around player?
+  In ECCV, 2024a.
+Yuliang Liu, Zhang Li, Mingxin Huang, Biao Yang, Wenwen Yu, Chunyuan Li, Xu-Cheng Yin,
+  Cheng-Lin Liu, Lianwen Jin, and Xiang Bai. Ocrbench: on the hidden mystery of ocr in large
+  multimodal models. Science China Information Sciences, 2024b.
+Ziyu Liu, Zeyi Sun, Yuhang Zang, Xiaoyi Dong, Yuhang Cao, Haodong Duan, Dahua Lin, and Jiaqi
+  Wang. Visual-rft: Visual reinforcement fine-tuning. arXiv preprint arXiv:2503.01785, 2025.
+Yingzi Ma, Yulong Cao, Jiachen Sun, Marco Pavone, and Chaowei Xiao. Dolphins: Multimodal
+  language model for driving, 2024.
+Jiageng Mao, Yuxi Qian, Junjie Ye, Hang Zhao, and Yue Wang. Gpt-driver: Learning to drive with
+   gpt. arXiv preprint arXiv:2310.01415, 2023.
+Debjyoti Mondal, Suraj Modi, Subhadarshi Panda, Rituraj Singh, and Godawari Sudhakar Rao.
+  Kam-cot: Knowledge augmented multimodal chain-of-thoughts reasoning. In AAAI, 2024.
+Ming Nie, Renyuan Peng, Chunwei Wang, Xinyue Cai, Jianhua Han, Hang Xu, and Li Zhang.
+ Reason2drive: Towards interpretable and chain-based reasoning for autonomous driving. In ECCV,
+ 2024.
+OpenAI. GPT-5. Technical report, OpenAI, 2025a. Accessed: 2025-9-22.
+OpenAI.    Introducing O3 and O4 mini.        https://openai.com/index/
+  introducing-o3-and-o4-mini/, 2025b. Accessed: 2025-07-24.
+Pranjal Paul, Anant Garg, Tushar Choudhary, Arun Kumar Singh, and K Madhava Krishna. Lego-
+  drive: Language-enhanced goal-oriented closed-loop end-to-end autonomous driving. In IROS,
+  2024.
+Kangan Qian, Sicong Jiang, Yang Zhong, Ziang Luo, Zilin Huang, Tianze Zhu, Kun Jiang, Meng-
+  meng Yang, Zheng Fu, Jinyu Miao, et al. Agentthink: A unified framework for tool-augmented
+  chain-of-thought reasoning in vision-language models for autonomous driving. arXiv preprint
+  arXiv:2505.15298, 2025.
+Zhijie Qiao, Haowei Li, Zhong Cao, and Henry X Liu. Lightemma: Lightweight end-to-end
+  multimodal model for autonomous driving. arXiv preprint arXiv:2505.00284, 2025.
+Hao Shao, Yuxuan Hu, Letian Wang, Guanglu Song, Steven L Waslander, Yu Liu, and Hongsheng Li.
+  Lmdrive: Closed-loop end-to-end driving with large language models. In CVPR, 2024.
+Chonghao Sima, Katrin Renz, Kashyap Chitta, Li Chen, Hanxue Zhang, Chengen Xie, Jens
+  Beißwenger, Ping Luo, Andreas Geiger, and Hongyang Li. Drivelm: Driving with graph vi-
+  sual question answering. In ECCV, 2024.
+
+
+                                               12
+Published as a conference paper at ICLR 2026
+
+
+
+
+Alex Su, Haozhe Wang, Weiming Ren, Fangzhen Lin, and Wenhu Chen. Pixel reasoner: In-
+  centivizing pixel-space reasoning with curiosity-driven reinforcement learning. arXiv preprint
+  arXiv:2505.15966, 2025.
+
+Wenchao Sun, Xuewu Lin, Yining Shi, Chuang Zhang, Haoran Wu, and Sifa Zheng. Sparsedrive:
+ End-to-end autonomous driving via sparse scene representation. In ICRA, 2025.
+
+Xiaoyu Tian, Junru Gu, Bailin Li, Yicheng Liu, Zhiyong Zhao, Yang Wang, Kun Zhan, Peng Jia,
+  Xianpeng Lang, and Hang Zhao. Drivevlm: The convergence of autonomous driving and large
+  vision-language models. arXiv preprint arXiv:2402.12289, 2024.
+
+Lei Wang, Yi Hu, Jiabang He, Xing Xu, Ning Liu, Hui Liu, and Heng Tao Shen. T-sciq: Teaching
+  multimodal chain-of-thought reasoning via large language model signals for science question
+  answering. In AAAI, 2024.
+
+Letian Wang, Yeping Hu, Liting Sun, Wei Zhan, Masayoshi Tomizuka, and Changliu Liu. Transferable
+  and adaptable driving behavior prediction. arXiv preprint arXiv:2202.05140, 2022.
+
+Shihao Wang, Zhiding Yu, Xiaohui Jiang, Shiyi Lan, Min Shi, Nadine Chang, Jan Kautz, Ying Li,
+  and Jose M. Alvarez. OmniDrive: A holistic vision-language dataset for autonomous driving with
+  counterfactual reasoning. In CVPR, 2025a.
+
+Xuezhi Wang and Denny Zhou. Chain-of-thought reasoning without prompting. NeurIPS, 2024.
+
+Yuping Wang, Shuo Xing, Cui Can, Renjie Li, Hongyuan Hua, Kexin Tian, Zhaobin Mo, Xiangbo
+  Gao, Keshu Wu, Sulong Zhou, et al. Generative ai for autonomous driving: Frontiers and
+  opportunities. arXiv preprint arXiv:2505.08854, 2025b.
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+  Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. NeurIPS,
+  2022.
+
+Shaoyuan Xie, Lingdong Kong, Yuhao Dong, Chonghao Sima, Wenwei Zhang, Qi Alfred Chen,
+  Ziwei Liu, and Liang Pan. Are vlms ready for autonomous driving? an empirical study from the
+  reliability, data and metric perspectives. In ICCV, 2025.
+
+Guowei Xu, Peng Jin, Ziang Wu, Hao Li, Yibing Song, Lichao Sun, and Li Yuan. Llava-cot: Let
+ vision language models reason step-by-step. ICCV, 2025a.
+
+Yi Xu, Yuxin Hu, Zaiwei Zhang, Gregory P. Meyer, Siva Karthik Mustikovela, Siddhartha Srinivasa,
+  Eric M. Wolff, and Xin Huang. Vlm-ad: End-to-end autonomous driving through vision-language
+  model supervision. In CoRL, 2025b.
+
+Zhenhua Xu, Yujia Zhang, Enze Xie, Zhen Zhao, Yong Guo, Kwan-Yee K. Wong, Zhenguo Li, and
+  Hengshuang Zhao. Drivegpt4: Interpretable end-to-end autonomous driving via large language
+  model. IEEE Robotics and Automation Letters, 2024.
+
+Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiaogang Xu, Jiashi Feng, and Hengshuang
+  Zhao. Depth anything v2. NeurIPS, 2024.
+
+Weihao Yu, Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin, Zicheng Liu, Xinchao Wang, and
+ Lijuan Wang. Mm-vet: Evaluating large multimodal models for integrated capabilities. In ICML,
+ 2024.
+
+Xiang Yue, Yuansheng Ni, Kai Zhang, Tianyu Zheng, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu
+  Jiang, Weiming Ren, Yuxuan Sun, Cong Wei, Botao Yu, Ruibin Yuan, Renliang Sun, Ming Yin,
+  Boyuan Zheng, Zhenzhu Yang, Yibo Liu, Wenhao Huang, Huan Sun, Yu Su, and Wenhu Chen.
+  Mmmu: A massive multi-discipline multimodal understanding and reasoning benchmark for expert
+  agi. In CVPR, 2024.
+
+Hanxue Zhang, Haoran Jiang, Qingsong Yao, Yanan Sun, Renrui Zhang, Hao Zhao, Hongyang Li,
+  Hongzi Zhu, and Zetong Yang. Detect anything 3d in the wild. In ICCV, 2025.
+
+
+                                               13
+Published as a conference paper at ICLR 2026
+
+
+
+
+Yi-Fan Zhang, Huanyu Zhang, Haochen Tian, Chaoyou Fu, Shuangqing Zhang, Junfei Wu, Feng
+  Li, Kun Wang, Qingsong Wen, Zhang Zhang, et al. Mme-realworld: Could your multimodal llm
+  challenge high-resolution real-world scenarios that are difficult for humans? In ICLR, 2024.
+Kesen Zhao, Beier Zhu, Qianru Sun, and Hanwang Zhang. Unsupervised visual chain-of-thought
+  reasoning via preference optimization. arXiv preprint arXiv:2504.18397, 2025.
+Ziwei Zheng, Michael Yang, Jack Hong, Chenxiao Zhao, Guohai Xu, Le Yang, Chao Shen, and Xing
+  Yu. Deepeyes: Incentivizing” thinking with images” via reinforcement learning. arXiv preprint
+  arXiv:2505.14362, 2025.
+Zewei Zhou, Tianhui Cai, Seth Z. Zhao, Yun Zhang, Zhiyu Huang, Bolei Zhou, and Jiaqi Ma. Autovla:
+  A vision-language-action model for end-to-end autonomous driving with adaptive reasoning and
+  reinforcement fine-tuning. In NeurIPS, 2025.
+
+
+
+
+                                               14
+Published as a conference paper at ICLR 2026
+
+
+
+
+A     A PPENDIX
+
+A.1    U SAGE OF LLM
+
+Large Language Models were utilized as a writing aid in the preparation of this manuscript. Their
+use was strictly limited to improving the clarity and readability of the text through sentence polishing
+and grammar correction. Additionally, we consulted LLMs for brainstorming potential names
+for concepts and components, such as Madaptive , DriveAlign-3B, and Drive-Internal. The core
+methodology, experimental results, and scientific insights presented in this paper are the original
+work of the authors.
+
+A.2    V ISION T OOLKIT: D ETAILED D ESCRIPTIONS AND C ALL F ORMATS
+
+Retrieve View. This tool allows the agent to request the image from any specific viewpoint. Its
+design is motivated by human drivers who consciously check specific mirrors or windows to get a clear
+view of the road conditions before critical maneuvers like lane changes or turns. More importantly,
+this tool incorporates a Historical Memory Pool, which caches images from all viewpoints over the
+past 5 seconds, sampled at 1Hz. This enables the model to intelligently look back at historical frames
+to assess changes in traffic light status or the movement trends of dynamic objects, thus avoiding
+the high computational cost and latency associated with processing redundant information from full
+video sequences.
+<tool_call>
+    <tool_name>Retrieve View</tool_name>
+    <params>{"frame_index": "-1s", "view_index": "front_left"}</params>
+</tool_call>
+
+                               Listing 1: Call Format of Retrieve View
+
+
+RoI Inspection. This tool empowers the agent with a “zoom-in” capability for meticulous examina-
+tion of critical areas. Based on a selected view, the agent can request to retrieve a higher-resolution
+version of the image and then crop and magnify a specific Region of Interest (RoI) by providing
+the absolute pixel coordinates of its bounding box. This is not merely a passive utility; it is a direct
+manifestation of the model’s Inherent Localization Ability. This allows for fine-grained analysis and
+focused viewing of any region the agent deems important, which is vital for confirming details such
+as the status of distant traffic lights or the text on traffic signs.
+<tool_call>
+    <tool_name>RoI Inspection</tool_name>
+    <params>{"view_index": "front_left", "bbox": [x_min, y_min, x_max,
+    y_max], "description": "the traffic lights"}</params>
+</tool_call>
+
+                               Listing 2: Call Format of RoI Inspection
+
+
+Depth Estimation. Accurately perceiving the 3D spatial relationship between the ego-vehicle
+and other traffic participants (e.g., vehicles, pedestrians) is fundamental to safe driving. This tool
+leverages the state-of-the-art monocular depth estimation algorithm, Depth Anything V2 (Yang et al.,
+2024), to generate a depth map for a specified view. The resulting depth map provides rich geometric
+information, enabling the model to intuitively grasp the relative distances and spatial layout of objects,
+as well as the overall road structure, which is crucial for path planning and obstacle avoidance.
+<tool_call>
+    <tool_name>Depth Estimation</tool_name>
+    <params>{"view_index": "front"}</params>
+</tool_call>
+
+                             Listing 3: Call Format of Depth Estimation
+
+
+
+                                                   15
+Published as a conference paper at ICLR 2026
+
+
+
+
+3D Object Detection. To comprehensively understand the dynamic environment, the agent must
+identify key objects and ascertain their precise 3D spatial information (position, size, and orientation).
+We integrate an advanced open-vocabulary, single-monocular 3D object detection tool that works with
+arbitrary camera views (Zhang et al., 2025). This tool not only detects a predefined set of common
+objects like cars, pedestrians, and traffic signs but its “open-vocabulary” nature also allows the model
+to dynamically specify new objects for detection based on the current scene’s needs, demonstrating
+remarkable flexibility and adaptability. The output from this tool provides indispensable input for
+subsequent trajectory prediction and risk assessment.
+
+
+<tool_call>
+    <tool_name>3D Object Detection</tool_name>
+    <params>{"view_index": "front", "object_text": "barrier"}</params>
+</tool_call>
+
+
+                            Listing 4: Call Format of 3D Object Detection
+
+
+
+
+A.3     DATASET C ONSTRUCTION
+
+A.3.1    D RIVE A LIGN -VQA DATASET C ONSTRUCTION
+
+To build a strong visual foundation for DriveAgent-R1, we constructed the DriveAlign-VQA dataset, a
+large-scale, high-quality collection of question-answer pairs specific to autonomous driving. The con-
+struction followed a systematic generation-and-validation pipeline, ensuring data diversity, relevance,
+and accuracy. The key stages are outlined below:
+
+1. Image Collection and Diversification. We first collected 1 million frames from real-world driving
+   scenarios. To ensure a wide variety of scenes, we converted these images into CLIP embeddings,
+   performed feature-based clustering, and then sampled a fixed number of images from each cluster.
+   This process guarantees a diverse representation of road types, weather conditions, and traffic
+   densities.
+
+2. QA Pair Generation. We employed the powerful Qwen2.5-VL-72B model to generate question-
+   answer (QA) pairs from the curated images. The generation process used a mixed strategy: 70%
+   of questions were derived from predefined templates covering key driving-related topics, while
+   the remaining 30% were generated freely to capture more nuanced scene details (see the prompt
+   below). The generation randomly utilized either a single front-view image or all six camera views
+   to encourage robust, multi-perspective understanding.
+
+3. Quality Validation and Filtering. To ensure the highest quality, we used Doubao-Seed-1.6 as an
+   automated “judge” model to validate every generated QA pair. The judge model scored each pair
+   on dimensions such as question relevance, answer correctness, and grounding in visual evidence.
+   Only pairs that received a perfect score were retained for the next stage.
+
+4. Diversity Enhancement. In the final step, we utilized Doubao-Seed-1.6 again to rewrite the
+   validated questions. This step was crucial for increasing linguistic diversity and preventing the
+   model from overfitting to specific phrasings in the templates. During this phase, we also filtered
+   out overly simple or trivial QA pairs to maintain a high level of complexity in the final dataset.
+
+This rigorous pipeline ultimately yielded the DriveAlign-VQA dataset, comprising 530K high-quality
+question-answer pairs that effectively develop driving-specific visual sensitivity in our base model.
+
+
+                                                   16
+Published as a conference paper at ICLR 2026
+
+
+
+
+   Prompt for Free-Form VQA Generation
+
+   I am preparing high-quality visual question answering (VQA) training data to pretrain a
+   Qwen2.5-VL-3B vision-language model (VLM) for autonomous driving scene understanding.
+   For each input front-view driving scene image I provide, please strictly design four diverse
+   and specific question-answer pairs based only on the visible content in the image.
+   Your goal is to generate VQA data that focuses on the most crucial information for autonomous
+   driving decision-making.
+   Do NOT create any questions or answers about objects, events, or details that are NOT present
+   in the given image.
+   The questions should cover, as much as possible, the following critical aspects relevant to
+   driving:
+   • Lane lines and road boundaries
+   • Presence, type, and status of traffic signs and lights
+   • Positions and number of vehicles, pedestrians, or cyclists
+   • Obstacles or unusual road conditions
+   • Road directions or upcoming maneuvers
+   For each image:
+   • Design 4 questions, each addressing a different key element visible in the scene.
+   • Provide an accurate and unambiguous answer to each question, strictly based on the image
+     content.
+   • Do not invent information. Only output what can be directly observed.
+   Present your output as follows:
+   Q1: <question 1>
+   A1: <answer 1>
+   Q2: <question 2>
+   A2: <answer 2>
+   Q3: <question 3>
+   A3: <answer 3>
+   Q4: <question 4>
+   A4: <answer 4>
+   Please begin when I input the first image.
+
+
+
+A.3.2    C ONSTRUCTION P IPELINE OF D RIVE -I NTERNAL DATASET
+
+The Drive-Internal dataset was curated from a massive database of real-world driving logs through
+a rigorous pipeline designed to capture high-value, complex driving situations. The construction
+process consists of three key stages:
+1. Long-tail Instance Retrieval. We formulated a fine-grained taxonomy to address long-tail
+   distributions, targeting corner cases such as structurally abnormal vehicles, debris, and wildlife.
+   We utilized a CLIP to perform open-vocabulary retrieval from the raw logs. Candidates were
+   subsequently refined through human inspection to ensure high relevance to the target long-tail
+   categories.
+
+2. Critical Scenario Extraction. Complementing object-centric mining, we extracted challenging
+   scenarios characterized by dynamic environmental interactions. By computing the variance in
+   driving maneuvers, we isolated clips where the ego-vehicle undergoes significant state changes,
+   thereby capturing moments that test the robustness of planning algorithms.
+
+3. Decision-Centric Frame Sampling. To support planning tasks, keyframe selection is tailored
+   to the scenario type. For maneuvers involving speed or directional changes, we select frames
+   0.5s–1.0s prior to the event, ensuring the model receives input within a realistic reaction threshold.
+   In steady-state driving scenarios, a frame maximizing contextual information is chosen as the
+   representative sample.
+
+
+                                                  17
+Published as a conference paper at ICLR 2026
+
+
+
+
+A.4       DM-SFT C OT DATA C ONSTRUCTION P IPELINE
+
+To provide high-quality data for the initial SFT phase, we developed an automated data construction
+pipeline structured as a three-stage workflow (see Fig. 5). This pipeline systematically processes raw
+datasets—which exclusively contain multimodal inputs and ground-truth meta-actions—and converts
+them into comprehensive reasoning datasets that effectively integrate both Mtool and Mtext reasoning
+modalities.
+
+          Step-1: Necessity Assessment for Tool Calling                     Step-2: Mode-Specific CoT Annotation                       Step-3: Rule-Based Data Cleaning
+
+                                                             Ground Truth
+                            Reasoning                        Meta Actions
+                      w/ Tools     w/o Tools                                  Reasoning                   Validation & Filtering
+                                                                                                                                              Tool usage control
+                                                                               w/ Tools
+           72B          High           Low
+                                                     �����                                                                         � > �
+                                                                            Vision Toolkit
+                                                                                                  Data
+                               Other                                                                          Judge Model                  Format standardization
+                                                                                                 w/ CoT
+                                                                 72B                                       Score CoT: � ∈ [�, �]
+ Raw                       ACC     0.9                                                                                                                                    Cold Start
+                                                                              Reasoning
+Dataset     3B        Reasoning w/o Tools                                                                     Thresholding: �                 Content correction          SFT Data
+                                                                              w/o Tools
+
+                                                     �����
+                                                                                               � ≤ �
+                                                                                             Regenerate
+
+
+Figure 5: The automated three-stage pipeline for SFT data construction. The process consists of:
+(1) Necessity Assessment, which partitions data into tool-necessary Dtool and tool-unnecessary Dtext
+sets; (2) Mode-Specific CoT Annotation, where a teacher model’s outputs are refined through a
+validation-regeneration loop with a judge model; and (3) Rule-Based Data Cleaning to produce the
+final dataset.
+
+
+Step 1: Necessity Assessment for Tool Calling. This initial step partitions the raw dataset by
+discerning the necessity of tool use for each sample. Our two-model approach aims to establish clear
+boundaries for scenario complexity. We first employ a lightweight Qwen2.5-VL-3B model to filter
+out simple scenarios where high accuracy (e.g., > 0.9) is achievable in the Mtext mode, forming
+the tool-unnecessary set Dtext . For the remaining samples, a powerful Qwen2.5-VL-72B oracle
+model determines the tool-necessary set Dtool by identifying cases where the Mtool mode yields a
+significant performance gain over the Mtext mode. This use of a highly capable oracle provides a
+reliable, conservative criterion for tool necessity, ensuring that we identify scenarios where external
+perception is genuinely beneficial, while leaving ambiguous cases for the exploratory set Dexplore
+used in subsequent RL stages.
+
+Step 2: Mode-Specific CoT Annotation and Validation. In this step, we generate mode-specific
+CoT annotations using the powerful Qwen2.5-VL-72B as the “teacher model.” For each classified
+sample, the teacher model performs “inverse” reasoning from the ground-truth meta-actions to
+construct a logical thought process in either the Mtext or Mtool mode. By anchoring the teacher model
+to the ground-truth action, we effectively steer the reasoning process. This approach corroborates
+recent observations (Zhou et al., 2025) regarding the utility of constrained or prompted generation
+in producing high-quality annotations. To ensure the quality and coherence of these annotations,
+we implement a rigorous validation and filtering process. A separate “judge model” scores the
+logical consistency of each generated CoT on a scale s ∈ [0, 1]. Samples with scores falling below
+a predefined quality threshold τ are automatically sent back to the teacher model for regeneration.
+This iterative refinement loop ensures that only high-fidelity reasoning paths are retained. To ensure
+a balanced distribution of tool use within the Dtool set, a Dynamic Tool Preference Guidance
+mechanism is also employed during this process, preventing a preference tool bias in the annotated
+data.
+
+Step 3: Rule-Based Data Cleaning. In the final step, the annotated data is subjected to a rule-
+based cleaning pipeline to ensure its fidelity and uniformity. This pipeline performs three primary
+functions: (1) Format Standardization, which validates the structural integrity of the CoT and the
+syntactical correctness of tool calls; (2) Content Correction, which rectifies content-level errors such
+as annotation artifacts or mismatches between the final prediction and the ground-truth label; and (3)
+Tool Usage Control, which normalizes tool usage by constraining call frequency and eliminating
+redundant or illogical calls.
+
+
+                                                                                             18
+Published as a conference paper at ICLR 2026
+
+
+
+
+After this pipeline, we sample an equal number of high-quality instances from Dtext and Dtool to
+construct the final cold-start SFT dataset, providing a solid foundation for the model’s hybrid-thinking
+capabilities.
+
+A.5    R EWARD D ESIGN D ETAILS
+
+Accuracy Reward (Racc ). The accuracy reward, Racc , is designed to evaluate the quality of the
+generated meta-action sequence by comparing it to the ground-truth sequence. It is a composite score
+that combines the accuracy of speed and trajectory predictions, with a higher weight on speed to
+emphasize safety. The formulation is as follows:
+                                  Racc = λs · Rspeed + λj · Rtraj
+where λs = 0.7 and λj = 0.3 are the weighting factors for the speed reward (Rspeed ) and trajectory
+reward (Rtraj ), respectively.
+Both Rspeed and Rtraj are calculated based on a weighted Levenshtein distance, which measures
+the similarity between the predicted sequence Â = (â1 , . . . , âm ) and the ground-truth sequence
+A = (a1 , . . . , an ). The similarity score for a sequence is defined as:
+                                                          D(Â, A)
+                                    Rseq (Â, A) = 1 −
+                                                         max(m, n)
+where D(Â, A) is the weighted Levenshtein distance. The distance is computed recursively. Let
+D(i, j) be the distance between the first i elements of Â and the first j elements of A. Then:
+                                          
+                                          D(i − 1, j) + Cdel
+                         D(i, j) = min D(i, j − 1) + Cins
+                                            D(i − 1, j − 1) + Csub (âi , aj , j)
+                                          
+
+The costs for deletion (Cdel ) and insertion (Cins ) are set to a constant value of 0.6 to allow for more
+flexible alignment between sequences of potentially different lengths. The substitution cost, Csub , is
+defined as 1 − S(âi , aj , j), where S is a position-aware match score:
+                                       S(â, a, t) = I(â = a) · wa,t
+Here, I(·) is the indicator function, which is 1 if the predicted action â matches the ground-truth
+action a, and 0 otherwise. wa,t is the position-action weight for the ground-truth action a at timestep
+t.
+This weighting mechanism is designed to counteract the data imbalance. By up-weighting rarer, more
+critical actions (e.g., “Stop”, “Left Turn”), we encourage the model to learn a more balanced and
+robust decision-making policy. The weights are derived from the frequency fc,t of each action class c
+at each timestep t in the training data. The calculation proceeds in three steps:
+                                                               ′
+      1. Raw Inverse Frequency Weight: A raw weight wc,t          is calculated based on the inverse
+                                                    ¯
+         frequency relative to the mean frequency ft at that timestep, controlled by an exponent
+         γ = 0.5:                                   ¯         γ
+                                             ′         ft + ϵ
+                                           wc,t =
+                                                      fc,t + ϵ
+      2. Clipping: The raw weights are clipped to a predefined range [wmin , wmax ] (e.g., [0.7, 1.3])
+         to prevent extreme values from destabilizing training:
+                                        ′′           ′
+                                      wc,t = clip(wc,t  , wmin , wmax )
+      3. Normalization: Finally, the clipped weights for each timestep are normalized to have a
+         mean of 1, ensuring that the weighting scheme adjusts the relative importance of actions
+         without altering the overall scale of the reward at each timestep:
+                                                            ′′
+                                                          wc,t
+                                            wc,t = 1 P           ′′
+                                                     |V | c′ ∈V wc′ ,t
+         where V is the set of all possible actions for the given component (speed or trajectory).
+This comprehensive reward design ensures that the agent is rewarded not only for correctness but
+also for learning to handle critical, less-frequent driving maneuvers effectively.
+
+
+                                                   19
+Published as a conference paper at ICLR 2026
+
+
+
+
+Tool Usage Reward (Rtool ). In the final AMS-RL stage, the reward function is augmented with a
+tool-usage component, Rtool , to guide the agent in learning when to use tools. This reward is only
+applied to trajectories generated in the tool-use mode (Mtool ) and is designed to penalize superfluous
+tool calls while rewarding effective ones. The core mechanism is a contrastive evaluation within
+each group of G generated responses for a given input.
+                                                text
+First, we establish a performance baseline, R̄acc    , by calculating the average accuracy of all text-
+only trajectories within the group. If a group contains no such text-only paths, this baseline
+cannot be established, and the Rtool reward is not applied (i.e., set to zero) for that group, as
+no contrastive comparison is possible. For groups where a baseline exists, the reward for each
+tool-assisted trajectory i is determined by its performance gain over this baseline, adjusted for a
+penalty corresponding to the number of tool calls.
+The tool usage reward, Rtool , for a trajectory i that uses Ni tools is calculated as:
+                                                      text
+                                  Rtool = (Racc,i − R̄acc  ) − Ni · Ctool
+Parameter Derivation: We set the per-call cost coefficient Ctool based on a “Minimum Effective
+Gain” principle rather than empirical tuning. We posit that active perception is justified only if
+it corrects at least one meta-action in the 4-step sequence, corresponding to an accuracy gain of
+0.25. Amortizing this gain over the median number of expected tool calls (2 calls, given a range of
+1-3), we derive Ctool = 0.25/2 = 0.125. This design explicitly penalizes superfluous tool calls: if
+the accumulated cost Ni · Ctool outweighs the accuracy gain, the agent receives a negative reward,
+incentivizing it to invoke tools only when they provide a clear performance advantage.
+Finally, the reward is clipped to a fixed range, for instance [−0.2, 0.2], to ensure training stability.
+This design explicitly incentivizes the agent to invoke active perception only when the accuracy
+improvement is significant enough to overcome the inherent cost of tool usage, fostering an intelligent
+and efficient decision-making process.
+
+
+
+
+                                                    20
+Published as a conference paper at ICLR 2026
+
+
+
+
+A.6   T RAINING AND E VALUATION P ROMPT T EMPLATE
+
+   Prompt Template for Model Training and Evaluation
+
+   <context>
+   You are provided with a front-view image of the car camera from the current frame.
+   The navigation command is: {navigation command}.
+   Your current speed is: {speed} km/h.
+
+   <task>
+   Your task is to analyze the driving scenario, construct a natural, logical reasoning process and
+   predict meta-actions. The following three stages are guidelines for structuring your thoughts:
+   1. <description>: Briefly describe the key aspects of the driving environment relevant
+      to the decision. (<4 sentences)
+   2. <reasoning>: Briefly explain logically how the perceived situation helps you to predict
+      the meta-actions. (<4 sentences)
+   3. <prediction>: Based on reasoning, briefly explain how you arrived at the meta-actions.
+      (<2 sentences)
+   Finally, output the meta-actions for the current frame and the next 3 frames (2s interval between
+   frames).
+   Output ONE composite action for each frame, each consisting of one speed token from
+   {"Stop", "Keep Speed", "Accelerate", "Decelerate"} and one trajectory
+   token from {"Left Turn", "Right Turn", "Straight"}.
+   Note that Left Turn and Right Turn include both major turns and minor adjustments
+   like lane changes or small heading corrections.
+
+   <rule>
+   • Your response should be concise, prefer short, direct sentences.
+   • First check if context suffices for prediction, then choose <think with tools> or
+     <think no tools>.
+
+   <tool usage>
+   Under <think with tools>, you need to consider the following content:
+   • You are recommended to call the tools multiple times for better understanding (max 3 calls).
+   • Please call the tool meaningfully, as each call to the tool incurs additional costs.
+
+   Example:
+   <think_with_tools>(or <think_no_tools>)
+       <description>
+           ...(you can call tools here under <think_with_tools>)
+       </description>
+       <reasoning>
+           ...(you can call tools here under <think_with_tools>)
+       </reasoning>
+       <prediction>
+           ...(you can call tools here under <think_with_tools>)
+       </prediction>
+   </think_with_tools>(or </think_no_tools>)
+   <meta actions>[’Speed, Traj’, ’Speed, Traj’, ’Speed, Traj’, ’Speed,
+       Traj’]</meta actions>
+
+
+
+
+A.7   AUTOMATED M ETA -ACTION L ABELING P IPELINE
+
+To generate high-quality training labels, we developed a robust automated pipeline that converts
+raw vehicle trajectory data into discrete meta-action sequences. Distinguishing itself from static
+rule-based or direct VLM generation approaches, our method employs an Iterative Dual-Feedback
+
+
+                                                  21
+Published as a conference paper at ICLR 2026
+
+
+
+
+Optimization strategy. This pipeline optimizes kinematic rule thresholds through a cycle of VLM-
+based consistency checks and human verification, ensuring that the final labels are both physically
+plausible and semantically accurate before undergoing final refinement for complex cases.
+
+A.7.1    RULE -BASED G ENERATION
+The core of our pipeline is a rule-based labeling process that maps continuous trajectory data to a
+predefined vocabulary of speed and trajectory actions. This process is governed by a sliding window
+mechanism.
+
+Sliding Window Mechanism. We employ a sliding window that spans a 3-second duration,
+encompassing 1 second of historical trajectory and 2 seconds of future trajectory relative to its center
+point. Starting from the current frame, the window slides forward four times in 2-second increments.
+This procedure generates a four-step discrete meta-action sequence, representing the planned behavior
+for the next 8 seconds at a 2-second resolution.
+
+Trajectory-to-Action Mapping. For each segment of the trajectory captured by the window,
+we derive a composite meta-action consisting of a longitudinal (speed) and a lateral (trajectory)
+component based on the following rules:
+
+• Longitudinal Action (Speed): The speed action is determined by the vehicle’s average speed and
+  acceleration within the window.
+  – Stop: If the speed is below a threshold of 0.5 m/s.
+  – Accelerate / Decelerate: If the absolute acceleration exceeds a threshold of 0.3 m/s2 .
+  – Keep Speed: If the absolute acceleration is within the ±0.3 m/s2 range.
+• Lateral Action (Trajectory): The trajectory action is classified by calculating the overall angle
+  between the initial and final direction vectors of the trajectory segment within the window.
+  – Straight: If the absolute angle of deviation is less than 15◦ .
+  – Left Turn / Right Turn: If the angle exceeds 15◦ , with the direction determined by the sign of
+    the angle.
+
+Physically Grounded Thresholds. The thresholds employed in our rules are physically grounded
+to ensure interpretability. Specifically, the speed threshold of 0.5 m/s effectively distinguishes
+intentional movement from sensor noise or station-keeping drift. Similarly, the acceleration threshold
+of 0.3 m/s2 captures deliberate velocity changes while filtering out minor fluctuations typical of
+cruising. The heading deviation of 15◦ reliably separates straight driving from intentional lateral
+maneuvers. Crucially, these values were not arbitrarily chosen heuristics; rather, they are the
+converged results of an iterative “Dual-Feedback” optimization process, which effectively bridges
+kinematic rules with semantic understanding, as detailed in the following section.
+
+A.7.2    I TERATIVE T HRESHOLD O PTIMIZATION AND VLM-BASED R EFINEMENT
+While rule-based mapping provides a consistent baseline, determining the optimal boundaries for
+“intentional” driving actions can be ambiguous. To ensure high-quality labels and address the
+known limitations of VLMs in temporal grounding, we implemented a “Rule-Based Generation +
+VLM-as-Judge + Human Verification” pipeline with a dual-feedback mechanism.
+VLM-as-Judge with BEV Visualization. In this step, we leverage the advanced reasoning capabili-
+ties of GPT-4.1 to act as a proxy for human verification. We provide the model with a bird’s-eye-view
+(BEV) visualization of the ego-vehicle’s future trajectory alongside the initial rule-based meta-action
+sequence. This strategy of providing explicit visual context effectively mitigates the temporal ground-
+ing weaknesses often observed in VLMs, a challenge also highlighted and similarly addressed in Xu
+et al. (2025b) through visual prompts. The model is then tasked with evaluating the sequence for
+logical consistency.
+Dual-Feedback Iterative Tuning. We treated the kinematic thresholds (speed, acceleration, yaw)
+as parameters within a dual-feedback loop: 1) VLM Feedback: The VLM scored the consistency
+between the rule-generated labels and the BEV visualizations. 2) Human Feedback: We conducted
+
+
+                                                  22
+Published as a conference paper at ICLR 2026
+
+
+
+
+random spot-checks to calculate the false-label rate. In each iteration, thresholds were adjusted to
+simultaneously maximize the VLM’s consistency alignment score and minimize the human-observed
+error rate. The thresholds reported in the previous section represent the converged values from this
+optimization.
+Final Refinement for Hard Cases. For the small fraction of remaining boundary cases where
+rule-based outputs remained ambiguous (low VLM confidence), we performed a final pass using
+GPT-4.1. By providing the model with the BEV visualization and the tentative rule-based sequence,
+we allowed it to refine the labels based on logical consistency and scene context. The prompt used
+for this final refinement is detailed below.
+
+   VLM Refinement Prompt
+
+   System Prompt:
+   You are an expert driving meta-action evaluator and corrector. You will be given a bird’s-
+   eye-view (BEV) image where a blue polyline indicates the future ego trajectory. You will
+   also receive a 4-step rule-based meta-action sequence, each step being a pair: [speed action,
+   trajectory action]. Your job: (1) rate how consistent the sequence is with the visible trajectory
+   shape and plausible driving behavior, (2) correct any unreasonable actions.
+
+   User Prompt:
+   Consider the image and the rule-based 4-step meta-action sequence.
+   • Allowed speed actions: Stop, Keep Speed, Accelerate, Decelerate.
+   • Allowed trajectory actions: Left Turn, Right Turn, Straight.
+   • Return a strict JSON object with keys: score (0-10 integer), reason, and final meta actions.
+   • final meta actions MUST be a list of EXACTLY 4 strings, preserving the original speed
+     action for each step.
+   • Each string MUST be in the form ‘<speed>, <trajectory>’ using ONLY the allowed labels.
+   • Temporal semantics: the 4 steps cover [0-2s), [2-4s), [4-6s), [6-8s) after the current frame;
+     the first step is the current 0-2s window.
+   • Trajectory evidence: ONLY use the first 16 future trajectory points starting from the current
+     ego position; ignore farther points.
+   • Global trend tolerance: a turning trend does NOT require all steps to be turning; sequences
+     like ‘Straight, Straight, Left Turn, Left Turn’ are acceptable.
+   • Stationary cases: if future points are nearly stationary (clustered at one location), DO NOT
+     infer a turn; set the trajectory action to ‘Straight’ for those windows.
+   • Plausibility filter: only fix clearly unreasonable trajectory actions given the geometry and
+     the 2s window (e.g., ‘Stop, Left Turn’ -> ‘Stop, Straight’).
+   • Do not add any commentary. Output only the JSON.
+
+
+
+A.8    H UMAN E VALUATION D ETAILS
+
+To establish a credible human performance benchmark, we recruited three licensed drivers, each
+possessing over two years of driving experience. The evaluation tasked these participants with the
+same high-level planning challenge assigned to the agent: predicting a sequence of four meta-actions
+for each driving scenario. To facilitate this, we developed a dedicated evaluation interface, as depicted
+in Figure 6. For each sample, this interface presented the forward-facing camera view, current vehicle
+speed, and the navigation directive. Participants then selected the appropriate meta-actions for the
+subsequent 8-second horizon using a series of dropdown menus. The test sets from both Drive-Interal
+and nuScenes were partitioned equally, with each participant evaluating a unique third of the samples.
+The final “Human” baseline score reported in the main results is the average of the accuracies from
+these three evaluators.
+
+
+                                                  23
+Published as a conference paper at ICLR 2026
+
+
+
+
+Figure 6: The user interface for human evaluation. For each scenario, evaluators were provided with
+the front-view camera image, a navigation instruction, and the current vehicle speed. They used the
+dropdown menus to predict the 4-step meta-action sequence for the upcoming 8-second interval.
+A.9     E XTENDED E XPERIMENTAL R ESULTS
+
+A.9.1      D ETAILED R ESULTS FOR D OMAIN A LIGNMENT
+To provide a comprehensive view of the benefits of our autonomous driving domain alignment
+strategy, this section presents the detailed performance breakdown of our DriveAlign-3B model.
+Table 9 compares its performance against the base model, Qwen2.5-VL-3B, and the larger Qwen2.5-
+VL-7B across our domain-specific DriveAlign-VQAtest benchmark and a suite of eight general VLM
+benchmarks.
+As referenced in the main paper, the results demonstrate that DriveAlign-3B not only achieves a
+significant improvement of +11.7 points in the domain-specific overall score but also enhances its
+general VLM capabilities. This dual improvement validates our approach of developing robust driving-
+specific priors without compromising, and in many cases strengthening, the model’s foundational
+reasoning abilities.
+
+Table 9: Detailed results of domain alignment on in-domain and general abilities. Scores on
+DriveAlign-VQAtest (upper) and 8 general VLM benchmarks (lower). Numbers in blue/red are deltas
+vs. Qwen2.5-VL-3B.
+
+ Task                 Benchmark                          DriveAlign-3B (ours)   Qwen2.5-VL-3B   Qwen2.5-VL-7B
+                      scene description                        87.8 (+5.5)          82.3            82.2
+                      recognition of traffic entities          91.5 (+11.4)         80.1            86.4
+ DriveAlign-VQAtest   localization of critical targets         85.1 (+12.9)         72.2            67.9
+                      traffic commonsense and rules            74.0 (+17.1)         56.9            71.5
+                      overall                                  84.6 (+11.7)         72.9            77.0
+                      MMStar                                   56.7 (+2.9)          53.8            60.6
+                      MMVet                                    60.6 (-0.6)          61.2            69.0
+                      MMBench EN (val)                         80.4 (+1.1)          79.3            79.7
+                      MMBench EN V11 (val)                     77.4 (+1.0)          76.4            80.3
+ General              MME-Realworld-lite                       48.3 (+6.2)          42.1            44.6
+                      OCRBench                                 81.4 (-1.2)          82.6            88.1
+                      MMMU (val)                               46.0 (+4.4)          41.6            48.4
+                      AI2D                                     80.1 (+1.9)          78.2            80.7
+                      overall                                  66.4(+2.0)           64.4            68.9
+ Notes. For DriveAlign-VQAtest , each of the four topics contains 200 samples; the judge model is Doubao
+ Seed 1.6. The general benchmarks suite includes MMStar (Chen et al., 2024), MMVet (Yu et al., 2024),
+ MMBench (Liu et al., 2024a), MME-Realworld-lite (Zhang et al., 2024), OCRBench (Liu et al., 2024b),
+ MMMU (Yue et al., 2024), and AI2D (Kembhavi et al., 2016). The general evaluation was performed using
+ VLMEvalKit (Duan et al., 2024) with the default configuration.
+
+
+A.9.2      E XTENDED A BLATION R ESULTS FOR P ROGRESSIVE T RAINING S TRATEGY
+To further validate the robustness of our progressive training strategy, we present the ablation study
+results on the nuScenes dataset in Table 10. These results complement the main analysis conducted on
+
+
+                                                          24
+Published as a conference paper at ICLR 2026
+
+
+
+
+                        First Frame-Join Acc
+                                                                                                 Table 10: Ablation on the progressive training strategy on
+                                                                                  70
+
+          50
+                        Sequence Avg-Joint Acc
+                        MSA        48.29
+                                                 51.84            52.96
+                                                                          47.10
+                                                                                                 the nuScenes test set. We evaluate different combinations of
+                                        39.53
+                                                         42.59                    60             our three training stages. To ensure fair comparison, we also
+
+
+
+
+                                                                                       MSA (%)
+Acc (%)
+          40
+                                                                                                 test variants where a single RL stage (FCM-RL or AMS-RL)
+                29.27
+          30                                                                      50
+                                                                                                 is trained for two epochs, matching the total RL epochs of
+                        22.22
+          20
+                                                                                  40
+                                                                                                 our final model. Best results are in bold.
+               DriveAlign-3B       + DM-SFT      + FCM-RL        DriveAgent-R1
+                                                                                                                                        Training Stage             Sequence Avg-Joint Acc (%)
+                                                                                                 Variant                                                                                          MSA (%)
+                                                                                                                              DM-SFT      FCM-RL     AMS-RL        Mtool     Mtext    Madaptive
+Figure 7: Progressive training gains                                                             Variant-1 (SFT Only)         1 epoch         -             -      41.04     39.17     39.53       42.05
+on nuScenes test set. Accuracy in the                                                            Variant-2 (+FCM)
+                                                                                                 Variant-3 (+FCM x2)
+                                                                                                                              1 epoch
+                                                                                                                              1 epoch
+                                                                                                                                          1 epoch
+                                                                                                                                          2 epochs
+                                                                                                                                                            -
+                                                                                                                                                            -
+                                                                                                                                                                   42.92
+                                                                                                                                                                   45.15
+                                                                                                                                                                             40.58
+                                                                                                                                                                             41.07
+                                                                                                                                                                                       42.59
+                                                                                                                                                                                       44.60
+                                                                                                                                                                                                   56.49
+                                                                                                                                                                                                   58.30
+adaptive mode (Madaptive ) and MSA                                                               Variant-4 (+AMS)             1 epoch         -      1 epoch       41.18     40.58     40.92       57.76
+                                                                                                 Variant-5 (+AMS x2)          1 epoch         -      2 epochs      44.19     41.47     43.57       60.30
+improve with each training stage.                                                                DriveAgent-R1 (FCM→AMS)      1 epoch      1 epoch       1 epoch   46.38     44.43     47.10       65.30
+
+
+the Drive-Internal dataset in Section 4.3.2. The performance trends observed on nuScenes are highly
+consistent with those on Drive-Internal, confirming that each stage of our training pipeline—from
+SFT to the cascaded FCM-RL and AMS-RL—contributes to a steady and significant improvement
+in the agent’s capabilities. This cross-dataset consistency underscores the general effectiveness and
+reliability of our proposed training methodology.
+
+A.10                     Q UALITATIVE R ESULTS
+
+This section presents qualitative examples to illustrate the capabilities of DriveAgent-R1 in diverse
+driving scenarios. We begin with a simple case where the agent efficiently employs text-only
+reasoning (See Fig. 8 & Fig. 9). Subsequently, we showcase the agent’s active perception: at a
+busy intersection, it uses RoI Inspection and Retrieve View to check signals and pedestrian flow
+(See Fig. 10); in a low-visibility night scene, it leverages 3D Object Detection to uncover a hidden
+pedestrian (See Fig. 11); when approaching a barrier, the Depth Estimation tool provides the spatial
+awareness to navigate safely and plan ahead (See Fig. 12). Finally, two additional examples highlight
+the crucial role of RoI Inspection in resolving ambiguity by assessing the risk of distant pedestrians
+and confirming the state of a faraway traffic signal (See Fig. 13). Finally, to explicitly validate
+the superiority of our Hybrid Thinking framework, we present two comparative analyses against
+rigid “forced-mode” baselines. These cases demonstrate how the adaptive mode outperforms forced
+strategies by ensuring intent-driven tool usage in complex scenarios (See Fig. 14) and preventing
+information redundancy in straightforward scenes (See Fig. 15).
+
+
+                                         Front View
+                                                                                                                                   Reasoning under �����
+                                                                                                            Description The vehicle is approaching a toll booth with clear lane
+                                                                                                        markings. The speed is moderate, and the road ahead appears to be
+                                                                                                        straight. There are no immediate obstacles or turns visible. The navigation
+                                                                                                        command is to proceed through the toll booth.
+
+                                                                                                            Reasoning Given the current speed and proximity to the toll booth,
+                                                                                                           deceleration is necessary to safely navigate through. After passing the toll
+                                                                                                           booth, resuming normal speed is logical. The straight trajectory aligns
+                                                                                                           with the goal of proceeding through the toll area without deviation. No
+                   Speed:                                                                                  turns are required in this scenario.
+                   19.0 km/h
+                                                                                                             Prediction Decelerating initially ensures safe passage through the
+                                                                                                           toll booth. Then, maintaining speed allows for smooth travel afterward.
+                   Navigation：
+                   Proceed through the toll booth
+
+                                    ["Decelerate, Straight", "Decelerate, Straight", "Keep Speed, Straight", "Keep Speed, Straight"]
+
+                                                                                                5
+Figure 8: In this routine driving scenario, the vehicle approaches a toll booth with clear lane markings
+and straightforward navigation. Recognizing the low complexity and lack of ambiguity, DriveAgent-
+R1 employs its efficient Mtext mode. Through text-only reasoning, it formulates a safe and logical
+plan: decelerate to pass through the toll gate, then maintain speed to proceed, effectively handling a
+common situation without needing to invoke its vision toolkit.
+
+
+
+
+                                                                                                                25
+Published as a conference paper at ICLR 2026
+
+
+
+
+ Case Study General scenario
+                   Front View
+                                                                                Reasoning under �����
+                                                         Description The road is straight with no visible turns or obstacles.
+                                                           Trees line both sides, and there are no cars in the immediate vicinity
+                                                           of the intersection. The speed is moderate at 40 km/h. The navigation
+                                                           command is to continue straight.
+                                                          Reasoning      Given the clear road ahead and lack of traffic,
+                                                           maintaining current speed and trajectory is logical. No turns or stops
+                                                           are necessary as the path remains straight. The moderate speed
+                                                           suggests steady driving without acceleration or deceleration.
+      Speed:
+      40.27 km/h                                          Prediction    Based on this reasoning, the appropriate actions are to
+                                                          keep the current speed and stay straight for all frames.
+      Navigation：
+      Continue straight
+
+             ["Keep Speed, Straight", "Keep Speed, Straight", "Keep Speed, Straight", "Keep Speed, Straight"]
+
+                                                                                                 6
+Figure 9: In this case, the road is straight and the view is open with no apparent obstacles, DriveAgent-
+R1 engages its efficient text-only reasoning mode (Mtext ) due to the low scene complexity. By solely
+analyzing the textual scene description and navigation command, it accurately assesses the simple
+road conditions and formulates a plan to “Keep Speed, Continue Straight.” This decision is made
+without invoking the vision toolkit, demonstrating the efficiency of the hybrid-thinking framework.
+
+
+
+
+                                                                              Reasoning under �����
+                                                    Description The scene shows an intersection with multiple vehicles
+                                                    and pedestrians. There are motorcyclists and cars nearby, requiring
+                 Front View                         careful navigation. I need check the traffic light status.
+                                                                                         {"view_index": "front", "bbox": [80, 140, 120, 160],
+                                                                                        "description": "the traffic light at the intersection"}
+
+                                                                                 The traffic light is green and there are 46 seconds
+                                                                                 left, which means I need to wait cautiously for
+                                                                                 pedestrians to cross. I will check front-right next.
+
+                                                                                        {"frame_index": "current", "view_index": "front_right"}
+
+                                                                                 The front-right view captures motorcyclists and
+                                                                                 pedestrians crossing the intersection, indicating a
+                                                           Front Right View      busy area.
+     Speed:
+     3.07 km/h                                       Reasoning Given that the current speed is low and road condition is
+                                                    busy, stopping is necessary before proceeding with the turn. After ensuring
+                                                    that there are no pedestrians in front of the vehicle, accelerating with a right
+     Navigation：                                    turn aligns with the navigation command.
+     Turn right at the current intersection
+                                                     Prediction The initial actions involve stopping and assessing the
+                                                    environment. After ensuring safety, accelerating with a right turn.
+
+
+                      ["Stop, Straight", "Stop, Straight", "Stop, Right Turn", "Accelerate, Right Turn"]
+
+
+Figure 10: This case highlights the necessity of active perception when navigating a challenging
+right turn at a busy intersection with heavy pedestrian and motorcycle traffic. The initial view
+provides insufficient detail to ascertain the traffic light’s status, creating uncertainty. To resolve this,
+DriveAgent-R1 proactively engages its Mtool mode. It first invokes the “RoI Inspection” tool to
+confirm the green light and then use the “Retrieve View” to get the front-right view to better assess
+the dense flow of crossing traffic. By grounding its reasoning in this actively acquired visual evidence,
+the agent formulates a safe, context-aware plan: to stop and wait for pedestrians to clear before
+executing the right turn.
+
+
+
+                                                               26
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                                               Reasoning under �����
+                                                      Description   The vehicle is approaching a bus on the right side of the road.
+                    Front View
+                                                       The bus appears to be stationary or moving very slowly. There are no
+                                                       immediate obstacles in the lane ahead.
+
+                                                       Reasoning     Given the proximity of the bus and the moderate speed, it's
+                                                       necessary to decelerate to ensure safety. I need to confirm again if there
+                                                       are any immediate hazards on the road ahead.
+
+                                                                                                  {"view_index": "front", "object_text": "bus"}
+
+                                                                                         The 3D object detection confirms the
+                                                                                         presence of a bus. At the same time,
+                                                                                         some pedestrians are detected in the
+       Speed:                                                                            immediate path. This supports
+       26.79 km/h                                    maintaining a straight trajectory while decelerating.
+
+                                                      Prediction        The initial action should be to decelerate and continue
+       Navigation：                                    straight. Once it's confirmed that there are no immediate hazards, keep the
+       Go straight on the current road                current speed.
+
+                ["Decelerate, Straight", "Decelerate, Straight", "Keep Speed, Straight", "Decelerate, Straight"]
+
+                                                                                              7
+Figure 11: This case demonstrates the agent’s ability to uncover potential hazards in challenging
+low-visibility conditions. While navigating a narrow road at night, the initial perception identifies a
+nearby bus but fails to detect a pedestrian in the immediate path due to the darkness. By invoking the
+“3D Object Detection” tool, DriveAgent-R1 performs active perception and successfully identifies the
+otherwise overlooked pedestrian. This critical, tool-grounded discovery prompts the agent to revise
+its initial assessment and decide to decelerate, prioritizing safety in response to the newly revealed
+risk.
+
+
+
+
+                                                                                Reasoning under �����
+                                                       Description     The vehicle is approaching a barrier gate at the intersection.
+                    Front View
+                                                        There are traffic cones on the left side, indicating a controlled entry point.
+
+                                                        Reasoning      Given the low speed and the presence of traffic cones, it's
+                                                        necessary to decelerate initially to ensure safety as the vehicle approaches
+                                                        the barrier gate. Once safely past the gate, maintaining a steady speed
+                                                        while continuing straight aligns with the navigation command.
+                                                                                                   {"view_index": "front"}
+
+
+                                                                                            The depth map shows that the barrier
+                                                                                            gate and traffic cones are relatively close,
+                                                                                            reinforcing the need to decelerate initially.
+                                                                                            The road ahead appears clear after the
+       Speed:
+                                                                                            gate.
+       5.20 km/h
+                                                       Prediction The vehicle should decelerate initially, once past the gate,
+       Navigation：                                     maintain a steady speed and continue straight.
+       Continue straightafter passing the
+       barrier gate
+                ["Decelerate, Straight", "Decelerate, Straight", "Keep Speed, Straight", "Accelerate, Straight"]
+
+                                                                                                                                       9
+Figure 12: In scenarios requiring precise distance judgment, such as passing through this barrier
+gate, the “Depth Estimation” tool proves invaluable. The generated depth map provides two critical
+insights: it first confirms the gate’s close proximity, reinforcing the decision to decelerate for safe
+passage. More importantly, it also perceives the clear and open road beyond the barrier. This foresight
+into the upcoming environment allows DriveAgent-R1 to formulate a confident, multi-stage plan:
+slow down to navigate the immediate obstacle, and then accelerate once safely through.
+
+
+
+
+                                                              27
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                                              Reasoning under �����
+                    Front View
+                                                    Description The scene shows a straight urban road with no immediate
+                                                      turns. A FedEx truck is parked on the left, and there are pedestrians and
+                                                      vehicles further ahead. I will use RoI_Inspection to zoom in on the
+                                                      pedestrian area for better visibility of any potential hazards.
+                                                                                           {"view_index": "front", "bbox": [375, 180, 460, 215],
+                                                                                          "description": "Pedestrian area"}
+
+                                                                                   The RoI_Inspection image shows pedestrians
+                                                                                   walking on the sidewalk, which is close to the
+                                                                                   road. This indicates potential hazards that
+                                                                                   require caution.
+       Speed:                                        Reasoning      Given the current speed and the presence of pedestrians
+       27.46 km/h                                    near the road, it's prudent to decelerate initially to ensure safety. After
+                                                     confirming no immediate obstacles, maintaining a steady speed.
+       Navigation：                                   Prediction Decelerating first ensures safety. Once safe, keeping a steady
+       Continue straight.                           speed allows for smooth progression along the intended path.
+
+
+           ["Decelerate, Straight", "Keep Speed, Straight", "Decelerate, Straight", "Keep Speed, Straight"]
+
+                                                                                                                                        10
+Figure 13: Even on a seemingly clear, straight road, DriveAgent-R1 exhibits proactive caution by
+investigating distant activity. While the initial view shows pedestrians far ahead, their exact proximity
+to the road is uncertain. By deploying the “RoI Inspection” tool, the agent obtains a magnified view,
+revealing that the individuals are walking very close to the lane of travel. This specific, tool-acquired
+insight elevates the potential risk, prompting the agent to prudently decelerate to ensure a safe passage.
+
+
+
+
+                                                             28
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                                                                    Key object:
+
+                                                                                                    The white car
+                                 Speed:                                                             approaching from the
+                                 39 km/h                                                            intersection
+                                 Navigation：
+                                 go straight
+               Text Mode                                   Tool Mode                         Adaptive Mode (Tool Mode）
+  <description>                             <description>                                <description>
+  The road is straight with no visible      The road ahead is wet, ... There are         The road ahead is clear ... There are
+turns or obstacles. Trees line both sides trees .. and a few pedestrians ....          trees... A motorcycle is on the left side ...
+of the road, and there are pedestrians                                                          {"view_index": "front", "bbox":
+                                                     {"frame_index": "t0",
+on the left. No immediate need for                                                             [300, 170, 350, 200], "description":
+                                                    "view_index": "front_left"}
+acceleration or deceleration is apparent.                                                      "the intersection ahead"}
+  <reasoning>
+  Given the clear path ahead,
+maintaining current speed is
+appropriate. There are no signs
+indicating a need to change lanes or
+alter direction. The navigation
+command suggests continuing straight,         The front-left view shows a                The RoI_Inspection image shows an
+aligning with this observation. No          motorcyclist on the left side of the road. oncoming car entering the
+external factors require altering speed     <reasoning>                                intersection. ...require deceleration.
+or trajectory.                                Given the wet road conditions and          <reasoning>
+  <prediction>                              the presence of a motorcyclist,              ... the road may be narrowed ..., it's
+  Based on the reasoning, the best          deceleration might be necessary ...        necessary to decelerate and prepare for a
+course of action is to keep the current     <prediction>                               possible lane change to the right. ....
+speed and stay straight.                      Considering ..., deceleration is           <prediction>
+                                            necessary initially. After ensuring safety, Based on the analysis, ... ...decelerating
+                                            maintaining the current speed while        while making a right turn to avoid the
+                                            continuing straight ...                    oncoming traffic...
+  <meta actions>                            <meta actions>                               <meta actions>
+  ["Keep Speed, Straight" x 4]              ["Decelerate, Straight", "Decelerate,        ["Decelerate, Right Turn", "Decelerate,
+  </meta actions>                         Straight", "Keep Speed, Straight", "Keep Straight", "Decelerate, Straight",
+                                          Speed, Straight"]                            "Decelerate, Straight"]
+                                            </meta actions>                              </meta actions>
+
+              ACC: 0/100                                 ACC: 25/100                                ACC: 100/100
+
+Figure 14: Comparison of reasoning modes in a complex intersection scenario. The key object
+is a distant white car approaching from the intersection (top). Left (Mtext ): Relying solely on the
+defauplt resolution, the model fails to detect the distant vehicle and incorrectly decides to maintain
+speed. Center (Mtool ): Although forced to use tools, the model lacks specific intent. It calls a generic
+front-left view but fails to focus on the critical area. This illustrates that without the autonomous
+reasoning to seek specific evidence, tool usage can be ineffective. Right (Madaptive ): The model
+identifies uncertainty and autonomously switches to Tool Mode. It proactively uses RoI Inspection to
+zoom in on the intersection, successfully identifying the oncoming car and planning a safe lane change.
+This demonstrates the superiority of active, intent-driven perception over passive tool invocation.
+
+
+
+
+                                                                29
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                                                                                         Key object:
+
+                                                                                                         The white car changing
+                                   Speed:                                                                lanes to the right
+                                   34 km/h
+
+                                   Navigation：
+                                   proceed straight
+                Text Mode                                     Tool Mode                          Adaptive Mode (Text Mode）
+  <description>                               <description>                                    <description>
+  The road is clear ahead ... Traffic is      The road is straight with multiple               The road is clear ahead with no
+moderate ... A white car is in front,       lanes. ... there are no immediate                immediate obstacles. A white car in
+turning right...                            obstacles. ... A traffic sign ... is visible ... front has a right turn signal, indicating it
+  <reasoning>                                         {"frame_index": "t0",                  may be changing lanes...
+  The white car ahead is turning right, so           "view_index": "front_left"}               <reasoning>
+it's safe to decelerate slightly to avoid a                                                    To ensure safety, I need to decelerate
+collision. ...The road remains straight for                             The front-left       slightly as there are lane changes
+the next few seconds...                                                 view shows a         involving other vehicles. The traffic flow
+  <prediction>                                                          similar road         suggests maintaining a steady speed ....
+  Decelerating initially ensures safe                                   ahead...             so deceleration will be gradual rather
+navigation around the turning vehicle.        <reasoning>                                    than abrupt...
+Keeping straight aligns with the clear        The road is clear and straight, ...              <prediction>
+road ahead...                               maintaining a steady speed is prudent. ... ... initial deceleration is needed...
+  <meta actions>                                      {"view_index": "front",                keeping the current speed while
+  ["Decelerate, Straight", "Decelerate,              "object_text": "traffic sign"}          proceeding straight is appropriate.
+Straight", "Decelerate, Straight",                                                             <meta actions>
+"Decelerate, Straight"]                                                 The detected           ["Decelerate, Straight", "Decelerate,
+  </meta actions>                                                       sign   and   other   Straight", "Keep Speed, Straight",
+                                                                        vehicles ..keep "Decelerate, Straight"]
+                                                                        current speed ... </meta actions>
+                                                <prediction>
+                                                Given the clear road ahead ... the
+                                              logical action is to keep the current speed
+                                              while driving straight...
+                                                <meta actions>
+                                                ["Keep Speed, Straight" x 4]
+                                                </meta actions>
+
+            ACC: 87.5/100                                   ACC: 25/100                                  ACC: 100/100
+
+Figure 15: Comparison of reasoning modes in a clear, high-dynamic scenario. The key object
+is a white car cutting into the ego-lane (top). Center (Mtool ): When forced to use tools in a clear
+scenario, the model becomes distracted. It invokes 3D Object Detection for a non-critical traffic sign,
+introducing irrelevant information that diverts attention from the immediate braking event, leading
+to a dangerous “Keep Speed” prediction. Right (Madaptive ): The model correctly recognizes that
+the initial visual context is sufficient. It selects Text Mode, avoiding the noise and cognitive load of
+unnecessary tool calls. By focusing on the clear visual evidence of the cut-in, it correctly predicts the
+necessary deceleration. This highlights the importance of Hybrid Thinking in preventing “tool abuse”
+and information overload.
+
+
+
+
+                                                                   30
+Published as a conference paper at ICLR 2026
+
+
+
+
+A.11      A NALYSIS OF A FAILURE C ASE IN C OMPLEX I NTERSECTIONS
+
+To provide a transparent assessment of our agent’s current limitations, this section analyzes a
+representative failure case in a complex urban intersection (see Figure 16). In this scenario, the agent
+initially correctly identifies its traffic light as green. However, after proactively retrieving a side-view
+image to better assess the intersection, it misinterprets a red pedestrian signal as its own, causing it to
+override its correct initial judgment and erroneously plan to stop.
+This failure highlights a key limitation: the agent’s over-reliance on new visual evidence from its tools,
+which stems from an insufficient grasp of complex road topologies and traffic rules. Future work will
+directly address this challenge through two complementary directions: (1) strengthening the agent’s
+foundational understanding of complex road topologies and traffic rules through targeted domain
+alignment, and (2) cultivating a more nuanced reasoning process capable of resolving informational
+conflicts. This will involve training the agent on adversarial scenarios with ambiguous visual cues,
+teaching it to weigh evidence and resolve contradictions rather than uncritically accepting the most
+recent perception. By implementing these measures, we aim to develop a more robust agent that not
+only actively perceives its environment but also critically reasons about what it sees, leading to safer
+and more reliable decision-making.
+
+
+
+                                                                               Reasoning under �����
+                  Front View
+                                                     Description The scene is a nighttime urban intersection ... A pedestrian
+                                                    crossing is visible with multiple pedestrians holding umbrellas. The traffic
+                                                    light ahead shows green, indicating it's safe to proceed.
+
+                                                                                                           {"frame_index": "current",
+                                                                                                           "view_index": "front_right"}
+
+                                                                                                  The front-right view shows .... The
+                                                                                                  traffic light is red, indicating a
+                                                                                                  need to stop before proceeding.
+     Speed:
+     13.95 km/h                                       Reasoning The pedestrian crossing is busy, and the traffic light is red.
+                                                     Deceleration is necessary ... decelerating further will allow for a controlled
+     Navigation：                                     right turn after stopping if required by the traffic light's state.
+     Turn right at the current intersection.
+                                                      Prediction To safely navigate this scenario, I will decelerate initially to
+                                                     manage the pedestrian activity and assess the traffic light status. If the light
+                                                     remains red, I will decelerate further before stopping.
+
+
+       Pred: ["Decelerate, Right Turn", "Decelerate, Right Turn", "Stop, Right Turn", "Decelerate, Right Turn"]
+
+   GT: ["Decelerate, Right Turn", "Decelerate, Right Turn", "Keep Speed, Right Turn", "Keep Speed, Right Turn"]
+
+
+Figure 16: A failure case demonstrating incorrect traffic light identification. The agent initially cor-
+rectly identifies the forward traffic light as green, but after retrieving a front-right view, it mistakenly
+focuses on the red pedestrian light, leading to an unnecessary “Stop” command in its final plan.
+
+
+
+
+                                                               31
+Published as a conference paper at ICLR 2026
+
+
+
+
+A.12    DYNAMIC M ODE S WITCHING A NALYSIS
+
+In this section, we include two detailed figure sequences (Fig. 17 and Fig. 18) visualizing the agent’s
+ability to switch between Mtext and Mtool based on evolving visual observations.
+
+                                    <think_text>
+
+                                      <description>
+                                        The road is wet, indicating rainy conditions. A stop sign is visible on the right, and there's
+                                      an upcoming intersection with lane markings. The vehicle is currently traveling at 16.84 km/h.
+                                      The navigation command is to turn slightly right at the intersection and continue straight.
+                                      </decription>
+
+                                      <reasoning>
+                                        The wet road requires cautious driving, especially near intersections. Decelerating before
+            t-4                       turning ensures safety. A right turn adjustment is necessary to align with the navigation
+                                      command. After turning, accelerating straight is logical to maintain flow.
+                                      </reasoning>
+
+                                      <prediction>
+                                        Decelerating first ensures safe entry into the intersection. Accelerating after the turn helps
+                                      maintain progress along the intended path.
+                                      </prediction>
+
+                                    </think_text>
+                                    <meta actions>
+                                    ["Decelerate, Straight", "Decelerate, Right Turn", "Accelerate, Straight", "Accelerate, Straight"]
+            t-3                     </meta actions>
+
+
+                                                              DriveAgent-R1 Switches thinking
+                                                              mode from text mode to tool mode.
+                                    <think_tool>
+
+                                      <description>
+            t-2                          The scene shows a wet road with a truck on the right and traffic cones ahead. The current
+                                      speed is low, indicating cautious driving. A slightly right turn is required at the upcoming
+                                      intersection. Using RoI_Inspection will help identify any potential hazards or obstacles in the
+                                      area where the truck is located.
+
+                                               {"view_index": "front",
+                                              "bbox": [508, 140, 672, 230],
+                                              "description": "the truck on the right"}
+
+
+                                      </decription>
+
+            t-1                       <reasoning>
+                                      The RoI_Inspection confirms the presence of a truck on the right, which may pose an obstacle
+                                    for a left turn. Given the low speed and wet conditions, stopping is necessary to ensure safety
+                                    before proceeding with the turn. The navigation command indicates a right turn, but
+                                    due to the current low speed and potential hazards, stopping seems prudent
+                                    before continuing the turn.
+                                      </reasoning>
+
+                                      <prediction>
+                                      Based on the analysis, stopping is required in the current frame and subsequent frames to
+                                    safely navigate the intersection.
+             t                        </prediction>
+
+                                    </think_tool>
+                                    <meta actions>
+                                    ["Stop, Right Turn", "Stop, Right Turn", "Stop, Right Turn", "Stop, Right Turn"]
+                                    </meta actions>
+
+
+Figure 17: Dynamic Mode Switching from Mtext to Mtool in response to emerging risk. This
+sequence illustrates the agent’s ability to adapt its reasoning strategy during streaming inference.
+(Top - t − 4): The agent operates in Text Mode. Observing the wet road conditions and the upcoming
+intersection, it relies on internal knowledge to formulate a plan to “Decelerate” and then “Turn
+Slightly Right.” (Bottom - t): As the vehicle approaches the intersection, the agent identifies a truck
+on the right side as a potential conflict. It immediately switches to Tool Mode and invokes RoI
+Inspection to confirm the target. Grounded by this specific visual evidence, the agent updates its
+reasoning to prioritize caution, revising its decision to “Stop” to avoid potential collision hazards.
+
+
+
+                                                         32
+Published as a conference paper at ICLR 2026
+
+
+
+
+                                   <think_tool>
+                                     <description>
+                                        There are several people near the car on the left, and they seem to be moving or using some
+                                     equipment. The road appears to be clear ahead with a yellow dashed line guiding the path. Using
+                                     depth_estimation can help assess distances accurately.
+
+
+
+
+                                              {"view_index": "front"}
+            t-4
+
+                                       The depth map shows that the people on the left are relatively close. The road
+                                     ahead appears slightly further away, indicating no immediate immediate obstruction. However,
+                                     considering the potential movement of the individuals and their proximity to
+                                     the vehicle, it's prudent to adjust speed and direction slightly.
+                                     </description>
+
+                                     <reasoning>
+                                       Given the depth estimation and the presence of people near the vehicle, slowing down is
+            t-3                      necessary for safety. ... due to the proximity of the individuals and potential
+                                     movement, minor adjustments like right turns might be needed initially...
+                                     maintaining a steady speed while continuing straight...
+                                     </reasoning>
+
+                                     <prediction>
+                                        Based on the reasoning, the initial action should involve slight deceleration and a right turn to
+                                     maintain safety. Once a safe distance is achieved, keeping a steady speed and trajectory would be
+                                     appropriate.
+                                     </prediction>
+                                   </think_tool>
+            t-2                    <meta actions>
+                                   ["Decelerate, Right Turn", "Decelerate, Straight", "Keep Speed, Straight", "Keep Speed, Straight"]
+                                   </meta actions>
+
+
+                                                               DriveAgent-R1 Switches thinking mode
+                                                               from tool mode to text mode.
+                                   <think_text>
+                                     <description>
+            t-1                         The road is clear with no immediate obstacles or turns. Trees line both sides, and the lane
+                                     markings are visible. The speed is moderate at 27.83 km/h. No other vehicles are in sight.
+                                     </description>
+
+                                     <reasoning>
+                                       Given the clear road ahead and the navigation command to continue straight, maintaining
+                                     current speed and trajectory is logical. There are no signs indicating a need for acceleration or
+                                     deceleration. The environment suggests steady driving conditions for the next few seconds.
+                                     </reasoning>
+
+                                     <prediction>
+                                        Based on this reasoning, the appropriate action is to keep the current speed and stay straight.
+             t                       This approach aligns with the straightforward nature of the road.
+                                     </prediction>
+                                   </think_text>
+                                   <meta actions>
+                                   ["Keep Speed, Straight", "Keep Speed, Straight", "Keep Speed, Straight", "Keep Speed, Straight"]
+                                   </meta actions>
+
+
+Figure 18: Dynamic Mode Switching from Mtool to Mtext for efficiency. This sequence demon-
+strates the agent’s capability to optimize inference cost by switching modes based on scene complexity.
+(Top - t − 4): The agent encounters pedestrians and equipment on the left. It activates Tool Mode
+and utilizes Depth Estimation to assess the spatial relationship (“the people on the left are relatively
+close”). To ensure safety, it plans a maneuver to “Decelerate” and “Turn Right” to increase the lateral
+distance from the hazard. (Bottom - t): After passing the obstruction, the scene simplifies. The agent
+observes a clear road with no immediate threats and a speed of 27.83 km/h. It dynamically switches
+to Text Mode, using efficient internal reasoning to generate a “Keep Speed, Straight” plan, validating
+that it can autonomously disengage tools when they are unnecessary.
+A.13    C OMPARISION WITH I NSTRUCTION -G UIDE ATTENTION
+
+In this section, we address the distinction between our tool-based active perception framework and
+Instruction-Guided Attention (i.e., explicitly prompting the model via text to “focus on” specific
+regions). While both approaches aim to guide the model’s focus, they differ fundamentally in their
+mechanisms for Information Gain and Generalization.
+
+
+                                                          33
+Published as a conference paper at ICLR 2026
+
+
+
+
+Theoretical Distinction: Resolution Amplifier vs. Attention on Compressed Features Standard
+VLMs encode input images into a sequence of visual tokens through a fixed-size vision encoder. This
+process involves downsampling, which inevitably leads to a loss of high-frequency details necessary
+for resolving small or distant objects (e.g., traffic lights at a distance).
+
+• Instruction-Guided Attention (Passive) Providing a text instruction (e.g., “Please pay close
+  attention to the traffic lights in the center”) operates strictly within the model’s self-attention
+  mechanism. It guides the model to attend to specific visual tokens within the already compressed
+  feature space. Crucially, if the physical visual evidence (e.g., the color of a distant light) was lost
+  during the initial downsampling and encoding, the model cannot “see” it, regardless of how explicit
+  the text instruction is.
+• Active Perception (RoI Inspection) In contrast, our RoI Inspection tool acts as a resolution
+  amplifier. It accesses the lossless, raw image buffer. When the agent predicts a bounding box, the
+  tool extracts this region from the high-resolution source and re-encodes it. This process introduces
+  new, high-fidelity pixel information that was absent in the global view tokens, effectively bypassing
+  the resolution bottleneck of the base encoder.
+
+A.13.1    Q UANTITATIVE A NALYSIS
+To empirically validate this distinction, we conducted a comparative study on the Drive-Internal
+test set. We compared DriveAgent-R1 (equipped with active tools) against a baseline using Textual
+Attention Prompting. Since manually tailoring specific coordinates for every test case is infeasible
+and would require an oracle, we utilized a generic, scene-agnostic instruction designed to cover
+common critical objects: “Please pay close attention to the vehicles and traffic lights in the center of
+the image.”
+
+Table 11: Comparison of Active Perception vs. Instruction-Guided Attention on Drive-Internal test
+set. Bold denotes the best performance.
+
+  Inference Setting                       First-Frame Joint Acc.            Seq. Avg. Joint Acc.
+  Baseline (Mtext )                                  45.27                           43.29
+  Instruction-Guided Attention                       46.72                           43.83
+  Active Perception (RoI)                            48.81                           44.65
+
+The results in Table 11 demonstrate that while guiding the model’s attention via text instructions offers
+a slight improvement, Active RoI Inspection yields a significantly larger gain (+3.54% First-Frame
+Acc and +1.36% Seq Acc). This confirms that guiding attention within a low-resolution feature map
+is insufficient for fine-grained planning tasks; increasing the effective resolution is required.
+
+
+
+
+                                                   34
+Published as a conference paper at ICLR 2026
+
+
+
+
+A.13.2         Q UALITATIVE A NALYSIS
+In this section, we present a representative failure case of Instruction-Guided Attention.
+
+
+
+
+                                  Speed:
+                                  31.5 km/h
+
+                                  Navigation：
+                                  go straight
+     Prompt model with Instruction                                              Active Perception
+ “Please pay close attention to the vehicles and traffic                       with RoI_Inspection
+          lights in the center of the image.”
+<think_text>                                                   <think_tools>
+
+ <description>                                                   <description>
+  The road is clear ahead with no immediate obstacles.           The vehicle is approaching an intersection with a traffic
+ Traffic signals are not visible, but the presence light visible ahead. The road appears clear, and there are no
+ of an intersection suggests caution. A building under         immediate obstacles or pedestrians. To better
+ construction is on the left.
+ </description>                                                understand the traffic light status and any
+ <reasoning>                                                   potential hazards, I will use the RoI_Inspection tool on the
+  Given the clear path and moderate speed, deceleration        traffic light.
+might be necessary initially to ensure safety as we approach             {"view_index": "front", "bbox":
+any unseen hazards. After confirming the intersection is safe,          [298, 155, 320, 170], "description":
+maintaining current speed while proceeding straight aligns              "the traffic light in front"}
+with the navigation command.                                    The RoI_Inspection tool confirms that the traffic light
+ </reasoning>
+ <prediction>
+                                                               ahead is red. This indicates that the vehicle should stop
+ Decelerating first ensures safety before resuming normal      at the intersection.
+speed. This matches the logical sequence of actions for the      </description>
+upcoming frames.                                                 <reasoning> Given the red traffic light, ...</reasoning>
+ </prediction>                                                   <prediction> .... </prediction>
+
+</think_text>                                                  </think_tool>
+
+meta actions:                                                  meta actions:
+["Decelerate, Straight", "Keep Speed, Straight",               ["Decelerate, Straight", "Decelerate, Straight",
+"Decelerate, Straight", "Keep Speed, Straight"]                  "Stop, Straight", "Stop, Straight"]
+
+
+Figure 19: Comparison of Passive Prompting vs. Active Perception. Left: Despite being prompted
+to “pay close attention to the vehicles and traffic lights in the center of the image,” the model fails to
+identify the traffic light status due to the limited resolution of global visual tokens, leading to a risky
+“Keep Speed” decision. Right: DriveAgent-R1 actively invokes RoI Inspection, retrieving a high-
+resolution crop that reveals the Red Light, leading to a correct “Stop” decision. This demonstrates
+that active tools provide critical information gain that static prompts cannot achieve.
+
+
+
+
+                                                              35
+

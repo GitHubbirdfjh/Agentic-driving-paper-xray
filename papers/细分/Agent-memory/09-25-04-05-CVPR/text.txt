@@ -1,0 +1,1330 @@
+                                                                       JarvisIR: Elevating Autonomous Driving Perception
+                                                                             with Intelligent Image Restoration
+
+                                                       Yunlong Lin1*♣ Zixu Lin1*♣ Haoyu Chen2* Panwang Pan3* Chenxin Li6
+                                                                 Sixiang Chen2 Yeying Jin4 Wenbo Li5† Xinghao Ding1†
+                                                         1
+                                                           Key Laboratory of Multimedia Trusted Perception and Efficient Computing,
+                                                          Ministry of Education of China, Xiamen University, Xiamen, Fujian, China
+arXiv:2504.04158v1 [cs.CV] 5 Apr 2025
+
+
+
+
+                                                            2
+                                                              The Hong Kong University of Science and Technology (Guangzhou)
+                                                                 3
+                                                                   Bytedance’s Pico 4 Tencent 5 Huawei Noah’s Ark Lab
+                                                                           6
+                                                                             The Chinese University of Hong Kong
+                                                                        Project page:           https://cvpr2025-jarvisir.github.io/
+
+                                                                                                                      narios exhibit multiple and coupled degradations. Current
+                                                                    Abstract                                          adverse weather image restoration methods are primarily
+                                                                                                                      categorized into task-specific methods and all-in-one ap-
+                                        Vision-centric perception systems struggle with unpre-                        proaches. Both categories struggle with real-world cou-
+                                        dictable and coupled weather degradations in the wild.                        pled degradations, as shown in Figure 1. Task-specific
+                                        Current solutions are often limited, as they either de-                       methods [24, 31, 32, 45, 89] often require prior knowl-
+                                        pend on specific degradation priors or suffer from signif-                    edge of specific degradation types, while real-world degra-
+                                        icant domain gaps. To enable robust and autonomous                            dations are often unknown and coupled. All-in-one meth-
+                                        operation in real-world conditions, we propose JarvisIR,                      ods [13, 18, 30, 37, 49] trained on synthetic datasets in a su-
+                                        a VLM-powered agent that leverages the VLM as a con-                          pervised manner, suffer from a significant domain gap when
+                                        troller to manage multiple expert restoration models. To                      applied to real-world data. One promising strategy to tackle
+                                        further enhance system robustness, reduce hallucinations,                     multiple degradations in the wild is to integrate specialized
+                                        and improve generalizability in real-world adverse weather,                   models that excel in their domains. However, this strategy
+                                        JarvisIR employs a novel two-stage framework consisting                       is highly sensitive to task order, and even minor changes
+                                        of supervised fine-tuning and human feedback alignment.                       in execution sequence can lead to significant performance
+                                        Specifically, to address the lack of paired data in real-world                degradation. Therefore, autonomously and efficiently coor-
+                                        scenarios, the human feedback alignment enables the VLM                       dinating expert models in real-world scenarios is essential
+                                        to be fine-tuned effectively on large-scale real-world data in                for perceptual restoration.
+                                        an unsupervised manner. To support the training and eval-
+                                                                                                                         Recently, large language models (LLMs) have exhib-
+                                        uation of JarvisIR, we introduce CleanBench, a compre-
+                                                                                                                      ited remarkable proficiency in reasoning, decision-making
+                                        hensive dataset consisting of high-quality and large-scale
+                                                                                                                      and interaction with environments [26, 29, 53, 85, 98].
+                                        instruction-responses pairs, including 150K synthetic en-
+                                                                                                                      These advancements raise an important question: Could
+                                        tries and 80K real entries. Extensive experiments demon-
+                                                                                                                      vision-language models (VLMs) act as controllers, manag-
+                                        strate that JarvisIR exhibits superior decision-making and
+                                                                                                                      ing publicly available specialized restoration models, au-
+                                        restoration capabilities. Compared with existing methods,
+                                                                                                                      tonomously planning tasks, and selecting models to facili-
+                                        it achieves a 50% improvement in the average of all percep-
+                                                                                                                      tate the development of comprehensive restoration systems?
+                                        tion metrics on CleanBench-Real. Project page: https:
+                                                                                                                      The answer is affirmative, however, constructing such sys-
+                                        //cvpr2025-jarvisir.github.io/.
+                                                                                                                      tems is non-trivial and typically requires extensive paired
+                                        1. Introduction                                                               data. In real-world scenarios, while there exists exten-
+                                                                                                                      sive real degraded data, the lack of corresponding labels
+                                        Vision-centric perception systems often struggle in ad-                       prevents the implementation of supervised fine-tuning ap-
+                                        verse weather, where images captured in real-world sce-                       proaches. To tackle this issue and harness large-scale un-
+                                            ∗ Authors Yunlong Lin and Zixu Lin contributed the most and led the
+                                                                                                                      labeled data, we design a fine-tuning framework based on
+                                        study, while Authors Haoyu Chen and Panwang Pan also made significant         human feedback, allowing the VLM to be trained in an un-
+                                        contributions. † Corresponding author.                                        supervised manner. With this approach, we could create a
+
+
+                                                                                                                  1
+Figure 1. Limitations of single-task methods, all-in-one methods, and inaccurate task order. (a) Single-task specific and all-in-one
+methods fail to address coupled degradation in real-world scenarios. (b) Collaboration among multi-expert models effectively mitigates
+complex degradation, but is sensitive to the order of tasks. Unlike these approaches, JarvisIR can dynamically schedule different expert
+models in response to the rapidly changing scenarios and coupled degradation in the wild.
+
+
+system that performs robustly and reliably in the wild.                • We introduce JarvisIR, a VLM-powered agent that au-
+                                                                         tonomously manages and coordinates multiple expert
+    In this work, we introduce JarvisIR, a VLM-powered
+                                                                         restoration models to address coupled weather degrada-
+agent integrating VLM (i.e., Llava-Llama3 [46]) with ex-
+                                                                         tions in real-world environments.
+pert restoration models sourced from GitHub and Hug-
+                                                                       • We present CleanBench, the first high-quality instruction-
+ging Face. The development of this system involved two
+                                                                         following dataset specifically curated for developing in-
+key components: 1) CleanBench, an instruction-following
+                                                                         telligent restoration systems, containing 150K synthetic
+dataset constructed using the self-instruct strategy [73],
+                                                                         and 80K real instruction-response pairs.
+which includes 150K synthetic and 80K real instruction-
+                                                                       • We propose a novel two-stage framework combining su-
+response pairs (CleanBench-Real), designed to support both
+                                                                         pervised fine-tuning and human feedback alignment to
+training and evaluation. 2) A supervised fine-tuning (SFT)
+                                                                         enhance system robustness, reduce hallucinations and im-
+and human feedback alignment framework for training a
+                                                                         prove generalizability in the wild.
+VLM as an agent to be reliable and autonomous. Specif-
+                                                                       • Our experiments demonstrate that JarvisIR outperforms
+ically, to enable the VLM to follow user instructions and
+                                                                         strong baselines in terms of decision-making and percep-
+perceive image degradation, we train it using the synthetic
+                                                                         tion restoration.
+portion of CleanBench via SFT [50]. To enhance system
+robustness, reduce hallucinations, and improve generaliz-
+ability in real-world adverse weather, we fine-tune JarvisIR           2. Related Work
+on CleanBench-Real with human feedback. To ensure sta-
+                                                                       Tool-Augmented LLMs. Recent studies [6, 53, 56, 60–
+bility during training and improve overall performance, we
+                                                                       62, 97] highlight the growing potential of large language
+propose the MRRHF algorithm, an extension of the rank-
+                                                                       models (LLMs) for proficient tool usage and decision-
+ing responses with human feedback (RRHF) approach [93].
+                                                                       making in complex settings. For example, Gorilla [53] fa-
+Specifically, to expand the exploration space while main-
+                                                                       cilitates LLMs’ response to Tool calls through dataset con-
+taining a performance lower bound for JarvisIR, we intro-
+                                                                       struction and fine-tuning. ToolLLM [56] extends this con-
+duce a hybrid sample generation strategy and regularization
+                                                                       cept to enable interaction with a large number of tools.
+term. Furthermore, to comprehensively feedback the qual-
+                                                                       ToolAlpaca [65] demonstrates the feasibility of general-
+ity of system responses during training, we incorporate mul-
+                                                                       ized tool-use capabilities in smaller LLMs. Toolformer [60]
+tiple VLM-based Image Quality Assessment (IQA) models
+                                                                       constructs tool-use augmented data to train LLMs to select
+as a unified reward model.
+                                                                       tools. In the realm of visual tools, various approaches have
+   Our contributions can be summarized as follows:                     been proposed to enhance the capabilities of large language
+
+
+                                                                   2
+models in handling visual tasks [78, 88], augmented with
+Hugging Face models [61], Azure models [88], visual foun-
+dation models [78].
+
+Alignment of LLMs. Reinforcement Learning from Hu-
+man Feedback (RLHF) [1, 2, 28, 66] has emerged as a
+groundbreaking technique for aligning LLMs. The core
+idea is learning a reward function to reflect human prefer-
+ences with human annotations and optimize LLMs by RL
+methods like proximal policy optimization (PPO). During
+PPO-based optimization, updating LLMs requires the like-
+lihood of an entire generation. However, for LLM agents,
+human feedback is usually obtained only after the tool re-
+sponse is completed and the function is successfully in-
+voked. Moreover, unlike typical LLM training, our two-
+stage fine-tuning process integrates both visual and linguis-
+tic modalities. Rank Responses to Align Human Feedback
+(RRHF) [93] has shown promise by using reward models
+to rank multiple responses, aligning LLMs effectively. This           Figure 2. The dataset construction workflow consists of three main
+technique allows easy extension to fine-grained tool agents,          steps: 1) Synthesis of degraded images. 2) Generation of Assess-
+                                                                      ment reasoning and the optimal task sequence. 3) Generation of
+thereby maximizing the utility of existing reward models.
+                                                                      instruction-response pairs for the system.
+
+Image Restoration. Single-task image restoration has                  3. Methodology
+achieved significant progress in addressing specific degra-
+dation types, such as dehazing [31, 42, 81], low-light en-            In this section, we first describe CleanBench, a comprehen-
+hancement [27, 33, 44], desnowing [8, 14, 17], deraining              sive benchmark consisting of extensive instruction-response
+[12, 16, 82], denoising [7, 94] super-resolution [10, 64, 70,         pairs used for the training and evaluation of JarvisIR
+72], image fusion [22, 23, 43, 74]. However, these task-              (Sec. 3.1). We then introduce JarvisIR, a VLM agent to
+specific approaches often lack generalizability and adapt-            call expert restoration models in response to intricate mul-
+ability to complex, coupled degradations. To overcome this            tiple degraded environments in the wild (Sec. 3.2). Finally,
+limitation, adverse weather restoration research aims to de-          we describe the two-stage training framework for JarvisIR,
+velop a unified framework capable of addressing multiple              comprising supervised fine-tuning and human feedback
+degradation types simultaneously [15, 25, 41, 51]. Another            alignment.
+prevailing research line is dedicated to building more intelli-
+gent restoration systems. Clarity ChatGPT [77], integrated
+                                                                      3.1. CleanBench
+with advanced visual models, allows users to perform so-              High-quality and large-scale datasets are crucial for un-
+phisticated image manipulation and enhancement through                leashing the full potential of VLMs. A multimodal instruc-
+natural language interactions. RestoreAgent [9] and Agen-             tion sample can be formally represented as a triplet: {user
+ticIR [101] are contemporaneous independent works that                instruction, degraded image, response}, where “user in-
+utilize MLLM as a task planner to coordinate multiple                 struction” specifies the task and describes the restoration
+restoration tools. Specifically, RestoreAgent [9] involves            tools, “degraded image” serves as the visual input to be
+fine-tuning a vision-language model (VLM) using synthetic             processed, and the “response” provides the ground truth an-
+datasets to directly produce an execution plan. Agenti-               swer. In Figure 2, we outline the construction of our dataset,
+cIR [101] leverages two off-the-shelf LLMs and VLMs                   focusing on the generation of degraded images and the col-
+to achieve the scheduling of restoration tools on the syn-            lection of task-specific instructions and responses.
+thetic experiment platform. Essentially, both studies focus           Image Collection. We first collect raw daytime im-
+on building intelligent restoration systems tailored for syn-         ages from various sources, including autonomous driving
+thetic degradation conditions. Conversely, our study aims             datasets [4, 59, 92, 102] and natural scenes [5, 34, 39, 42,
+to develop a robust system for real-world applications, in-           47, 87, 99]. Then, Q-instruct [80] serves as a quality filter to
+corporating human feedback to enhance robustness, reduce              extract high-quality samples. To simulate realistic adverse
+hallucinations and improve generalizability. Furthermore,             weather scenarios, including rainy, nighttime, snowy, and
+our system is built in an unsupervised manner using large-            foggy, we customized the degradation library developed us-
+scale, unlabeled real-world data.                                     ing physical models and image transformation techniques to
+
+
+                                                                  3
+                                                                     Figure 4. The workflow of JarvisIR. To address real-world cou-
+                                                                     pled weather degradation, we develop JarvisIR, a VLM-powered
+        Figure 3. Examples of CleanBench-Real dataset.               intelligent system that dynamically schedules expert models for
+                                                                     restoration. Initially, JarvisIR assesses the degradation of the in-
+synthesize degraded images. More detail in supplementary             put images and parses user instructions to formulate a task plan,
+material.                                                            selecting the appropriate expert models for each subtask. The se-
+Response Generation. The response from JarvisIR con-                 lected experts perform their designated tasks and return the results
+sists of two components: “chain-of-thought” (COT) ra-                to JarvisIR, which integrates the outcomes and provides the final
+tionales and the optimal task sequence with model se-                answer to the user. The design of the figure is inspired by [61].
+lection. (a) For COT rationales, we distill DepictQA-
+                                                                     plementary material). For the division of the training and
+Wild’s [91] knowledge, which excels in low-level quality
+                                                                     evaluation sets, we selected 500 images from each of the
+reasoning assessment. Specifically, given a degraded im-
+                                                                     four CleanBench-Real scenarios to form the evaluation set
+age pair, we prompt DepictQA-Wild [91] to assess the qual-
+                                                                     (2K), while the remaining images are utilized for alignment
+ity of the degraded image in terms of clarity, colorfulness,
+                                                                     tuning. Instruction-response pairs are generated in the same
+and sharpness, generating detailed degradation and reason-
+                                                                     way as outlined in CleanBench.
+ing insights. (b) To determine the optimal task sequence
+with restoration model selection, we employ an exhaustive            3.2. JarvisIR
+search strategy [9] to explore various task permutations and
+model combinations, scoring each sequence to identify the            JarvisIR is a VLM-powered agent that coordinates multiple
+optimal restoration path.                                            expert restoration models to address complex degradation.
+Task-model Assignment. User instructions include de-                 As illustrated in Figure 4, the workflow of JarvisIR consists
+scriptions of available tasks and models, sourced from               of four steps: Task Planning, Model Selection, Task Exe-
+GitHub or Hugging Face, to formulate task-model assign-              cution, and Response Generation. To enhance the agent’s
+ment as a single-choice problem. Presenting tasks and mod-           decision-making and perception restoration capabilities in
+els as options within a context allows JarvisIR to more ef-          real-world scenarios, as depicted in Figure 5, we initially
+fectively identify the appropriate model for each sub-task.          perform supervised fine-tuning (SFT) on CleanBench to ob-
+Instruction Generation. Motivated by the self-instruct               tain an initial version, termed JarvisIR-SFT. Subsequently,
+strategy [73], for each initial user instruction and response,       the JarvisIR-SFT is further fine-tuned utilizing the MR-
+GPT-4V is prompted to generate 20 candidate pairs. We                RHF algorithm on CleanBench-Real, yielding the JarvisIR-
+then manually review these candidates to eliminate ambi-             MRRHF model.
+guity, repetition, and inaccuracies, ultimately selecting 5          3.2.1. JarvisIR-SFT
+instruction-response pairs per degraded image (see supple-
+mentary material for details). Ultimately, CleanBench in-            We employ the standard SFT to get the JarvisIR-SFT model.
+cludes a total of 150K instruction-response pairs, which are         Formally, the multimodal instruction sample can be de-
+used in the initial instruction-tuning phase.                        noted in a triplet form (I, M, R), where I, M, R rep-
+CleanBench-Real. To align and evaluate JarvisIR’s perfor-            resent the user instruction, the degraded image, and the
+mance in real-world scenarios, we introduce CleanBench-              ground truth response, respectively. The VLM predicts an
+Real, comprising 80K unlabeled real degraded images from             answer A given the instruction and the degraded image:
+internet and diverse sources [4, 33, 34, 47, 57, 71, 87, 92].        A = f (I, M; θ). The training objective is the original
+CleanBench-Real is categorized into four adverse weather             auto-regressive objective used to train LLMs [48, 90]:
+scenarios: rainy, night, snowy, and foggy. The degrada-                                N
+tion in each scenario is complex and interwined. For ex-
+                                                                                       X
+                                                                           Lsf t = −          logPπ (Ri | {Ii , Mi } , R<i ; θ) ,    (1)
+ample, as presented in Figure 3, an image captured in rain                              i=1
+may experience multiple degradations concurrently, includ-
+ing rain, raindrops, defocus blur, and noise (more in sup-           where N is the length of the ground-truth response.
+
+
+                                                                 4
+3.2.2. JarvisIR-MRRHF
+Intuitively, SFT allows JarvisIR-SFT to achieve favorable
+performance on synthetic data. Nevertheless, as previously
+noted, due to the distribution shift, transferring from syn-
+thetic training data to real test data, JarvisIR-SFT exhibits
+increased hallucination, i.e., degraded perception restora-
+tion performance and decision-making capability. To im-
+prove its generalizability, we further fine-tune JarvisIR on
+CleanBench-Real with refined ranking responses with hu-
+man feedback algorithm (MRRHF).
+Reward modeling. The reward model evaluates tool-
+calling outcomes and converts them into structured reward
+signals to guide the agent’s optimization process. There-                 Figure 5. Two-stage training framework of JarvisIR. In the first
+fore, selecting an appropriate reward model is crucial. For-              stage, JarvisIR undergoes supervised fine-tuning on synthetic data
+tunately, in the image quality assessment (IQA) field, VLM-               from CleanBench to enable it to follow user instructions and rec-
+based IQA models have been developed [80], demonstrat-                    ognize image degradation. In the second stage, we further fine-
+ing strong performance in evaluating aesthetic quality and                tune JarvisIR on CleanBench-Real using the MRRHF algorithm
+image distortion. These IQA models are inherently suitable                to improve system robustness, reduce hallucinations, and enhance
+for serving as reward models. To construct a comprehen-                   generalizability under real-world adverse weather conditions.
+sive reward model S, as well as an evaluation system, we
+integrated multiple IQA models. Specifically, we employ
+                                                                          where pi is conditional log probability (length-normalized)
+a z-score strategy [9] to standardize the scores assessed by
+                                                                          of ri under model ρ. The core idea is letting the policy
+each IQA model separately and then sum the standardized
+                                                                          model ρ give larger probabilities for better responses and
+results:
+                             k                                            give smaller probabilities for worse responses. Inspired by
+                           X    si − µi
+                      S=                 ,                (2)             PRO [63], we refine the original ranking loss:
+                           i=1
+                                   σi
+                                                                                            X
+where si represents the score assessed by i-th IQA model.                         Lrank =         (sj − si ) max (0, pi − pj ) ,  (4)
+µi and σi epresent the mean and standard deviation of si ,                                    si <sj
+
+respectively. k indicates the total number of IQA models.
+                                                                          and a cross-entropy loss like SFT process is added to learn
+Alignment with MRRHF. We propose an extension to
+                                                                          the response with the highest reward si , i′ = arg maxi si :
+the existing RRHF method that can be used for align-
+ing JarvisIR in a cost-effective manner: 1) A hybrid sam-                              X
+                                                                              Lf t = −     log Pρ (ri′ ,t | {Ii , Mi } , ri′ ,<t ; θ) . (5)
+ple generation strategy that combines offline and online
+                                                                                          t
+approaches to expand the optimization exploration space
+while ensuring a performance lower bound. 2) Entropy reg-                 Furthermore, we define the entropy regularization term as:
+ularization terms are integrated to foster diversity among                                     X
+agent responses, thereby facilitating exploration during                             Ler = −       ρ(a | y) log ρ(a | y),         (6)
+training. Specifically, for a pair of user instruction Ii                                              a
+and degraded image Mi , we first adopt offline diverse
+beam search [68] to get m1 different responses Rm1 =                      where y represents the current state of the agent. The over-
+{r1 , r2 , . . . , rm1 } from SFT model π. Similarly, we can              all loss is utilized to optimize the JarvisIR-SFT to derive
+obtain Rm2 = {r1 , r2 , . . . , rm2 } from policy model ρ (ini-           JarvisIR-MRRHF:
+tialized from SFT model π) during training. The combined
+candidate m responses are denoted as Rm = Rm1 ∪ Rm2 .                                   L = λ1 Lrank + λ2 Lf t + λ3 Ler ,               (7)
+Subsequently, we execute the task sequences specified in
+                                                                          where λ1 , λ2 and λ3 are constants controlling the relative
+candidate responses, calling multiple restoration models to
+                                                                          importance of the different losses, which are empirically set
+generate restored images. These predictions are then as-
+                                                                          to 0.5, 0.5 and 0.1 in all experiments, respectively.
+sessed by the reward model S, yielding scores for each ri
+                                                                          Discussion of RLHF and RRHF: The training of vanilla
+with S(ri ) = si . To align with scores {si }m , we use policy
+                                                                          RLHF [50] necessitated a policy model, a value model, a
+model ρ to give scores pi for each ri by:
+                                                                          reward model, and a reference model, which could be de-
+                    P
+                        logPρ (ri,t | {Ii , Mi } , ri,<t ; θ)             manding on memory resources. Rank Responses to Align
+           pi = t                                             , (3)       Human Feedback (RRHF) [93] can effectively alleviate
+                                     ∥ri ∥
+
+                                                                      5
+Figure 6. Visual comparisons of various methods on CleanBench-Real. Our approach delivers significant quality improvements, eliminat-
+ing complex real-world degradation and preserving the most natural details.
+
+the issues of resource-intensive and tedious hyperparame-            Table 1. Comparison of JarvisIR with other strategies on the
+ter tuning in RLHF. However, directly fine-tuning JarvisIR           CleanBench-Real validation set. The “Score” represents the sum
+using RRHF yields limited improvement to its generaliza-             of the four normalized metrics. The “Ranking” indicates the given
+                                                                     decision’s percentage ranking among all possible decisions. We
+tion in real-world scenarios. Although vanilla RRHF em-
+                                                                     highlight the best and second-best results.
+ploys an off-policy learning strategy that could save time by
+avoiding the need to generate new responses during train-
+ing, it has the drawback of relying on a static offline pref-                         Strategy                  Score Ranking(%)
+erence dataset for training the policy model. Consequently,                  (I) Random Order and Model         1.12       43.2%
+the policy might over-optimize for reward on in-distribution             (II) Random Order + Predict Model      2.66       34.7%
+data as the model cannot further query the preference oracle            (III) Random Model + Predict Order      3.08       23.4%
+during the training process [75]. The RRHF incorporating                  (IV) Pre-defined Order and Model      3.94       22.5%
+online sampling like PPO might mitigate this issue, but it                         (V) Human Expert             4.85       18.6%
+demands more GPU resources to store the reference model,                            ⋆JarvisIR-SFT               5.17       14.3%
+thereby significantly decreasing the training speed [93].                         ⋆JarvisIR-MRRHF               6.21        4.8%
+
+4. Experiments                                                       real-world scenarios. Due to the lack of paired clean-
+                                                                     degraded data in the real scenarios. Four image quality
+4.1. Experimental Settings                                           assessment metrics are used for evaluation: MUSIQ [35],
+Training Setup. Llava-Llama3-8b [46] serves as the base              MANIQA [86], CLIP-IQA+ [69], LIQE [95].
+model for JarvisIR, which undergoes full parameter fine-             Tool Settings. We present the task-specific restoration
+tuning using the Adam optimizer. During the SFT phase,               tools employed in our implementation, including denois-
+we fine-tune JarvisIR for 3 epochs with a batch size of 128          ing (SCUnet [94]), super-resolution & deblur & com-
+and a learning rate of 1e-5. In the MRRHF tuning phase, we           pression artifact removal (StableSR-turbo [70] and Real-
+set the diverse beam search size to 3, the diverse beam group        ESRGAN [72]), deraining (IDT [82], UDR-S2Former [8]
+to 5, the diversity penalty to 2.0, and the sampling temper-         and Img2img-turbo [52]), dehazing (RIDCP [81] and
+ature to 0.8. Alignment tuning is performed over 3 epochs            KANet [21]), low-light enhancement (Img2img-turbo [52],
+with a batch size of 1 and a learning rate of 1e-5. To speed         HVI-CIDNet [83] and LightenDiff [27]) and desnowing
+up training, we select three IQA models—Q-instruct [80],             (Img2img-turbo [52] and Snowformer [11]). More de-
+MUSIQ [35] and MANIQA [86]—to construct the unifed                   tails are in the supplementary material. Notably, we select
+reward model (Eq. 2). All experiments are conducted on 8             lightweight and efficient models instead of the latest state-
+NVIDIA A100 80G GPUs.                                                of-the-art models to simplify the validation process of our
+Dataset Setings & Metrics. The CleanBench is fully uti-              proposed paradigm. Incorporating more advanced models
+lized for supervised fine-tuning of Llava-Llama3-8b [46] to          could further enhance performance.
+obtain JarvisIR-SFT. The training set of CleanBench-Real
+is used for alignment tuning, yielding JarvisIR-MRRHF.
+                                                                     4.2. Decision Making Capability
+Additionally, JarvisIR’s evaluation is conducted on the val-         Compared Baselines. We conducted a comparative anal-
+idation set of CleanBench-Real, focusing on 1) decision-             ysis of JarvisIR against several alternative approaches: (I)
+making ability and 2) perception restoration capability in           Random selection of both the task order and the models, as-
+
+
+                                                                 6
+Table 2. Comparison of JarvisIR with All-in-One methods for multi-degraded perception restoration on CleanBench-Real. We highlight
+the best , second-best and third-best results. Notably, all scenes represent multiple degraded weather conditions, such as haze, low
+light and blur.
+
+                                             Night Scenes                                            Rain Scenes
+    Method
+                           MUSIQ ↑     MANIQA ↑      CLIP-IQA+ ↑        LIQE ↑    MUSIQ ↑      MANIQA ↑      CLIP-IQA+ ↑    LIQE ↑
+    AirNet [40]             44.26        0.1889            0.4429        1.313      62.61        0.3871         0.5867       3.136
+    AutoDIR [30]            47.30        0.1885            0.4341        1.403      63.93        0.4002         0.6082       3.312
+    DA-CLIP [49]            45.86        0.2010            0.4544        1.427      63.28        0.3993         0.5959       3.194
+    PromptIR [55]           45.45        0.2010            0.4473        1.408      62.85        0.3926         0.5941       3.161
+    MiOIR [37]              46.93        0.2013            0.4403        1.408      63.07        0.3779         0.5841       3.055
+    InstructIR [18]         44.03        0.1533            0.3689        1.257      62.93        0.3657         0.5609       3.055
+    T3 -DiffWeather [13]    46.79        0.1964            0.4547        1.413      62.67        0.3689         0.5823       3.011
+    ⋆JarvisIR-SFT           60.77        0.5048            0.5239        3.224      65.03        0.5339         0.6290       4.005
+    ⋆JarvisIR-MRRHF         67.25        0.5876            0.6336        3.613      70.38        0.7004         0.7127       4.435
+                                              Fog Scenes                                             Snow Scenes
+    Method
+                           MUSIQ ↑     MANIQA ↑      CLIP-IQA+ ↑        LIQE ↑    MUSIQ ↑      MANIQA ↑      CLIP-IQA+ ↑    LIQE ↑
+    AirNet [40]             64.23        0.3829            0.6173        2.686      67.32        0.4320         0.6379       3.794
+    AutoDIR [30]            64.84        0.3966            0.6443        2.928      67.62        0.4305         0.6453       3.824
+    DA-CLIP [49]            64.78        0.3880            0.6540        2.793      67.71        0.4294         0.6426       3.817
+    PromptIR [55]           64.54        0.3810            0.6417        2.557      67.34        0.4292         0.6435       3.776
+    MiOIR [37]              64.93        0.3501            0.5969        2.415      67.28        0.4187         0.6404       3.702
+    InstructIR [18]         64.82        0.3904            0.6449        2.919      67.98        0.4038         0.6052       3.715
+    T3 -DiffWeather [13]    64.58        0.3715            0.6163        2.497      67.72        0.4129         0.6268       3.713
+    ⋆JarvisIR-SFT           70.45        0.4855            0.6560        3.977      70.24        0.7133         0.7127       4.086
+    ⋆JarvisIR-MRRHF         74.22        0.7502            0.7805        4.714      73.87        0.8014         0.7918       4.881
+
+
+
+suming that task types are accurately determined. (II) Ran-             AutoDIR [30], DA-CLIP [49], PromptIR [55], MiOIR [37],
+dom task order, but models predicted by JarvisIR. (III) Ran-            InstructIR [18], T3 -DiffWeather [13]. For a fair compar-
+dom model selection, but task orders predicted by JarvisIR.             ison, we repeatedly run these compared methods multiple
+(IV) Using a human expert’s predefined order and models                 times to fully leverage their capabilities. Additionally, we
+for different scenes, assuming the approximate scene degra-             supply InstructIR and AutoDIR with explicit prompts de-
+dation can be determined. (V) A human expert manually                   tailing degradation scenarios to optimize their performance.
+generates a solution case by case for each image, determin-             Results. As shown in Table 2 and Figure 6, JarvisIR out-
+ing both the task sequence and the appropriate models.                  performs existing All-in-One approaches across all met-
+Results. As indicated in Table 1, strategies that involve               rics. In Night Scenes, JarvisIR-MRRHF achieves a MUSIQ
+human expert participation—specifically settings (IV) and               score of 67.25, which is 42.2% higher than AutoDIR’s
+(V)—demonstrate strong performance compared to ran-                     score of 47.30. In MANIQA, JarvisIR-MRRHF scores
+dom strategies, ranking within the top 22.5% and 18.6%                  0.5876, much better than DA-CLIP (0.2010) and MiOIR
+of all possible strategies, respectively. These results indi-           (0.2013). These results show that JarvisIR autonomously
+cate the effectiveness of human experts’ experience in com-             selects optimal task sequences and models, outperform-
+plex decision-making processes. Interestingly, however, our             ing methods with predefined or random sequences. Ad-
+JarvisIR model achieves the highest performance, surpass-               ditionally, JarvisIR-MRRHF also exceeds the SFT version
+ing even the expert-driven customization strategies. Fur-               in all scenes, with notable gains in Rain (70.38 vs. 65.03
+thermore, JarvisIR-MRRHF (4.8%) outperforms JarvisIR-                   MUSIQ) and Fog (74.22 vs. 70.45 MUSIQ). These results
+SFT (14.3%) in both score and ranking, highlighting that                demonstrate that JarvisIR fine-tuned with MRRHF can im-
+the MRRHF stage in our training framework effectively                   prove generalizability, fewer hallucination errors, and better
+mitigates hallucination errors in system responses, thereby             decision-making ability.
+enabling the generation of more optimal decisions.
+                                                                        5. Ablation Study
+4.3. Perception Restoration Ability
+                                                                        Sample generation strategy. To assess the effectiveness of
+Compared All-in-One Methods. We compare JarvisIR                        the hybrid sample generation strategy, we compared it with
+with existing advanced all-in-one methods: AirNet [40],                 two variations of the original setting: 1) offline sample gen-
+
+
+                                                                    7
+Table 3. Ablation studies on different sample generation strategies
+and entropy regularization. The “Reward” represents the average
+reward scores obtained during MRRHF training, spanning from -1
+to 1. A negative score indicates a penalty, while a positive score
+represents a reward. The “Diversity” reflects the average number
+of unique responses produced during the training process.
+
+                 Strategy                 Reward      Diversity
+      offline sample generation             0.43        3.63
+      online sample generation              -0.87       1.27
+   hybrid sample generation (ours)          0.67        6.55
+     w/o. entropy regularization            0.50        4.56
+   w. entropy regularization (ours)         0.67        6.55
+
+
+
+eration strategy. 2) online sample generation strategy. The
+results in Table 3 and Figure 7 yield the following observa-
+tions: 1) The offline sample generation strategy yields lim-
+ited performance gains, with a reward score of 0.43 and a
+diversity score of 3.63. This limitation arises because the               Figure 7. Ablation studies on different sample generation strate-
+sample distribution is restricted to the finite dataset gen-              gies and entropy regularization. (a) Response diversity during
+erated by the SFT model using diverse beam search [68].                   MRRHF training iterations. (b) Reward values across MRRHF
+Consequently, the policy model may over-optimize for in-                  training iterations.
+distribution data, thereby limiting its ability to generalize
+and achieve higher reward scores. 2) The online sampling                  6. Conclusions
+strategy initially yields higher reward scores and diversity.             This paper introduces JarvisIR, a VLM-powered intelli-
+However, as training progresses, the model encounters a                   gent system that leverages Llava-Llama3 to connect dis-
+collapse, leading to a significantly low reward score (-0.87)             tinct restoration expert models. JarvisIR can autonomously
+and decreased diversity (1.27). This instability may result               schedule different expert models in response to the rapidly
+from an excessively large optimization space without ade-                 changing scenarios and coupled degradation in autonomous
+quate constraints during training. When the model reaches                 driving and natural environments. To enhance system ro-
+a local minimum, it struggles to escape, as the candidate                 bustness, minimize hallucinations, and improve generaliz-
+responses generated using diverse beam search [68] are of                 ability, we propose a novel two-stage framework compris-
+poor quality, causing the model to produce repetitive and                 ing supervised fine-tuning and human feedback alignment.
+invalid responses. Our hybrid sampling approach combines                  Specifically, we design the human feedback alignment to
+both online and offline samples, resulting in superior per-               effectively tune the VLM in an unsupervised manner, lever-
+formance with a reward score of 0.67 and the highest diver-               aging large-scale unlabeled real-world data. To support
+sity score of 6.55. This balanced strategy leverages the ad-              the training and evaluation of JarvisIR, we present Clean-
+vantages of both online and offline sampling, ensuring sta-               Bench, a high-quality, large-scale dataset containing 150K
+ble training by providing sufficient exploration space while              synthetic and 80K real instruction-response pairs. Exper-
+avoiding the pitfalls associated with purely online sampling.             iments show that JarvisIR outperforms existing methods,
+As a result, the hybrid strategy maintains high reward scores             achieving a 50% improvement in the average of all percep-
+and diversity throughout training, outperforming both on-                 tion metrics on CleanBench-Real.
+line and offline strategies.
+                                                                          7. Acknowledgments
+Entropy regularization. As discussed in Sec. 3.2.2, en-
+tropy regularization significantly affects the diversity of sys-          This work was supported in part by the National Natu-
+tem responses during training. The results in Table 3 and                 ral Science Foundation of China under Grant 82172033,
+Figure 7 show that without this regularization, the reward                Grant U19B2031, Grant 61971369, Grant 52105126, Grant
+decreases from 0.67 to 0.50, while the diversity drops from               82272071, and Grant 62271430; and in part by the Dreams
+6.55 to 4.56. This highlights the role of entropy regular-                Foundation of Jianghuai Advance Technology Center; and
+ization in fostering greater exploration and producing more               in part by the Open Fund of the National Key Laboratory of
+diverse, high-quality responses.                                          Infrared Detection Technologies.
+
+
+                                                                      8
+References                                                                 streaks. In Proceedings of the IEEE/CVF international con-
+                                                                           ference on computer vision, pages 13106–13117, 2023. 3
+ [1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama
+                                                                      [13] Sixiang Chen, Tian Ye, Kai Zhang, Zhaohu Xing, Yunlong
+     Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo
+                                                                           Lin, and Lei Zhu. Teaching tailored to talent: Adverse
+     Almeida, Janko Altenschmidt, Sam Altman, Shyamal
+                                                                           weather restoration via prompt pool and depth-anything
+     Anadkat, et al. Gpt-4 technical report. arXiv preprint
+                                                                           constraint. In European Conference on Computer Vision,
+     arXiv:2303.08774, 2023. 3
+                                                                           pages 95–115. Springer, 2025. 1, 7
+ [2] AI Anthropic. The claude 3 model family: Opus, sonnet,
+                                                                      [14] Wei-Ting Chen, Hao-Yu Fang, Cheng-Lin Hsieh, Cheng-
+     haiku. Claude-3 Model Card, 1, 2024. 3
+                                                                           Che Tsai, I Chen, Jian-Jiun Ding, Sy-Yen Kuo, et al. All
+ [3] Tim Brooks, Ben Mildenhall, Tianfan Xue, Jiawen Chen,
+                                                                           snow removed: Single image desnowing algorithm using
+     Dillon Sharlet, and Jonathan T Barron. Unprocessing
+                                                                           hierarchical dual-tree complex wavelet representation and
+     images for learned raw denoising. In Proceedings of
+                                                                           contradict channel loss. In Proceedings of the IEEE/CVF
+     the IEEE/CVF conference on computer vision and pattern
+                                                                           international conference on computer vision, pages 4196–
+     recognition, pages 11036–11045, 2019. 16
+                                                                           4205, 2021. 3
+ [4] Holger Caesar, Varun Bankiti, Alex H Lang, Sourabh Vora,
+                                                                      [15] Wei-Ting Chen, Zhi-Kai Huang, Cheng-Che Tsai, Hao-
+     Venice Erin Liong, Qiang Xu, Anush Krishnan, Yu Pan,
+                                                                           Hsiang Yang, Jian-Jiun Ding, and Sy-Yen Kuo. Learning
+     Giancarlo Baldan, and Oscar Beijbom. nuscenes: A mul-
+                                                                           multiple adverse weather removal via two-stage knowledge
+     timodal dataset for autonomous driving. In Proceedings of
+                                                                           learning and multi-contrastive regularization: Toward a uni-
+     the IEEE/CVF conference on computer vision and pattern
+                                                                           fied model. In Proceedings of the IEEE/CVF Conference on
+     recognition, pages 11621–11631, 2020. 3, 4, 14
+                                                                           Computer Vision and Pattern Recognition, pages 17653–
+ [5] Jianrui Cai, Shuhang Gu, and Lei Zhang. Learning a deep
+                                                                           17662, 2022. 3
+     single image contrast enhancer from multi-exposure im-
+                                                                      [16] Xiang Chen, Hao Li, Mingqiang Li, and Jinshan Pan.
+     ages. IEEE Transactions on Image Processing, 27(4):2049–
+                                                                           Learning a sparse transformer network for effective image
+     2062, 2018. 3, 14, 15
+                                                                           deraining. In Proceedings of the IEEE/CVF conference on
+ [6] Wenhao Chai, Enxin Song, Yilun Du, Chenlin Meng,
+                                                                           computer vision and pattern recognition, pages 5896–5905,
+     Vashisht Madhavan, Omer Bar-Tal, Jeng-Neng Hwang,
+                                                                           2023. 3
+     Saining Xie, and Christopher D Manning. Auroracap: Ef-
+     ficient, performant video detailed captioning and a new          [17] Bodong Cheng, Juncheng Li, Ying Chen, and Tieyong
+     benchmark. arXiv preprint arXiv:2410.03051, 2024. 2                   Zeng. Snow mask guided adaptive residual network for
+                                                                           image snow removal. Computer Vision and Image Under-
+ [7] Haoyu Chen, Jinjin Gu, Yihao Liu, Salma Abdel Magid,
+                                                                           standing, 236:103819, 2023. 3
+     Chao Dong, Qiong Wang, Hanspeter Pfister, and Lei Zhu.
+     Masked image training for generalizable deep image de-           [18] Marcos V Conde, Gregor Geigle, and Radu Timofte. High-
+     noising. In Proceedings of the IEEE/CVF Conference on                 quality image restoration following human instructions.
+     Computer Vision and Pattern Recognition, pages 1692–                  arXiv preprint arXiv:2401.16468, 2024. 1, 7
+     1703, 2023. 3                                                    [19] Ziteng Cui, Guo-Jun Qi, Lin Gu, Shaodi You, Zenghui
+ [8] Haoyu Chen, Jingjing Ren, Jinjin Gu, Hongtao Wu, Xue-                 Zhang, and Tatsuya Harada. Multitask aet with orthogonal
+     quan Lu, Haoming Cai, and Lei Zhu. Snow removal in                    tangent regularity for dark object detection. In Proceedings
+     video: A new dataset and a novel method. In Proceed-                  of the IEEE/CVF international conference on computer vi-
+     ings of the IEEE/CVF International Conference on Com-                 sion, pages 2553–2562, 2021. 16
+     puter Vision (ICCV), pages 13211–13222, 2023. 3, 6, 15           [20] Yuekun Dai, Chongyi Li, Shangchen Zhou, Ruicheng Feng,
+ [9] Haoyu Chen, Wenbo Li, Jinjin Gu, Jingjing Ren, Sixiang                Yihang Luo, and Chen Change Loy. Flare7k++: Mixing
+     Chen, Tian Ye, Renjing Pei, Kaiwen Zhou, Fenglong Song,               synthetic and real datasets for nighttime flare removal and
+     and Lei Zhu. Restoreagent: Autonomous image restoration               beyond. arXiv preprint arXiv:2306.04236, 2023. 16
+     agent via multimodal large language models. arXiv preprint       [21] Yuxin Feng, Long Ma, Xiaozhe Meng, Fan Zhou, Risheng
+     arXiv:2407.18035, 2024. 3, 4, 5                                       Liu, and Zhuo Su. Advancing real-world image dehazing:
+[10] Haoyu Chen, Wenbo Li, Jinjin Gu, Jingjing Ren, Haoze                  perspective, modules, and training. IEEE Transactions on
+     Sun, Xueyi Zou, Zhensong Zhang, Youliang Yan, and Lei                 Pattern Analysis and Machine Intelligence, 2024. 6, 15
+     Zhu. Low-res leads the way: Improving generalization for         [22] Chunming He, Kai Li, Guoxia Xu, Jiangpeng Yan, Longx-
+     super-resolution by self-supervised learning. In Proceed-             iang Tang, Yulun Zhang, Yaowei Wang, and Xiu Li. Hqg-
+     ings of the IEEE/CVF Conference on Computer Vision and                net: Unpaired medical image enhancement with high-
+     Pattern Recognition, pages 25857–25867, 2024. 3                       quality guidance. TNNLS, 2023. 3
+[11] Sixiang Chen, Tian Ye, Yun Liu, and Erkang Chen.                 [23] Chunming He, Kai Li, Guoxia Xu, Yulun Zhang, Runze Hu,
+     Snowformer: Context interaction transformer with scale-               Zhenhua Guo, and Xiu Li. Degradation-resistant unfolding
+     awareness for single image desnowing. arXiv preprint                  network for heterogeneous image fusion. In ICCV, pages
+     arXiv:2208.09703, 2022. 6, 15                                         12611–12621, 2023. 3
+[12] Sixiang Chen, Tian Ye, Jinbin Bai, Erkang Chen, Jun Shi,         [24] Chunming He, Chengyu Fang, Yulun Zhang, Kai Li,
+     and Lei Zhu. Sparse sampling transformer with uncertainty-            Longxiang Tang, Chenyu You, Fengyang Xiao, Zhenhua
+     driven ranking for unified removal of raindrops and rain              Guo, and Xiu Li. Reti-diff: Illumination degradation image
+
+
+                                                                  9
+     restoration with retinex-based latent diffusion model. ICLR,        [38] T Kudo. Sentencepiece: A simple and language indepen-
+     2025. 1                                                                  dent subword tokenizer and detokenizer for neural text pro-
+[25] Chunming He, Yuqi Shen, Chengyu Fang, Fengyang Xiao,                     cessing. arXiv preprint arXiv:1808.06226, 2018. 14
+     Longxiang Tang, Yulun Zhang, Wangmeng Zuo, Zhenhua                  [39] Boyi Li, Wenqi Ren, Dengpan Fu, Dacheng Tao, Dan
+     Guo, and Xiu Li. Diffusion models in low-level vision: A                 Feng, Wenjun Zeng, and Zhangyang Wang. Benchmark-
+     survey. TPAMI, 2025. 3                                                   ing single-image dehazing and beyond. IEEE Transactions
+[26] Shashank Mohan Jain. Hugging face. In Introduction to                    on Image Processing, 28(1):492–505, 2018. 3, 14, 15
+     transformers for NLP: With the hugging face library and             [40] Boyun Li, Xiao Liu, Peng Hu, Zhongqin Wu, Jiancheng
+     models to solve problems, pages 51–67. Springer, 2022. 1                 Lv, and Xi Peng. All-in-one image restoration for unknown
+[27] Hai Jiang, Ao Luo, Xiaohong Liu, Songchen Han, and                       corruption. In Proceedings of the IEEE/CVF conference
+     Shuaicheng Liu. Lightendiffusion: Unsupervised low-light                 on computer vision and pattern recognition, pages 17452–
+     image enhancement with latent-retinex diffusion models.                  17462, 2022. 7
+     arXiv preprint arXiv:2407.08939, 2024. 3, 6, 15                     [41] Ruoteng Li, Robby T Tan, and Loong-Fah Cheong. All in
+[28] Songtao Jiang, Yan Zhang, Ruizhe Chen, Yeying Jin,                       one bad weather removal using architectural search. In Pro-
+     and Zuozhu Liu.         Modality-fair preference optimiza-               ceedings of the IEEE/CVF conference on computer vision
+     tion for trustworthy mllm alignment. arXiv preprint                      and pattern recognition, pages 3175–3185, 2020. 3
+     arXiv:2410.15334, 2024. 3                                           [42] Beibei Lin, Yeying Jin, Wending Yan, Wei Ye, Yuan Yuan,
+[29] Songtao Jiang, Tuo Zheng, Yan Zhang, Yeying Jin, Li Yuan,                and Robby T Tan. Nighthaze: Nighttime image dehazing
+     and Zuozhu Liu. Med-moe: Mixture of domain-specific                      via self-prior learning. arXiv preprint arXiv:2403.07408,
+     experts for lightweight medical vision-language models. In               2024. 3, 14, 15
+     Findings of the Association for Computational Linguistics:          [43] Yunlong Lin, Zhenqi Fu, Ge Meng, Yingying Wang,
+     EMNLP 2024, pages 3843–3860, 2024. 1                                     Yuhang Dong, Linyu Fan, Hedeng Yu, and Xinghao Ding.
+[30] Yitong Jiang, Zhaoyang Zhang, Tianfan Xue, and Jinwei                    Domain-irrelevant feature learning for generalizable pan-
+     Gu. Autodir: Automatic all-in-one image restoration with                 sharpening. In Proceedings of the 31st ACM International
+     latent diffusion. arXiv preprint arXiv:2310.10123, 2023. 1,              Conference on Multimedia, pages 3287–3296, 2023. 3
+     7                                                                   [44] Yunlong Lin, Zhenqi Fu, Kairun Wen, Tian Ye, Sixiang
+[31] Yeying Jin, Wending Yan, Wenhan Yang, and Robby T Tan.                   Chen, Ge Meng, Yingying Wang, Yue Huang, Xiaotong Tu,
+     Structure representation network and uncertainty feedback                and Xinghao Ding. Unsupervised low-light image enhance-
+     learning for dense non-uniform fog removal. In Proceed-                  ment with lookup tables and diffusion priors. arXiv preprint
+     ings of the Asian Conference on Computer Vision, pages                   arXiv:2409.18899, 2024. 3
+     2041–2058, 2022. 1, 3                                               [45] Yunlong Lin, Tian Ye, Sixiang Chen, Zhenqi Fu, Yingying
+[32] Yeying Jin, Wenhan Yang, and Robby T Tan. Unsuper-                       Wang, Wenhao Chai, Zhaohu Xing, Lei Zhu, and Xinghao
+     vised night image enhancement: When layer decomposi-                     Ding. Aglldiff: Guiding diffusion models towards unsu-
+     tion meets light-effects suppression. In European Confer-                pervised training-free real-world low-light image enhance-
+     ence on Computer Vision, pages 404–421. Springer, 2022.                  ment. arXiv preprint arXiv:2407.14900, 2024. 1
+     1                                                                   [46] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae
+[33] Yeying Jin, Beibei Lin, Wending Yan, Yuan Yuan, Wei Ye,                  Lee. Visual instruction tuning. Advances in neural infor-
+     and Robby T Tan. Enhancing visibility in nighttime haze                  mation processing systems, 36, 2024. 2, 6, 14
+     images using guided apsf and gradient adaptive convolu-             [47] Yun-Fu Liu, Da-Wei Jaw, Shih-Chia Huang, and Jenq-Neng
+     tion. In Proceedings of the 31st ACM International Confer-               Hwang. Desnownet: Context-aware deep network for snow
+     ence on Multimedia, pages 2446–2457, 2023. 3, 4                          removal. IEEE Transactions on Image Processing, 27(6):
+[34] Yeying Jin, Xin Li, Jiadong Wang, Yan Zhang, and Malu                    3064–3073, 2018. 3, 4, 15
+     Zhang. Raindrop clarity: A dual-focused dataset for day             [48] Gen Luo, Yiyi Zhou, Tianhe Ren, Shengxin Chen, Xi-
+     and night raindrop removal. In European Conference on                    aoshuai Sun, and Rongrong Ji. Cheap and quick: Efficient
+     Computer Vision, pages 1–17. Springer, 2025. 3, 4, 14, 15                vision-language instruction tuning for large language mod-
+[35] Junjie Ke, Qifei Wang, Yilin Wang, Peyman Milanfar, and                  els. Advances in Neural Information Processing Systems,
+     Feng Yang. Musiq: Multi-scale image quality transformer.                 36, 2024. 4
+     In Proceedings of the IEEE/CVF international conference             [49] Ziwei Luo, Fredrik K Gustafsson, Zheng Zhao, Jens
+     on computer vision, pages 5148–5157, 2021. 6, 17, 18, 19                 Sjölund, and Thomas B Schön.          Controlling vision-
+[36] Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka                   language models for multi-task image restoration. arXiv
+     Matsuo, and Yusuke Iwasawa. Large language models are                    preprint arXiv:2310.01018, 2023. 1, 7
+     zero-shot reasoners. Advances in neural information pro-            [50] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Car-
+     cessing systems, 35:22199–22213, 2022. 18                                roll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini
+[37] Xiangtao Kong, Chao Dong, and Lei Zhang. Towards ef-                     Agarwal, Katarina Slama, Alex Ray, et al. Training lan-
+     fective multiple-in-one image restoration: A sequential and              guage models to follow instructions with human feedback.
+     prompt learning strategy. arXiv preprint arXiv:2401.03379,               Advances in neural information processing systems, 35:
+     2024. 1, 7                                                               27730–27744, 2022. 2, 5
+
+
+                                                                    10
+[51] Ozan Özdenizci and Robert Legenstein. Restoring vision                  of the AAAI Conference on Artificial Intelligence, pages
+     in adverse weather conditions with patch-based denoising                 18990–18998, 2024. 5
+     diffusion models. IEEE Transactions on Pattern Analysis             [64] Haoze Sun, Wenbo Li, Jianzhuang Liu, Haoyu Chen,
+     and Machine Intelligence, 45(8):10346–10357, 2023. 3                     Renjing Pei, Xueyi Zou, Youliang Yan, and Yujiu Yang.
+[52] Gaurav Parmar, Taesung Park, Srinivasa Narasimhan, and                   Coser: Bridging image and language for cognitive super-
+     Jun-Yan Zhu. One-step image translation with text-to-                    resolution. In Proceedings of the IEEE/CVF Conference on
+     image models. arXiv preprint arXiv:2403.12036, 2024. 6,                  Computer Vision and Pattern Recognition, pages 25868–
+     14, 15, 17                                                               25878, 2024. 3
+[53] Shishir G Patil, Tianjun Zhang, Xin Wang, and Joseph E              [65] Qiaoyu Tang, Ziliang Deng, Hongyu Lin, Xianpei Han,
+     Gonzalez. Gorilla: Large language model connected with                   Qiao Liang, Boxi Cao, and Le Sun. Toolalpaca: General-
+     massive apis. arXiv preprint arXiv:2305.15334, 2023. 1, 2                ized tool learning for language models with 3000 simulated
+[54] Fabio Pizzati, Pietro Cerri, and Raoul de Charette. Physics-             cases. arXiv preprint arXiv:2306.05301, 2023. 2
+     informed guided disentanglement in generative networks.             [66] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-
+     IEEE Transactions on Pattern Analysis and Machine Intel-                 Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalk-
+     ligence, 45(8):10300–10316, 2023. 17                                     wyk, Andrew M Dai, Anja Hauth, Katie Millican, et al.
+[55] Vaishnav Potlapalli, Syed Waqas Zamir, Salman H Khan,                    Gemini: a family of highly capable multimodal models.
+     and Fahad Shahbaz Khan. Promptir: Prompting for all-                     arXiv preprint arXiv:2312.11805, 2023. 3
+     in-one image restoration. Advances in Neural Information            [67] Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier
+     Processing Systems, 36, 2024. 7                                          Martinet, Marie-Anne Lachaux, Timothée Lacroix, Bap-
+[56] Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan,                 tiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar,
+     Yaxi Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian,                  et al. Llama: Open and efficient foundation language mod-
+     et al. Toolllm: Facilitating large language models to master             els. arXiv preprint arXiv:2302.13971, 2023. 14
+     16000+ real-world apis. arXiv preprint arXiv:2307.16789,
+                                                                         [68] Ashwin K Vijayakumar, Michael Cogswell, Ramprasath R
+     2023. 2
+                                                                              Selvaraju, Qing Sun, Stefan Lee, David Crandall, and
+[57] Ruijie Quan, Xin Yu, Yuanzhi Liang, and Yi Yang. Remov-                  Dhruv Batra. Diverse beam search: Decoding diverse
+     ing raindrops and rain streaks in one go. In Proceedings of              solutions from neural sequence models. arXiv preprint
+     the IEEE/CVF conference on computer vision and pattern                   arXiv:1610.02424, 2016. 5, 8, 17
+     recognition, pages 9147–9156, 2021. 4, 15
+                                                                         [69] Jianyi Wang, Kelvin CK Chan, and Chen Change Loy. Ex-
+[58] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+                                                                              ploring clip for assessing the look and feel of images. In
+     Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+                                                                              Proceedings of the AAAI Conference on Artificial Intelli-
+     Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learn-
+                                                                              gence, pages 2555–2563, 2023. 6, 17
+     ing transferable visual models from natural language super-
+                                                                         [70] Jianyi Wang, Zongsheng Yue, Shangchen Zhou, Kelvin CK
+     vision. In International conference on machine learning,
+                                                                              Chan, and Chen Change Loy. Exploiting diffusion prior for
+     pages 8748–8763. PMLR, 2021. 14, 20
+                                                                              real-world image super-resolution. International Journal of
+[59] Christos Sakaridis, Dengxin Dai, and Luc Van Gool. Acdc:
+                                                                              Computer Vision, 132(12):5929–5949, 2024. 3, 6, 15
+     The adverse conditions dataset with correspondences for
+     semantic driving scene understanding. In Proceedings of             [71] Shuhang Wang, Jin Zheng, Hai-Miao Hu, and Bo Li. Natu-
+     the IEEE/CVF International Conference on Computer Vi-                    ralness preserved enhancement algorithm for non-uniform
+     sion, pages 10765–10775, 2021. 3, 14                                     illumination images. IEEE transactions on image process-
+[60] Timo Schick, Jane Dwivedi-Yu, Roberto Dessı̀, Roberta                    ing, 22(9):3538–3548, 2013. 4
+     Raileanu, Maria Lomeli, Eric Hambro, Luke Zettlemoyer,              [72] Xintao Wang, Liangbin Xie, Chao Dong, and Ying Shan.
+     Nicola Cancedda, and Thomas Scialom. Toolformer: Lan-                    Real-esrgan: Training real-world blind super-resolution
+     guage models can teach themselves to use tools. Advances                 with pure synthetic data. In Proceedings of the IEEE/CVF
+     in Neural Information Processing Systems, 36, 2024. 2                    international conference on computer vision, pages 1905–
+[61] Yongliang Shen, Kaitao Song, Xu Tan, Dongsheng Li,                       1914, 2021. 3, 6, 15
+     Weiming Lu, and Yueting Zhuang. Hugginggpt: Solving ai              [73] Yizhong Wang, Yeganeh Kordi, Swaroop Mishra, Alisa
+     tasks with chatgpt and its friends in hugging face. Advances             Liu, Noah A Smith, Daniel Khashabi, and Hannaneh Ha-
+     in Neural Information Processing Systems, 36, 2024. 3, 4                 jishirzi. Self-instruct: Aligning language models with self-
+[62] Enxin Song, Wenhao Chai, Guanhong Wang, Yucheng                          generated instructions. arXiv preprint arXiv:2212.10560,
+     Zhang, Haoyang Zhou, Feiyang Wu, Haozhe Chi, Xun                         2022. 2, 4, 24, 25
+     Guo, Tian Ye, Yanting Zhang, et al. Moviechat: From dense           [74] Yingying Wang, Yunlong Lin, Xuanhua He, Hui Zheng,
+     token to sparse memory for long video understanding. In                  Keyu Yan, Linyu Fan, Yue Huang, and Xinghao Ding.
+     Proceedings of the IEEE/CVF Conference on Computer Vi-                   Learning diffusion high-quality priors for pan-sharpening:
+     sion and Pattern Recognition, pages 18221–18232, 2024.                   A two-stage approach with time-aware adapter fine-tuning.
+     2                                                                        IEEE Transactions on Geoscience and Remote Sensing,
+[63] Feifan Song, Bowen Yu, Minghao Li, Haiyang Yu, Fei                       2025. 3
+     Huang, Yongbin Li, and Houfeng Wang. Preference rank-               [75] Zhichao Wang, Bin Bi, Shiva Kumar Pentyala, Kiran Ram-
+     ing optimization for human alignment. In Proceedings                     nath, Sougata Chaudhuri, Shubham Mehrotra, Xiang-Bo
+
+
+                                                                    11
+     Mao, Sitaram Asur, et al. A comprehensive survey of llm                  retinex network for robust low-light image enhancement.
+     alignment techniques: Rlhf, rlaif, ppo, dpo and more. arXiv              IEEE Transactions on Image Processing, 30:2072–2086,
+     preprint arXiv:2407.16216, 2024. 6                                       2021. 3, 4, 14, 15
+[76] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten                    [88] Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin,
+     Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al.                    Ehsan Azarnasab, Faisal Ahmed, Zicheng Liu, Ce Liu,
+     Chain-of-thought prompting elicits reasoning in large lan-               Michael Zeng, and Lijuan Wang. Mm-react: Prompting
+     guage models. Advances in neural information processing                  chatgpt for multimodal reasoning and action. arXiv preprint
+     systems, 35:24824–24837, 2022. 18                                        arXiv:2303.11381, 2023. 3
+[77] Yanyan Wei, Zhao Zhang, Jiahuan Ren, Xiaogang Xu,                   [89] Tian Ye, Yunchen Zhang, Mingchao Jiang, Liang Chen,
+     Richang Hong, Yi Yang, Shuicheng Yan, and Meng Wang.                     Yun Liu, Sixiang Chen, and Erkang Chen. Perceiving and
+     Clarity chatgpt: An interactive and adaptive processing sys-             modeling density for image dehazing. In European confer-
+     tem for image restoration and enhancement. arXiv preprint                ence on computer vision, pages 130–145. Springer, 2022.
+     arXiv:2311.11695, 2023. 3                                                1
+[78] Chenfei Wu, Shengming Yin, Weizhen Qi, Xiaodong                     [90] Shukang Yin, Chaoyou Fu, Sirui Zhao, Ke Li, Xing Sun,
+     Wang, Zecheng Tang, and Nan Duan. Visual chatgpt: Talk-                  Tong Xu, and Enhong Chen. A survey on multimodal large
+     ing, drawing and editing with visual foundation models.                  language models. arXiv preprint arXiv:2306.13549, 2023.
+     arXiv preprint arXiv:2303.04671, 2023. 3                                 4
+[79] Haoning Wu, Zicheng Zhang, Weixia Zhang, Chaofeng                   [91] Zhiyuan You, Jinjin Gu, Zheyuan Li, Xin Cai, Kaiwen Zhu,
+     Chen, Liang Liao, Chunyi Li, Yixuan Gao, Annan Wang,                     Tianfan Xue, and Chao Dong. Descriptive image quality
+     Erli Zhang, Wenxiu Sun, et al. Q-align: Teaching lmms                    assessment in the wild. arXiv preprint arXiv:2405.18842,
+     for visual scoring via discrete text-defined levels. arXiv               2024. 4
+     preprint arXiv:2312.17090, 2023. 18, 19                             [92] Fisher Yu, Haofeng Chen, Xin Wang, Wenqi Xian, Yingy-
+[80] Haoning Wu, Zicheng Zhang, Erli Zhang, Chaofeng Chen,                    ing Chen, Fangchen Liu, Vashisht Madhavan, and Trevor
+     Liang Liao, Annan Wang, Kaixin Xu, Chunyi Li, Jingwen                    Darrell. Bdd100k: A diverse driving dataset for heteroge-
+     Hou, Guangtao Zhai, et al. Q-instruct: Improving low-level               neous multitask learning. In Proceedings of the IEEE/CVF
+     visual abilities for multi-modality foundation models. In                conference on computer vision and pattern recognition,
+     Proceedings of the IEEE/CVF Conference on Computer Vi-                   pages 2636–2645, 2020. 3, 4, 14
+     sion and Pattern Recognition, pages 25490–25500, 2024.              [93] Zheng Yuan, Hongyi Yuan, Chuanqi Tan, Wei Wang, Song-
+     3, 5, 6, 18, 19                                                          fang Huang, and Fei Huang. Rrhf: Rank responses to align
+[81] Rui-Qi Wu, Zheng-Peng Duan, Chun-Le Guo, Zhi Chai,                       language models with human feedback without tears. arXiv
+     and Chongyi Li. Ridcp: Revitalizing real image dehaz-                    preprint arXiv:2304.05302, 2023. 2, 3, 5, 6, 17
+     ing via high-quality codebook priors. In Proceedings of             [94] Kai Zhang, Yawei Li, Jingyun Liang, Jiezhang Cao, Yu-
+     the IEEE/CVF conference on computer vision and pattern                   lun Zhang, Hao Tang, Deng-Ping Fan, Radu Timofte, and
+     recognition, pages 22282–22291, 2023. 3, 6, 15, 16                       Luc Van Gool. Practical blind image denoising via swin-
+[82] Jie Xiao, Xueyang Fu, Aiping Liu, Feng Wu, and Zheng-                    conv-unet and data synthesis. Machine Intelligence Re-
+     Jun Zha. Image de-raining transformer. IEEE Transac-                     search, 20(6):822–836, 2023. 3, 6, 15
+     tions on Pattern Analysis and Machine Intelligence, 45(11):         [95] Weixia Zhang, Guangtao Zhai, Ying Wei, Xiaokang Yang,
+     12978–12995, 2022. 3, 6, 15                                              and Kede Ma. Blind image quality assessment via vision-
+[83] Qingsen Yan, Yixu Feng, Cheng Zhang, Pei Wang, Peng                      language correspondence: A multitask learning perspec-
+     Wu, Wei Dong, Jinqiu Sun, and Yanning Zhang. You only                    tive. In Proceedings of the IEEE/CVF conference on com-
+     need one color space: An efficient network for low-light im-             puter vision and pattern recognition, pages 14071–14081,
+     age enhancement. arXiv preprint arXiv:2402.05809, 2024.                  2023. 6, 17
+     6, 15                                                               [96] Zhuosheng Zhang, Aston Zhang, Mu Li, and Alex Smola.
+[84] Lihe Yang, Bingyi Kang, Zilong Huang, Zhen Zhao, Xiao-                   Automatic chain of thought prompting in large language
+     gang Xu, Jiashi Feng, and Hengshuang Zhao. Depth any-                    models. arXiv preprint arXiv:2210.03493, 2022. 18
+     thing v2. arXiv preprint arXiv:2406.09414, 2024. 16                 [97] Lirui Zhao, Yue Yang, Kaipeng Zhang, Wenqi Shao, Yuxin
+[85] Rui Yang, Lin Song, Yanwei Li, Sijie Zhao, Yixiao Ge, Xiu                Zhang, Yu Qiao, Ping Luo, and Rongrong Ji. Diffagent:
+     Li, and Ying Shan. Gpt4tools: Teaching large language                    Fast and accurate text-to-image api selection with large lan-
+     model to use tools via self-instruction. Advances in Neural              guage model. In Proceedings of the IEEE/CVF Conference
+     Information Processing Systems, 36, 2024. 1                              on Computer Vision and Pattern Recognition, pages 6390–
+[86] Sidi Yang, Tianhe Wu, Shuwei Shi, Shanshan Lao,                          6399, 2024. 2
+     Yuan Gong, Mingdeng Cao, Jiahao Wang, and Yujiu                     [98] Zhonghan Zhao, Wenhao Chai, Xuan Wang, Boyi Li,
+     Yang. Maniqa: Multi-dimension attention network for no-                  Shengyu Hao, Shidong Cao, Tian Ye, and Gaoang Wang.
+     reference image quality assessment. In Proceedings of the                See and think: Embodied agent in virtual environment. In
+     IEEE/CVF Conference on Computer Vision and Pattern                       European Conference on Computer Vision, pages 187–204.
+     Recognition, pages 1191–1200, 2022. 6, 17, 18, 19                        Springer, 2025. 1
+[87] Wenhan Yang, Wenjing Wang, Haofeng Huang, Shiqi                     [99] Shangchen Zhou, Chongyi Li, and Chen Change Loy. Led-
+     Wang, and Jiaying Liu. Sparse gradient regularized deep                  net: Joint low-light enhancement and deblurring in the dark.
+
+
+                                                                    12
+      In European conference on computer vision, pages 573–
+      589. Springer, 2022. 3, 14, 15
+[100] Deyao Zhu, Jun Chen, Xiaoqian Shen, Xiang Li, and Mo-
+      hamed Elhoseiny. Minigpt-4: Enhancing vision-language
+      understanding with advanced large language models. arXiv
+      preprint arXiv:2304.10592, 2023. 14
+[101] Kaiwen Zhu, Jinjin Gu, Zhiyuan You, Yu Qiao, and Chao
+      Dong. An intelligent agentic system for complex image
+      restoration problems. arXiv preprint arXiv:2410.17809,
+      2024. 3
+[102] Jannik Zürn, Paul Gladkov, Sofı́a Dudas, Fergal Cotter,
+      Sofi Toteva, Jamie Shotton, Vasiliki Simaiaki, and Nikhil
+      Mohan. Wayvescenes101: A dataset and benchmark for
+      novel view synthesis in autonomous driving. arXiv preprint
+      arXiv:2407.08280, 2024. 3
+
+
+
+
+                                                                   13
+                            JarvisIR: Elevating Autonomous Driving Perception
+                                  with Intelligent Image Restoration
+                                                Supplementary Material
+   This is the supplementary material for the paper:                     bedding spaces of visual and textual tokens, we implement
+“JarvisIR: Elevating Autonomous Driving Perception with                  a trainable image projector to map visual tokens into the
+Intelligent Image Restoration.” We provide the following                 textual space, following [67, 100]. (b) Token Fusion: We
+materials in this manuscript:                                            integrate the visual tokens into predefined positions within
+• Sec.8 More implementation details.                                     the textual tokens to achieve token fusion. (c) Response
+  – Restoration tool settings.                                           Generation Using LLM: The fused tokens are fed into the
+  – Details of Model Setups.                                             LLM to generate the final response. In our experiments, we
+• Sec.9 CleanBench dataset details.                                      primarily use Llama3-8B [67]. Even with their advanced
+  – Dataset statistics.                                                  features, pre-trained LLMs lack the ability to furnish accu-
+  – Details of degradation library.                                      rate responses, thorough reasoning regarding degradation,
+• Sec.10 More ablation.                                                  and precise restoration plans without dataset-specific fine-
+  – MRRHF vs. vanilla RRHF.                                              tuning. Therefore, we employ a full parameter fine-tuning
+  – Sample generation strategy and entropy regularization.               technique that efficiently unleashes the potential of LLM to
+  – Effectiveness of differentiated contrast weights.                    the maximum extent.
+  – Impact of reasoning for decision-making.                             Model setup. Since the CLIP pre-trained ViT-L/14 [58] en-
+  – Impact of reward model.                                              codes each 14 × 14 image patch into a visual token, the
+• Sec.11 More visual results.                                            input image dimensions must be integer multiples of 14.
+• Sec.12 Limitations, broader impacts and future work.                   Therefore, we zero-pad the input images to meet this re-
+                                                                         quirement. We encode the image patches into visual tokens
+8. More implementation details                                           using the CLIP pre-trained ViT-L/14 [58], where each token
+                                                                         is a 1024-dimensional vector. These visual tokens are sub-
+8.1. Restoration tool settings                                           sequently projected by the image projection layer into the
+Table 4 lists the task-specific restoration tools used in our            LLM’s hidden dimension of 4096.
+implementation. Notably, some models lack weights cor-                   Training setup. Both the SFT and MRRHF tuning phases
+responding to certain tasks but are inherently adaptable;                utilize the Adam optimizer with learning rate 1e-5 with
+we collect appropriate data to retrain them. For exam-                   cosine decay. The warmup ratio is set to 0.03, the max-
+ple, Img2img-turbo [52] is an image-to-image translation                 imum sequence length is 2048, and the weight decay is
+method based on SD-turbo that provides night-to-day and                  4. JarvisIR-SFT undergoes training for three epochs with
+rainy-to-day weights but not snow-to-day weights. To en-                 a batch size of 128, while JarvisIR-MRRHF is trained for
+able Img2img-turbo to adapt to snow scenes, we retrain it                three epochs using a batch size of 2. During the MRRHF
+using the CycleGAN paradigm on the snow subset of the                    tuning phase, the diverse beam search settings include a size
+ACDC dataset [59]. Additionally, it is important to note                 of 3, 5 beam groups, a diversity penalty of 2.0, and a sam-
+that we are not utilizing the latest state-of-the-art tools, sug-        pling temperature of 0.8. Training is conducted on 8 GPUs
+gesting considerable potential for enhancing our models.                 (NVIDIA A100 80G).
+
+8.2. Details of Model Setups                                             9. CleanBench dataset details
+Model Architecture. In this study, JarvisIR primarily
+                                                                         9.1. Dataset statistics
+adopts the architecture from Llava-Llama3-8B [46]. Specif-
+ically, the input images and instruction texts are first to-             CleanBench. In constructing the CleanBench process,
+kenized, then fused, and finally processed by the Large                  we collected large-scale raw daytime images from vari-
+Language Model (LLM) for response generation. (a) To-                    ous sources, including autonomous driving datasets [4, 4,
+kenization of input images and instruction texts: We use                 59, 92] and natural datasets [5, 34, 39, 42, 87, 99] .The
+a frozen CLIP pre-trained ViT-L/14 [58] as the image en-                 CleanBench dataset contains a total of 150K degraded-clean
+coder to convert input images into visual tokens. The in-                image pairs. For the construction of CleanBench-Real,
+struction texts are tokenized into textual tokens using the              we gathered 80K real degraded images consisting of night
+SentencePiece tokenizer [38]. To bridge the different em-                scenes, fog scenes, snow scenes and rain scenes. These data
+
+
+                                                                    14
+                                    Table 4. Task-specific restoration tools with descriptions.
+
+             Task                Tools                           Model Description
+                                                                 Utilizes pre-trained diffusion models with a time-aware encoder
+                                 StableSR-turbo [70]             for high-quality super-resolution, deblurring, and artifact re-
+       Super-resolution
+                                                                 moval.
+                                                                 Fast GAN for super-resolution, deblurring, and artifact removal,
+                                 Real-ESRGAN [72]
+                                                                 handling complex real-world degradations efficiently.
+                                                                 Hybrid UNet-based model combining convolution and trans-
+          Denoising              SCUnet [94]                     former blocks, designed for robust denoising under diverse real-
+                                                                 world noise conditions.
+                                                                 Utilizes pre-trained diffusion models with a time-aware encoder
+                                 StableSR-turbo [70]             for high-quality super-resolution, deblurring, and artifact re-
+Compression artifact removal                                     moval.
+                                                                 Fast GAN for super-resolution, deblurring, and artifact removal,
+                                 Real-ESRGAN [72]
+                                                                 handling complex real-world degradations efficiently.
+                                                                 Utilizes pre-trained diffusion models with a time-aware encoder
+                                 StableSR-turbo [70]             for high-quality super-resolution, deblurring, and artifact re-
+          Deblurring                                             moval.
+                                                                 Fast GAN for super-resolution, deblurring, and artifact removal,
+                                 Real-ESRGAN [72]
+                                                                 handling complex real-world degradations efficiently..
+                                 IDT [82]                        Transformer-based model for de-raining and raindrop removal.
+                                 UDR-S2Former [8]                An uncertainty-aware transformer model for rain streak removal.
+          Deraining
+                                                                 Efficient model based on SD-turbo, designed for fast and effec-
+                                 Img2img-turbo-rain [52]
+                                                                 tive rain removal in real-world images.
+      Raindrop removal           IDT [82]                        Transformer-based model for de-raining and raindrop removal.
+                                                                 Efficient dehazing model utilizing high-quality codebook priors
+                                 RIDCP [81]
+                                                                 to handle complex real-world haze.
+           Dehazing
+                                                                 Efficient dehazing network using a localization-and-removal
+                                 KANet [21]
+                                                                 pipeline to handle complex real-world hazy.
+                                                                 Efficient model for removing snow artifacts while preserving
+                                 Img2img-turbo-snow [52]
+                                                                 natural scene details.
+          Desnowing
+                                                                 Transormer-based model for removing snowflakes while pre-
+                                 Snowformer [11]
+                                                                 serving natural scene details.
+                                                                 Fast and efficient model based on SD-turbo, designed for low-
+                                 Img2img-turbo-night [52]
+                                                                 light enhancement in real-world scenarios.
+                                                                 Lightweight transformer for low-light and exposure correction,
+   Low-light enhancement
+                                 HVI-CIDNet [83]                 enhancing both image quality and downstream vision tasks effi-
+                                                                 ciently.
+                                                                 Diffusion-based framework for low-light enhancement, lever-
+                                 LightenDiff [27]                aging Retinex theory and latent-space decomposition for high-
+                                                                 quality unsupervised restoration.
+
+
+come from diverse sources, including the aforementioned              9.2. Details of degradation library
+autonomous driving datasets. Additionally, to enhance the
+generalizability of JarvisIR in natural contexts, we incor-          As described in Sec 3.1 of the manuscript, we simulate re-
+porated natural adverse weather scenes from internet and             alistic adverse weather scenarios—rainy, nighttime, snowy,
+public datasets [5, 34, 39, 42, 47, 57, 87, 99].                     and foggy conditions—by customizing a degradation li-
+                                                                     brary developed with physical models and image transfor-
+                                                                     mation techniques to synthesize degraded images. In this
+                                                                     section, we detail our degradation implementations, cov-
+
+
+                                                                15
+     Night Scene Simulator                                                                                      Optional
+                                                                 S&R Noise
+                              Invert Tone Mapping                                   Quantisation
+                              Invert Gamma                                          WB
+                                                                   RAW
+                              Correction                                            CRGB-SRGB
+                                                                  Format
+                              sRGB-cRGB                                             Gamma
+                              Invert White Balance                                  Correction
+      Daytime Image                                                                                                                Nighttime Image
+                                   sRGB RAW                                             ISP               Flare templates libray
+
+      Fog Scene Simulator
+                                     Depth Estimator
+
+                                          Gamma
+                                                                                                               JPEG
+                                          Noise
+                                                                                                             Compression
+                                          Color Bias
+
+       Daytime Image                                                                                                               Fogtime Image
+
+      Rain Scene Simulator
+
+
+
+                              Generator                                                                              Blend
+                                                                                          Model
+                                                        Disentangled
+       Daytime Image                                                                                                               Raintime Image
+
+
+      Snow Scene Simulator                              Text
+                               "driving in the snow”                                     LoRa
+                                                       Encoder                          adapters
+
+                             Encoder                                        U-Net                                   Decoder
+
+
+       Daytime Image                            Zero-conv                                                                          Snowtime Image
+                                                                           First Stage Skip Connections
+                                                Zero-conv
+
+
+Figure 8. Adverse weather scene simulator. To simulate realistic adverse weather scenarios, including rainy, nighttime, snowy, and foggy,
+we customized the degradation library developed using physical models and image transformation techniques to synthesize degraded
+images.
+
+ering the principles, formulas, and severity setups for the                         tion transform Tnight is given by:
+Night Scene Simulator, Fog Scene Simulator, Rain Scene
+Simulator, and Snow Scene Simulator. Examples for each                              Tnight (Iday ) = TISP (TsRGB→RAW (Iday ) + Inoise )+Iflare ,
+implementation are provided in Figure 11.                                                                                                    (8)
+                                                                                    which generates a degraded image Iday that closely resem-
+Night Scene Simulator. Inspired by the work of [19], we                             bles a dark nighttime scene. Furthermore, we use an online
+employ a low-light degradation transform to synthesize re-                          dynamic degradation process. It applies randomized param-
+alistic low-light images, denoted as Tnight , as illustrated in                     eter combinations, as defined in Equation 8, to simulate di-
+Figure 8. Specifically, we first convert the daytime image                          verse nighttime driving conditions.
+Iday into RAW data using the sRGB→ RAW process [3].                                 Fog Scene Simulator. Inspired by RIDCP [81], we de-
+Next, we linearly attenuate the RAW image and introduce                             sign a foggy image degradation transform, denoted as
+Shot and Read (S&R) noise, which is commonly observed                               Tfog , to synthesize realistic hazy images, as shown in Fig-
+in camera imaging systems [3]. Finally, we apply the Image                          ure 8. Specifically, we simulate fog by introducing trans-
+Signal Processing (ISP) pipeline to convert the low-light                           mission maps t(x) using depth estimation algorithms (e.g.,
+sensor data back into sRGB format. Additionally, we in-                             Depth anything V2 [84]), combined with exponential at-
+corporate flare degradation using flare templates from the                          tenuation eβd(x) , where β controls haze density within the
+Flare7K++ [20] dataset. The complete low-light degrada-                             range [0.3, 1.5]. Additionally, poor lighting conditions are
+
+
+                                                                               16
+modeled by applying a brightness adjustment factor γ ∈                10. More ablation
+[1.5, 3.0], Gaussian noise N , and atmospheric light varia-
+tion A + ∆A, where ∆A is sampled from [−0.025, 0.025].                To thoroughly investigate the proposed JarvisIR, we con-
+To further enhance realism, JPEG compression artifacts are            ducted an extensive array of ablation studies on the
+introduced by applying JPEG (·) to the degraded image.                CleanBench-Real dataset. Four non-reference metrics are
+The complete foggy image synthesis process is defined as:             used for assessment: MUSIQ [35], MANIQA [86], CLIP-
+                                                                  IQA+ [69], LIQE [95]. The specific elements of these stud-
+                             γ
+ Tfog (Iday ) = JPEG P Iday     + N , eβd(x) , A + ∆A ,               ies are further expounded in the sections that follow.
+                                                         (9)
+where P represents the hazy image formation process, Iday             10.1. MRRHF vs. vanilla RRHF
+is the clean image, and d(x) is the estimated depth map.              We evaluate the effectiveness of our proposed MRRHF by
+The variable x refers to the spatial coordinates of the im-           comparing it with vanilla RRHF [93]. The reward and
+age. This dynamic degradation process is designed to oper-            diversity metrics over training iterations are illustrated in
+ate online with randomized parameters, simulating diverse             Table 5. Fine-tuning JarvisIR with MRRHF significantly
+real-world foggy conditions.                                          improves the average values of both reward and diversity
+Rain Scene Simulator. Inspired by PGDGN [54], we in-                  by 0.19 and 3.43, respectively, compared to using RRHF.
+troduce a rain degradation transform, denoted as Train , to           The degradation in diversity and reward when using vanilla
+generate realistic rainy images (Figure 8). This transform            RRHF results from its offline sample generation strategy.
+synthesizes rainy images by combining a disentangled clean            As discussed in Sec. 5 in the manuscript, this strategy con-
+image with a physics-based rain rendering model. The                  fines its generated samples to the finite sample space cre-
+degradation process is formulated as:                                 ated by the SFT model using diverse beam search [68].
+           Train (Iday ) = WMod (G(Iday ), ŵ, z),       (10)         In contrast, our MRRHF employs a hybrid sample gener-
+                                                                      ation strategy and entropy regularization, providing suffi-
+where Iday is the clean image, G(Iday ) represents the disen-         cient sample exploration space to achieve globally optimal
+tangled base image, and WMod is the rain rendering model.             results.
+WMod incorporates parameters ŵ = {ŵd , ŵnd }, with ŵd
+controlling differentiable aspects such as raindrop size and          10.2. Sample generation strategy and entropy reg-
+streak density, and ŵnd addressing nondifferentiable prop-                  ularization
+erties. The term z introduces stochastic noise for variability
+                                                                      In our manuscript, we examine the effects of the sample
+in rain effects. This process applies WMod to add realistic
+                                                                      generation strategy and entropy regularization on the MR-
+raindrop occlusions, rain streaks, and scene wetness to the
+                                                                      RHF tuning process, focusing on reward scores and re-
+disentangled image. G(Iday ), generating a visually plausi-
+                                                                      sponse diversity. This section provides further evidence
+ble rainy image Train (Iday ) with controlled and diverse ef-
+                                                                      of the effectiveness of our hybrid sample generation strat-
+fects.
+                                                                      egy and entropy regularization. Specifically, as shown in
+Snow Scene Simulator. Building on the img2img-turbo
+                                                                      Table 5, we assess their impact on performance using the
+model [52], we introduce a snow transformation, denoted
+                                                                      CleanBench-Real validation set. The results demonstrate
+as Tsnow , to generate realistic snowy images from daytime
+                                                                      that our hybrid sampling approach and entropy regulariza-
+inputs. This process uses the SD-Turbo model with textual
+                                                                      tion not only enhance training stability and facilitate high-
+conditioning. It synthesizes snowy scenes by combining the
+                                                                      quality exploration of the optimization space but also sig-
+input image with a latent diffusion-based generator and a
+                                                                      nificantly improve testing performance.
+textual prompt. The snow transformation is formulated as:
+      Tsnow (Iday , Csnow ) = Gsnow (Iday , Csnow ) ,    (11)         10.3. Effectiveness of differentiated contrast
+                                                                            weights
+where Iday is the daytime input image, Csnow is the textual
+condition (e.g., “driving in the heavy snow”), and Gsnow rep-         In Equation 4 of our manuscript, we refine the original rank-
+resents the generator. By employing LoRA adapters and                 ing loss [93] by introducing
+                                                                                              P differentiated contrast weights,
+skip connections, the generator enables precise control over          expressed as Lrank =       si <sj (sj − si ) max (0, pi − pj ).
+scene characteristics while maintaining the structural in-            The term (sj − si ) represents the differentiated contrast
+tegrity of the input image. This process applies Gsnow to             weights. P We compare this with the original ranking loss
+infuse the daytime image Iday with snowy features, guided             L̂rank = si <sj max (0, pi − pj ). Table 5 presents the re-
+by the contextual information in Csnow . The resulting syn-           ward and diversity metrics over training iterations. When
+thetic image aligns closely with the visual expectations of a         the ranking loss is applied without differentiated contrast
+snowy environment while maintaining consistency with the              weights L̂rank the average values of both reward and di-
+original scene’s structure.                                           versity decrease by 0.14 and 3.93, respectively, compared
+
+
+                                                                 17
+Table 5. Ablation studies on tuning paradigm, differentiated contrast weights, different sample generation strategies, and entropy regular-
+ization. The “Reward” represents the average reward scores obtained during alignment tuning, spanning from -1 to 1. A negative score
+indicates a penalty, while a positive score represents a reward. The “Diversity” reflects the average number of unique responses produced
+during the training process. Additionally, we evaluate performance on the CleanBench-Real validation set using four non-reference met-
+rics: MUSIQ, MANIQA, CLIP-IQA+, and LIQE. The reported values represent the average performance across all tested scenes.
+                       Strategy                      Reward      Diversity        MUSIQ ↑       MANIQA ↑        CLIP-IQA+ ↑           LIQE ↑
+                  Vanilla RRHF                         0.40           3.12          63.89           0.5090          0.5388            3.589
+                  MRRHF (Ours)                         0.67           6.55          71.43           0.7099          0.7296            4.411
+        w/o. differentiated contrast weights           0.53           2.62          63.22           0.5871          0.6130            3.597
+     w. differentiated contrast weights (Ours)         0.67           6.55          71.43           0.7099          0.7296            4.411
+            offline sample generation                   0.43          3.63          64.12           0.5323          0.6012            3.620
+            online sample generation                   -0.87          1.27            -                -               -                -
+         hybrid sample generation (Ours)                0.67          6.55          71.43           0.7099          0.7296            4.411
+            w/o. entropy regularization                0.50           4.56          65.06           0.6207          0.6915            3.867
+         w. entropy regularization (Ours)              0.67           6.55          71.43           0.7099          0.7296            4.411
+
+to using Lrank . We attribute this to the differentiated con-                Table 6. Ablation studies on the impact of reasoning for decision-
+trast weights enabling the VLM to recognize that some neg-                   making. We evaluate performance on the CleanBench-Real vali-
+ative examples are neutral (with reward scores close to pos-                 dation set using four non-reference metrics: MUSIQ, MANIQA,
+                                                                             CLIP-IQA+, and LIQE. The reported values represent the average
+itive examples) and thus should not be excessively penal-
+                                                                             performance across all tested scenes.
+ized, which helps prevent confusion during VLM training.
+Specifically, assuming the system uses diverse beam search                     Configurations       MUSIQ ↑ MANIQA ↑ CLIP-IQA+ ↑ LIQE ↑
+to obtain multiple responses r1 , . . . , ri , rk , rn the original            w/o. reasoning        71.17     0.6942        0.7156      4.394
+RRHF algorithm treats the best response rk as positive and                     (Ours) w reasoning    71.43     0.7099        0.7296      4.411
+the remaining responses ri < rk as negative examples of
+rk and applies the same penalty to them. However, this                       outputting the task sequences. As shown in Table 6, provid-
+approach may not be reasonable, especially when the pref-                    ing detailed degradation and reasoning insights significantly
+erence scores of different ri are similar. For instance, when                enhances JarvisIR’s decision-making, leading to notable
+the preference of rk+1 is only slightly worse than rk , while                improvements in the four non-reference metrics. By ex-
+rn is significantly worse than rk , the model should differ-                 plicitly describing degradations and reasoning insights, the
+entiate and apply different penalty strengths, slightly penal-               model can use in-context learning to align selected tasks and
+izing rk+1 and heavily penalizing rn compared to rk . To                     restoration experts with the specific degradations present.
+address this, we propose using the score S (ri ) from a re-                  This strategy not only enhances interpretability but also in-
+ward model S (·) to indicate the numerical preference of ri ,                troduces constraints that make the model’s decisions more
+i.e., the differentiated contrast weights (sj − si ).                        reliable in real-world scenarios.
+
+10.4. Impact of reasoning for decision-making                                10.5. Impact of reward model
+As the pioneering work [76] points out, Chain-of-Thought                     To analyze how various reward model configurations af-
+(CoT) is “a series of intermediate reasoning steps” that has                 fect model optimization, we conducted an ablation ex-
+proven effective in complex reasoning tasks [36, 76, 96].                    periment exploring three distinct settings: (I) multiple
+The main idea of CoT is to prompt large language models                      VLM-based IQA models as a unifined reward model (e.g.,
+(LLMs) to output not only the final answer but also the rea-                 Q-instruct [80] and Q-align [79]). (II) using a sin-
+soning process leading to it, resembling human cognitive                     gle VLM-based IQA model (e.g., Q-Instruct [80] or Q-
+processes. Inspired by this approach, we enable JarvisIR to                  align [79]) or a traditional IQA model (e.g., MUSIQ [35]
+provide detailed degradation and reasoning insights about                    or MANIQA [86]). (III) multiple traditional IQA models as
+the degraded image before making decisions, specifically                     a unifined model (e.g., MUSIQ [35] and MANIQA [86]).
+before producing the task sequence with model selection.                     The results of JarvisIR-MRRHF trained with different re-
+To assess the impact of reasoning on final decision-making,                  ward models are summarized in Table 7. Based on the re-
+we perform ablation experiments on the CleanBench-Real                       sults, we make the following observations: (1) Using mul-
+validation set by comparing two variants: (1) directly re-                   tiple VLM-based IQA models as the reward model signif-
+questing JarvisIR to output the task sequences, and (2) pro-                 icantly improves perception metrics, although it increases
+viding detailed degradation and reasoning insights before                    resource consumption during training. (2) Training with a
+
+
+                                                                      18
+Table 7. Ablation studies on the impact of different reward model configurations. We evaluate performance on the CleanBench-Real
+validation set using four non-reference metrics: MUSIQ, MANIQA, CLIP-IQA+, and LIQE. The reported values represent the average
+performance across all tested scenes.
+      Configurations                                              MUSIQ ↑          MANIQA ↑         CLIP-IQA+ ↑         LIQE ↑
+      (I) Q-align [79] + Q-Instruct [80]                              71.41          0.7094             0.7308           4.419
+      (II) Q-align                                                    71.35          0.7086             0.7288           4.409
+      (II) Q-Instruct [80]                                            71.37          0.7093             0.7257           4.402
+      (II) MUSIQ [35]                                                 71.64          0.6932             0.6977           3.955
+      (II) MANIQA [86]                                                68.49          0.7126             0.6805           3.981
+      (III) MUSIQ [35] + MANIQA [86]                                  71.52          0.7118             0.7068           4.127
+      (Ours) Q-Instruct [80]+ MUSIQ [35] + MANIQA [86]                71.43          0.7099             0.7296           4.411
+
+
+single IQA model improves the corresponding metric sig-               mal models to solve them: “Denoise (SCUNet) → DeRain-
+nificantly, but other metrics may experience some degrada-            drop (IDT) → Deblur (StableSR-turbo)”. This improve-
+tion. (3) Combining multiple traditional IQA models as the            ment confirms that MRRHF fine-tuning significantly en-
+reward model enhances performance on certain metrics, but             hances JarvisIR’s decision-making ability under real-world
+the improvements are asymmetrical—some traditional met-               conditions, reduces hallucination errors, and improves gen-
+rics exhibit very high performance while perception met-              eralization performance.
+rics are relatively low. Consequently, we opt to create                  Figures 12, 13, 14, and 15 illustrate visual comparisons
+the unified reward model by combining both VLM-based                  of our method and the baseline methods across four dif-
+and non-VLM-based IQA models, such as Q-instruct [80],                ferent scenes on the CleanBench-Real test set. Our re-
+MUSIQ [35], and MANIQA [86]. This combination allows                  sults demonstrate that JarvisIR outperforms the compara-
+for a comprehensive evaluation of system responses while              tive methods in terms of color enhancement, detail preserva-
+preserving training efficiency.                                       tion, and the elimination of degradations, achieving a supe-
+                                                                      rior balance among these aspects. Conversely, the baseline
+11. More visual results.                                              methods perform poorly in real-world environments. They
+                                                                      struggle to handle coupled degradations that occur simulta-
+11.1. Perception restoration                                          neously in natural settings, such as low light combined with
+                                                                      fog or a mixture of rain and fog. These limitations may
+Additional visual comparisons highlight the effectiveness             arise from their heavy dependence on specific degradation
+of the proposed JarvisIR framework in real-world adverse              priors and significant domain gaps due to mismatches be-
+weather conditions. Figure 9 illustrates the comprehensive            tween synthetic training data distributions and real-world
+workflow of JarvisIR, which begins by receiving user com-             data. Consequently, they often produce subpar recovery re-
+mands and degraded images. JarvisIR evaluates the im-                 sults featuring artifacts, overexposure, underexposure, and
+age quality, identifies degradation factors, and formulates           amplified noise.
+task sequences. It then selects appropriate models for tasks
+such as denoising, dehazing, and super-resolution. The out-           12. Limitations, broader impacts and future
+puts include evaluated inference insights, detailed restora-
+tion plans, and enhanced images, effectively bridging user
+                                                                          work
+instructions with image restoration plans.                            The primary limitation of our research is that JarvisIR is un-
+    Figure 10 illustrates the decision-making processes of            able to address all real-world restoration scenarios. While
+both JarvisIR-MRRHF and JarvisIR-SFT. Experimental                    it demonstrates effectiveness in handling most degradation
+results indicate that the decision-making capability of               scenarios relevant to autonomous driving, it does not ex-
+JarvisIR-MRRHF surpasses that of JarvisIR-SFT. Specif-                tend to tasks such as underwater image restoration, old
+ically, JarvisIR-MRRHF makes correct decisions in cases               photo enhancement, or blind face restoration. By incor-
+where JarvisIR-SFT previously failed.          For example,           porating appropriate data and tools, rapid adaptation could
+in coupled degraded real rain scenarios (the first row),              be achieved through the proposed training paradigm. Fur-
+JarvisIR-SFT yields a mediocre decision—“Enhancement                  thermore, the tools currently employed are limited in scope
+(Img2img-turbo) → Dehaze (RIDCP) → DeRaindrop                         and capability. In our future work, we will incorporate
+(IDT)”—which does not remove raindrops and blur the                   more advanced and robust restoration tools that might fur-
+background. However, JarvisIR-MRRHF accurately iden-                  ther enhance JarvisIR’s ability to address real-world cou-
+tifies the appropriate restoration tasks and selects the opti-        pled degradation challenges.
+
+
+                                                                 19
+Figure 9. More examples of JarvisIR’s perception restoration are presented. Initially, JarvisIR assesses the degradation of the input images
+and parses user instructions to formulate a task plan, selecting appropriate expert models for each subtask. The selected experts perform
+their designated tasks and return the results to JarvisIR, which integrates the outcomes and provides the final answer to the user.
+
+
+
+
+Figure 10. Comparison of the decision-making processes of JarvisIR-MRRHF and JarvisIR-SFT. The results indicate that the MRRHF
+version accurately predicts the correct task sequence and selects appropriate restoration models. Conversely, the SFT version often fails to
+make suitable decisions in real-world scenarios due to the domain gap between training and real data distributions.
+
+   Another future work could focus on retaining the origi-               intelligent restoration system tailored for real-world chal-
+nal image resolution during training. Most current vision-               lenges. To enhance system robustness, reduce hallucina-
+language models (VLMs) resize input images to a fixed                    tions, and improve generalizability, we introduce a novel
+resolution, such as 336 × 336, which may degrade perfor-                 two-stage framework that integrates supervised fine-tuning
+mance, as resolution variation may affect the model’s per-               with human feedback alignment. By utilizing human feed-
+ception of degradation. To mitigate this, future research                back and large-scale real unlabeled data, our method allows
+could explore techniques to maintain original image resolu-              the VLM to be fine-tuned in an unsupervised manner. We
+tions. One approach involves adapting the position embed-                believe that this paradigm can inspire future work to build
+dings in CLIP [58] using bicubic interpolation to accommo-               more powerful and versatile intelligent systems.
+date varying image dimensions.
+
+   This work focuses on building an autonomous, robust,
+
+
+                                                                    20
+Daytime                     Fog                       Rainy                     Night                      Snow
+
+    Figure 11. Examples of synthetic adverse weather scenarios in autonomous driving from the CleanBench dataset.
+
+
+
+
+                                                         21
+Input         DA-CLIP          PromptIR        MiOIR           InstructIR     T3-DiffWeather    JarvisIR-SFT   JarvisIR-MRRHF
+
+
+        Figure 12. Visual comparisons among various methods on CleanBench-Real’s night scene validation set.
+
+
+
+
+Input         DA-CLIP          PromptIR         MiOIR          InstructIR      T3-DiffWeather   JarvisIR-SFT   JarvisIR-MRRHF
+
+
+        Figure 13. Visual comparisons among various methods on CleanBench-Real’s rain scene validation set.
+
+
+
+
+                                                        22
+Input         DA-CLIP          PromptIR        MiOIR          InstructIR      T3-DiffWeather   JarvisIR-SFT   JarvisIR-MRRHF
+
+
+        Figure 14. Visual comparisons among various methods on CleanBench-Real’s fog scene validation set.
+
+
+
+
+Input         DA-CLIP          PromptIR        MiOIR          InstructIR     T3-DiffWeather    JarvisIR-SFT   JarvisIR-MRRHF
+
+
+        Figure 15. Visual comparisons among various methods on CleanBench-Real’s snow scene validation set.
+
+
+
+
+                                                        23
+               Table 8. Instruction generated by GPT-4V using the self-instruct strategy [73]
+
+#    Instruction
+1    Please evaluate the image’s quality comprehensively and provide your insights. Additionally, outline
+     a step-by-step restoration strategy, specifying the sequence of tasks and model choices for each step.
+     The available tasks are super-resolution, denoising, dehazing,..., low-light enhancement. The avail-
+     able restoration models are StableSR-turbo: (model description), SCUnet: (model description),...,
+     RIDCP: (model description).
+2    Analyze the quality of the image comprehensively and provide your insights. Furthermore, propose
+     a restoration strategy by detailing each task and model choice sequentially. The available tasks
+     include super-resolution, denoising, dehazing,..., low-light enhancement. The restoration models are
+     StableSR-turbo: (model description), SCUnet: (model description),..., RIDCP: (model description).
+3    Assess the overall quality of the image and provide a detailed evaluation. Then, design a step-by-
+     step restoration process, specifying tasks and model choices. Tasks available are super-resolution,
+     denoising, dehazing,..., low-light enhancement, and models include StableSR-turbo: (model descrip-
+     tion), SCUnet: (model description),..., RIDCP: (model description).
+4    Perform a comprehensive evaluation of the image quality and explain your observations. Addition-
+     ally, develop a step-by-step restoration plan, identifying tasks and model choices. Available tasks
+     are super-resolution, denoising, dehazing,..., low-light enhancement, and models include StableSR-
+     turbo: (model description), SCUnet: (model description),..., RIDCP: (model description).
+5    Conduct a thorough analysis of the image’s quality and provide your insights. Subsequently, create
+     a restoration strategy step by step, specifying the tasks and model choices. The tasks available are
+     super-resolution, denoising, dehazing,..., low-light enhancement, and models are StableSR-turbo:
+     (model description), SCUnet: (model description),..., RIDCP: (model description).
+6    Evaluate the quality of the image comprehensively and outline your findings. Moreover, formulate
+     a sequential restoration plan, detailing tasks and model selections. Available tasks include super-
+     resolution, denoising, dehazing,..., low-light enhancement, and models are StableSR-turbo: (model
+     description), SCUnet: (model description),..., RIDCP: (model description).
+7    Provide a detailed assessment of the image’s quality and share your observations. Then, create
+     a restoration strategy in a step-by-step manner, specifying tasks and models. Available tasks are
+     super-resolution, denoising, dehazing,..., low-light enhancement, and models include StableSR-
+     turbo: (model description), SCUnet: (model description),..., RIDCP: (model description).
+8    Examine the image comprehensively and describe its quality in detail. Additionally, outline a step-
+     wise restoration process, specifying the tasks and models for each stage. Tasks available are super-
+     resolution, denoising, dehazing,..., low-light enhancement, and models are StableSR-turbo: (model
+     description), SCUnet: (model description),..., RIDCP: (model description).
+9    Review the image quality comprehensively and present your findings. Furthermore, propose a
+     restoration plan step by step, detailing the tasks and models used. Available tasks are super-
+     resolution, denoising, dehazing,..., low-light enhancement, and restoration models are StableSR-
+     turbo: (model description), SCUnet: (model description),..., RIDCP: (model description).
+10   Perform a detailed evaluation of the image and provide your insights. Then, construct a step-by-step
+     restoration strategy, specifying the sequence of tasks and the corresponding models. The avail-
+     able tasks include super-resolution, denoising, dehazing,..., low-light enhancement, and models are
+     StableSR-turbo: (model description), SCUnet: (model description),..., RIDCP: (model description).
+
+
+
+
+                                                    24
+               Table 9. Responses generated by GPT-4V using the self-instruct strategy [73]
+
+#    Response
+1    The image depicts an outdoor scene viewed through a wet windshield, with water droplets signif-
+     icantly obscuring the view. The evaluated image exhibits severe distortion caused by the water
+     droplets, resulting in a loss of sharpness and clarity. Details of the background, such as the car ahead
+     and surrounding structures, are blurred and difficult to discern. The image also suffers from uneven
+     focus and lacks proper visibility.
+2    This image portrays an outdoor scene as seen through a wet windshield, where water droplets heav-
+     ily obstruct the view. The distortion caused by these droplets leads to a noticeable reduction in
+     sharpness and clarity. Background elements, like the car in front and nearby structures, appear heav-
+     ily blurred and challenging to distinguish. The image further suffers from uneven focus, reducing
+     overall visibility.
+3    An outdoor setting is captured in this image, viewed through a wet windshield. The water droplets
+     significantly obscure the scene, causing severe distortion. Sharpness and clarity are greatly reduced,
+     and background features, such as the car ahead and surrounding buildings, are blurred and hard to
+     recognize. Uneven focus further detracts from the image’s overall visibility.
+4    This image showcases an outdoor scene as observed through a wet windshield, with water droplets
+     causing significant obstruction. The distortion leads to substantial clarity and sharpness loss. Details
+     in the background, including the car ahead and nearby structures, are blurred and hard to identify.
+     Additionally, the image has uneven focus, which impairs its overall visibility.
+5    The image illustrates an outdoor view observed through a wet windshield, where water droplets
+     obscure much of the scene. The distortion caused by the droplets results in a notable reduction in
+     sharpness and clarity. Background details, such as the car ahead and surrounding structures, appear
+     blurry and indistinct. Uneven focus further degrades the visibility of the image.
+6    In this image, an outdoor setting is depicted as seen through a wet windshield, with water droplets
+     heavily obscuring the view. The distortion from the droplets results in a considerable loss of sharp-
+     ness and clarity. Background elements, like the car ahead and nearby buildings, are blurred and hard
+     to discern. The uneven focus of the image adds to its overall lack of visibility.
+7    This image shows an outdoor scene viewed through a wet windshield, with water droplets creating
+     significant visual obstruction. The distortion caused by the droplets reduces the sharpness and clarity
+     of the image. Background features, including the car ahead and the surrounding structures, are
+     blurred and difficult to distinguish. The image also suffers from uneven focus, limiting its visibility.
+8    An outdoor view is displayed in this image, captured through a wet windshield with water droplets
+     blocking much of the scene. The distortion caused by the droplets results in reduced clarity and
+     sharpness. Background details, such as the car in front and nearby structures, are blurred and indis-
+     tinct. Uneven focus further compromises the visibility of the image.
+9    The image depicts an outdoor scene seen through a wet windshield, where water droplets obscure
+     much of the view. This distortion leads to a significant loss of sharpness and clarity. Background
+     elements like the car ahead and nearby structures are blurred and challenging to distinguish. Uneven
+     focus further contributes to the poor visibility of the image.
+10   This image represents an outdoor scene viewed through a wet windshield, with water droplets ob-
+     scuring the visual field. The distortion caused by the droplets significantly affects sharpness and
+     clarity, making background features like the car ahead and surrounding structures appear blurred
+     and indistinct. The uneven focus further reduces the overall visibility of the image.
+
+
+
+
+                                                   25
+
